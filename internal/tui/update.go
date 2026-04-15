@@ -30,6 +30,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case source.EOFMsg:
 		m.eof = true
+		if m.sourceKind == SourceFile {
+			m.autoScroll = false
+			m.logs.GotoTop()
+		}
 		return m, nil
 
 	case source.ErrMsg:
@@ -40,15 +44,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ChatReplyMsg:
 		m.chatLoading = false
 		m.chatMsgs = append(m.chatMsgs, chat.Message{Role: "assistant", Content: msg.Content})
+		m.refreshConvoContent()
 		return m, nil
 
 	case ChatErrMsg:
 		m.chatLoading = false
 		m.chatErr = msg.Err.Error()
+		m.refreshConvoContent()
 		return m, nil
 
 	case tea.KeyMsg:
 		return m.onKey(msg)
+
+	case tea.MouseMsg:
+		if msg.Action != tea.MouseActionPress {
+			return m, nil
+		}
+		if m.sidebarOpen {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.convo.ScrollUp(3)
+			case tea.MouseButtonWheelDown:
+				m.convo.ScrollDown(3)
+			}
+			return m, nil
+		}
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.logs.ScrollUp(3)
+			m.autoScroll = false
+		case tea.MouseButtonWheelDown:
+			m.logs.ScrollDown(3)
+			if m.logs.AtBottom() {
+				m.autoScroll = true
+			}
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -61,16 +92,29 @@ func (m Model) onResize(w, h int) Model {
 	m.logs.Width = lay.logsWidth
 	m.logs.Height = lay.paneHeight
 
-	// Input takes 3 rows at the bottom of the sidebar; message list
-	// gets the rest. The textarea needs a width-1 so its prompt fits.
-	inputWidth := lay.sidebarWidth - 2
+	// Sidebar outer border: -2. Input box inner border: -2.
+	innerW := lay.sidebarWidth - 2
+	if innerW < 4 {
+		innerW = 4
+	}
+	inputWidth := innerW - 2
 	if inputWidth < 10 {
 		inputWidth = 10
 	}
 	m.input.SetWidth(inputWidth)
 	m.input.SetHeight(3)
 
+	// convo viewport: paneHeight minus header(1) minus inputBox(5) minus outer border(2)
+	const inputBoxRows = 5
+	convoH := lay.paneHeight - 1 - inputBoxRows - 2
+	if convoH < 1 {
+		convoH = 1
+	}
+	m.convo.Width = innerW
+	m.convo.Height = convoH
+
 	m.refreshLogsContent()
+	m.refreshConvoContent()
 	return m
 }
 
@@ -91,6 +135,9 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case keyTab:
 			m.input.Blur()
 			m.focus = focusLogs
+			return m, nil
+		case keyAltEnter:
+			m.input.InsertString("\n")
 			return m, nil
 		case keyEnter:
 			return m.submitChat()
@@ -113,6 +160,10 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.onResize(m.width, m.height)
 		return m, cmd
 	case keyEscape:
+		if m.help {
+			m.help = false
+			return m, nil
+		}
 		if m.sidebarOpen {
 			m.sidebarOpen = false
 			m = m.onResize(m.width, m.height)
@@ -157,6 +208,23 @@ func (m *Model) refreshLogsContent() {
 	}
 }
 
+func (m *Model) refreshConvoContent() {
+	w := m.convo.Width
+	if w < 1 {
+		return
+	}
+	var lines []string
+	for _, msg := range m.chatMsgs {
+		lines = append(lines, renderMessage(msg, w))
+		lines = append(lines, "")
+	}
+	if m.chatErr != "" {
+		lines = append(lines, styleErr.Width(w).Render("error: "+m.chatErr))
+	}
+	m.convo.SetContent(strings.Join(lines, "\n"))
+	m.convo.GotoBottom()
+}
+
 // submitChat takes the current input, validates it, and kicks off a
 // chat request.
 func (m Model) submitChat() (tea.Model, tea.Cmd) {
@@ -176,6 +244,7 @@ func (m Model) submitChat() (tea.Model, tea.Cmd) {
 	m.chatErr = ""
 	m.chatLoading = true
 	m.input.Reset()
+	m.refreshConvoContent()
 
 	logLines := m.buf.LastN(m.cfg.ContextLines)
 	history := m.chatMsgs[:len(m.chatMsgs)-1] // prior turns only

@@ -45,6 +45,7 @@ type Model struct {
 	autoScroll bool
 
 	sidebarOpen bool
+	convo       viewport.Model // chat conversation viewport
 	input       textarea.Model
 	chatMsgs    []chat.Message // excludes system prompt
 	chatLoading bool
@@ -67,7 +68,7 @@ type Model struct {
 func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Client) Model {
 	ta := textarea.New()
 	ta.Placeholder = "Ask a question about the logs..."
-	ta.Prompt = "> "
+	ta.Prompt = ""
 	ta.CharLimit = 2000
 	ta.ShowLineNumbers = false
 	ta.SetHeight(3)
@@ -79,6 +80,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 		sourceKind: kind,
 		buf:        buf,
 		logs:       viewport.New(0, 0),
+		convo:      viewport.New(0, 0),
 		autoScroll: true,
 		input:      ta,
 		focus:      focusLogs,

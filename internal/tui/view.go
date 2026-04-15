@@ -23,8 +23,7 @@ func (m Model) View() string {
 
 	var body string
 	if m.sidebarOpen {
-		divider := styleSidebarBorder.Render(strings.Repeat("│", lay.paneHeight))
-		body = lipgloss.JoinHorizontal(lipgloss.Top, logsView, divider, m.renderSidebar(lay))
+		body = lipgloss.JoinHorizontal(lipgloss.Top, logsView, m.renderSidebar(lay))
 	} else {
 		body = logsView
 	}
@@ -39,47 +38,32 @@ func (m Model) View() string {
 }
 
 func (m Model) renderSidebar(lay layout) string {
+	// Each rounded border costs 2 cols (left+right) and 2 rows (top+bottom).
+	const borderW = 2
+	innerW := lay.sidebarWidth - borderW
+	if innerW < 1 {
+		innerW = 1
+	}
+
 	headerText := "chat"
 	if m.chatLoading {
 		headerText = "chat · thinking..."
 	}
-	header := styleSidebarHeader.
-		Width(lay.sidebarWidth).
-		Render(headerText)
+	header := styleSidebarHeader.Width(innerW).Render(headerText)
 
-	// Conversation body.
-	var lines []string
-	for _, msg := range m.chatMsgs {
-		lines = append(lines, renderMessage(msg, lay.sidebarWidth))
-		lines = append(lines, "")
-	}
-	if m.chatErr != "" {
-		lines = append(lines, styleErr.
-			Width(lay.sidebarWidth).
-			Render("error: "+m.chatErr))
-	}
-
-	// Reserve 3 rows for the input textarea plus 1 header + 1 blank.
-	const inputRows = 3
-	convoHeight := lay.paneHeight - inputRows - 2
-	if convoHeight < 1 {
-		convoHeight = 1
-	}
-
-	convo := strings.Join(lines, "\n")
 	convoBox := lipgloss.NewStyle().
-		Width(lay.sidebarWidth).
-		Height(convoHeight).
-		Render(trimToHeight(convo, convoHeight))
+		Width(innerW).
+		Height(m.convo.Height).
+		Render(m.convo.View())
 
-	dashCount := lay.sidebarWidth - 8
-	if dashCount < 0 {
-		dashCount = 0
+	inputInnerW := innerW - borderW
+	if inputInnerW < 1 {
+		inputInnerW = 1
 	}
-	inputLabel := styleDim.Render("─ input " + strings.Repeat("─", dashCount))
-	inputView := m.input.View()
+	inputView := styleInputBox.Width(inputInnerW).Render(m.input.View())
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, convoBox, inputLabel, inputView)
+	inner := lipgloss.JoinVertical(lipgloss.Left, header, convoBox, inputView)
+	return styleSidebarBox.Width(innerW).Render(inner)
 }
 
 func renderMessage(msg chat.Message, width int) string {
@@ -117,6 +101,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  esc       close sidebar / blur input",
 		"  tab       switch focus",
 		"  enter     send chat message (in input)",
+		"  ctrl+j    newline in chat input",
 		"  c         clear chat history",
 		"  j / ↓     scroll logs down",
 		"  k / ↑     scroll logs up",

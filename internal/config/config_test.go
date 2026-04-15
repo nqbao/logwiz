@@ -2,6 +2,8 @@ package config
 
 import (
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -108,6 +110,57 @@ func TestParseInvalidNumbers(t *testing.T) {
 		if _, err := Parse(args, envFromMap(nil), io.Discard); err == nil {
 			t.Errorf("Parse(%v) = nil err, want error", args)
 		}
+	}
+}
+
+func TestLoadFileConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgDir := filepath.Join(dir, ".logwiz")
+	if err := os.MkdirAll(cfgDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(`{
+		"openai_api_key": "sk-file",
+		"openai_base_url": "https://file.example/v1",
+		"openai_model": "file-model"
+	}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HOME", dir)
+	fc, err := loadFileConfig()
+	if err != nil {
+		t.Fatalf("loadFileConfig: %v", err)
+	}
+	if fc.OpenAIAPIKey != "sk-file" {
+		t.Errorf("OpenAIAPIKey = %q, want sk-file", fc.OpenAIAPIKey)
+	}
+	if fc.OpenAIBaseURL != "https://file.example/v1" {
+		t.Errorf("OpenAIBaseURL = %q", fc.OpenAIBaseURL)
+	}
+	if fc.OpenAIModel != "file-model" {
+		t.Errorf("OpenAIModel = %q", fc.OpenAIModel)
+	}
+}
+
+func TestFileConfigBelowEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgDir := filepath.Join(dir, ".logwiz")
+	if err := os.MkdirAll(cfgDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(`{"openai_api_key":"sk-file"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", dir)
+
+	env := envFromMap(map[string]string{EnvAPIKey: "sk-env"})
+	cfg, err := Parse(nil, env, io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.APIKey != "sk-env" {
+		t.Errorf("APIKey = %q, want sk-env (env should beat file)", cfg.APIKey)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"strings"
 )
 
 // Sender is the subset of *tea.Program used by sources to push messages.
@@ -51,7 +52,7 @@ func pump(ctx context.Context, r io.Reader, sender Sender) {
 		if ctx.Err() != nil {
 			return
 		}
-		sender.Send(NewLineMsg{Line: scanner.Text()})
+		sender.Send(NewLineMsg{Line: lastCRSegment(scanner.Text())})
 	}
 
 	if ctx.Err() != nil {
@@ -62,6 +63,19 @@ func pump(ctx context.Context, r io.Reader, sender Sender) {
 		return
 	}
 	sender.Send(EOFMsg{})
+}
+
+// lastCRSegment mimics terminal carriage-return behaviour: when a line
+// contains \r, each segment overwrites the previous one, so only the
+// last non-empty segment is what the user would have seen on screen.
+func lastCRSegment(s string) string {
+	last := ""
+	for _, seg := range strings.Split(s, "\r") {
+		if seg != "" {
+			last = seg
+		}
+	}
+	return last
 }
 
 // wrap around a sender func so tests can use a plain function.

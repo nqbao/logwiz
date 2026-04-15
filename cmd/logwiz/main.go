@@ -10,6 +10,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
@@ -22,9 +24,20 @@ import (
 )
 
 func main() {
+	// Capture the pipeline pgid before running so we can signal the whole
+	// group (start_api.sh, uvicorn, vite, etc.) when logwiz exits.
+	pgid, pgidErr := syscall.Getpgid(0)
+
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "logwiz:", err)
 		os.Exit(1)
+	}
+
+	if pgidErr == nil {
+		// Kill the pipeline process group so upstream processes (e.g.
+		// `start_api.sh | logwiz`) exit when the user quits logwiz.
+		signal.Ignore(syscall.SIGTERM)
+		_ = syscall.Kill(-pgid, syscall.SIGTERM)
 	}
 }
 
@@ -61,7 +74,7 @@ func run() error {
 
 	model := tui.New(cfg, kind, buf, client)
 
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	// Start source reader; it will Send messages into the program.
 	// An adapter keeps the source package free of a tea dependency.
@@ -70,6 +83,7 @@ func run() error {
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("tui: %w", err)
 	}
+
 	return nil
 }
 

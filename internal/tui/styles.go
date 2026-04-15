@@ -24,6 +24,14 @@ var (
 	styleSidebarBorder = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("240"))
 
+	styleSidebarBox = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("240"))
+
+	styleInputBox = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("62"))
+
 	styleSidebarHeader = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("219"))

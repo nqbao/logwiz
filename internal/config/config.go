@@ -4,11 +4,13 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -44,14 +46,56 @@ type Config struct {
 	File string
 }
 
+// fileConfig holds the subset of Config that can be set in
+// ~/.logwiz/config.json.
+type fileConfig struct {
+	OpenAIAPIKey  string `json:"openai_api_key"`
+	OpenAIBaseURL string `json:"openai_base_url"`
+	OpenAIModel   string `json:"openai_model"`
+}
+
+// loadFileConfig reads ~/.logwiz/config.json. Missing file is not an
+// error; any other problem is returned.
+func loadFileConfig() (fileConfig, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fileConfig{}, nil
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".logwiz", "config.json"))
+	if os.IsNotExist(err) {
+		return fileConfig{}, nil
+	}
+	if err != nil {
+		return fileConfig{}, fmt.Errorf("reading ~/.logwiz/config.json: %w", err)
+	}
+	var fc fileConfig
+	if err := json.Unmarshal(data, &fc); err != nil {
+		return fileConfig{}, fmt.Errorf("parsing ~/.logwiz/config.json: %w", err)
+	}
+	return fc, nil
+}
+
 // Parse parses args (not including the program name) and the given
 // environment lookup function, returning the resolved Config. out is
 // used for usage / error output.
 //
+// Resolution order: flag > env var > ~/.logwiz/config.json > default.
 // envLookup mirrors os.LookupEnv; pass os.LookupEnv in production.
 func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) (Config, error) {
+	fc, err := loadFileConfig()
+	if err != nil {
+		fmt.Fprintln(out, "logwiz: warning:", err)
+	}
+
 	fs := flag.NewFlagSet("logwiz", flag.ContinueOnError)
 	fs.SetOutput(out)
+
+	fileOr := func(fileVal, fallback string) string {
+		if fileVal != "" {
+			return fileVal
+		}
+		return fallback
+	}
 
 	envOr := func(key, fallback string) string {
 		if v, ok := envLookup(key); ok && v != "" {
@@ -60,13 +104,18 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		return fallback
 	}
 
+	// env > file > default
+	defaultAPIKey := envOr(EnvAPIKey, fileOr(fc.OpenAIAPIKey, ""))
+	defaultBaseURL := envOr(EnvBaseURL, fileOr(fc.OpenAIBaseURL, DefaultBaseURL))
+	defaultModel := envOr(EnvModel, fileOr(fc.OpenAIModel, DefaultModel))
+
 	var cfg Config
-	fs.StringVar(&cfg.APIKey, "api-key", envOr(EnvAPIKey, ""),
-		"API key for the OpenAI-compatible endpoint (env OPENAI_API_KEY)")
-	fs.StringVar(&cfg.BaseURL, "base-url", envOr(EnvBaseURL, DefaultBaseURL),
-		"Base URL for the chat completions endpoint (env OPENAI_BASE_URL)")
-	fs.StringVar(&cfg.Model, "model", envOr(EnvModel, DefaultModel),
-		"Model name (env OPENAI_MODEL)")
+	fs.StringVar(&cfg.APIKey, "api-key", defaultAPIKey,
+		"API key for the OpenAI-compatible endpoint (env OPENAI_API_KEY, ~/.logwiz/config.json)")
+	fs.StringVar(&cfg.BaseURL, "base-url", defaultBaseURL,
+		"Base URL for the chat completions endpoint (env OPENAI_BASE_URL, ~/.logwiz/config.json)")
+	fs.StringVar(&cfg.Model, "model", defaultModel,
+		"Model name (env OPENAI_MODEL, ~/.logwiz/config.json)")
 	fs.IntVar(&cfg.MaxLines, "max-lines", DefaultMaxLines,
 		"Rolling buffer size in lines")
 	fs.IntVar(&cfg.ContextLines, "context-lines", DefaultContextLines,
