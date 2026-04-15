@@ -11,6 +11,7 @@ import (
 	"context"
 	"io"
 	"strings"
+	"time"
 )
 
 // Sender is the subset of *tea.Program used by sources to push messages.
@@ -20,8 +21,9 @@ type Sender interface {
 	Send(msg any)
 }
 
-// NewLineMsg carries a single log line read from the source.
-type NewLineMsg struct{ Line string }
+// NewLinesMsg carries one or more log lines read from the source.
+// Batched at the source to avoid O(n) work per line downstream.
+type NewLinesMsg struct{ Lines []string }
 
 // EOFMsg indicates the source has finished (file EOF, or stdin closed).
 type EOFMsg struct{}
@@ -36,8 +38,13 @@ type Source interface {
 	Start(ctx context.Context, sender Sender)
 }
 
-// pump reads lines from r, pushing NewLineMsg for each line and a
-// final EOFMsg / ErrMsg when the stream ends or ctx is cancelled.
+// pump reads lines from r, pushing NewLinesMsg batches and a final
+// EOFMsg / ErrMsg when the stream ends or ctx is cancelled.
+//
+// Lines are coalesced into batches to avoid O(n)-per-line work downstream
+// (each batch triggers exactly one UI refresh regardless of how many lines
+// it contains). A batch is flushed when it reaches maxBatch lines or when
+// flushDelay has elapsed since the first line in the current batch.
 //
 // Callers that wrap os.Stdin or a file should pass the reader directly;
 // pump does its own buffering.
@@ -48,12 +55,36 @@ func pump(ctx context.Context, r io.Reader, sender Sender) {
 	const maxLine = 1 << 20
 	scanner.Buffer(make([]byte, 64*1024), maxLine)
 
+	const (
+		maxBatch   = 100
+		flushDelay = 10 * time.Millisecond
+	)
+	batch := make([]string, 0, maxBatch)
+	var firstAt time.Time
+
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		out := make([]string, len(batch))
+		copy(out, batch)
+		sender.Send(NewLinesMsg{Lines: out})
+		batch = batch[:0]
+	}
+
 	for scanner.Scan() {
 		if ctx.Err() != nil {
 			return
 		}
-		sender.Send(NewLineMsg{Line: lastCRSegment(scanner.Text())})
+		if len(batch) == 0 {
+			firstAt = time.Now()
+		}
+		batch = append(batch, lastCRSegment(scanner.Text()))
+		if len(batch) >= maxBatch || time.Since(firstAt) >= flushDelay {
+			flush()
+		}
 	}
+	flush()
 
 	if ctx.Err() != nil {
 		return
