@@ -1,0 +1,2 @@
+# logwiz
+Log Wizard
