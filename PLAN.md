@@ -256,12 +256,61 @@ Per the design doc — do **not** build these yet, even if tempting:
 
 - Search / filtering
 - Line selection or annotations
-- File follow / tail -f semantics
 - MCP / tool calling / agent loop
 - Multiple sessions or tabs
 - Structured log parsing, syntax colors
 - Response streaming (optional nice-to-have, but deferred)
 - `--tee`/`--out` duplication to stdout or file
+
+---
+
+## 8a. Post-v1 roadmap
+
+Deferred but intentionally kept on the roadmap. Ordered roughly by
+expected priority.
+
+### Follow mode (`tail -f` semantics) — planned
+
+File mode in v1 stops at EOF. Post-v1, a `--follow` / `-f` flag should
+keep the file open and stream appended lines into the same rolling
+buffer and UI.
+
+Sketch:
+
+- New source implementation `internal/source/follow.go` that:
+  - opens the file, reads start → EOF (same as file mode),
+  - then switches to watch mode instead of emitting `EOFMsg`.
+- Watch strategy, in order of preference:
+  1. `fsnotify` on the file for `Write` / `Rename` / `Remove` events
+     (fast, event-driven).
+  2. Fallback poll loop (~250ms) that `Stat`s size + inode and reads
+     the delta — needed on filesystems where fsnotify is unreliable
+     (network mounts, some containers).
+- **Rotation / truncation handling**: if size shrinks or inode changes,
+  reopen from offset 0 and emit a `SourceRotatedMsg` so the UI can
+  show a subtle marker in the log stream.
+- Keep the `EOFMsg` for the *initial* read pass only when `--follow`
+  is off; in follow mode it's replaced by a `FollowingMsg` status
+  that drives a `[following]` badge in place of `[eof]`.
+- CLI: `logwiz -f app.log` or `logwiz --follow app.log`. `-F` (capital)
+  could later mean "retry on missing file" like GNU tail.
+- Chat behavior is unchanged — it already reads from the rolling buffer,
+  so follow mode gets chat-over-live-logs for free.
+
+Tests to add with the feature: append after EOF, truncate-in-place,
+rotate-by-rename, file deletion + recreation.
+
+### Other post-v1 items
+
+- **Response streaming** from the chat endpoint (SSE) so answers render
+  token-by-token.
+- **`--tee` / `--out`** to also write raw stdin through to stdout and/or
+  a file while the TUI runs.
+- **Search / filter** over the buffer (`/` is already taken by chat —
+  maybe `Ctrl+F`).
+- **Copy answer to clipboard** and **retry last prompt**.
+- **Line selection** to scope a chat question to a specific range
+  instead of "last N lines".
 
 ---
 
