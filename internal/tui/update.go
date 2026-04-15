@@ -23,8 +23,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		return m.onResize(msg.Width, msg.Height), nil
 
-	case source.NewLineMsg:
-		m.buf.Append(msg.Line)
+	case source.NewLinesMsg:
+		for _, line := range msg.Lines {
+			m.buf.Append(line)
+		}
 		m.refreshLogsContent()
 		return m, nil
 

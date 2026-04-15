@@ -64,8 +64,8 @@ func TestStdinEmitsLinesThenEOF(t *testing.T) {
 	want := []string{"one", "two", "three"}
 	var lines []string
 	for _, m := range msgs {
-		if nl, ok := m.(NewLineMsg); ok {
-			lines = append(lines, nl.Line)
+		if nl, ok := m.(NewLinesMsg); ok {
+			lines = append(lines, nl.Lines...)
 		}
 	}
 	if !equalStrings(lines, want) {
@@ -90,8 +90,8 @@ func TestFileEmitsLinesThenEOF(t *testing.T) {
 	msgs := rec.snapshot()
 	var lines []string
 	for _, m := range msgs {
-		if nl, ok := m.(NewLineMsg); ok {
-			lines = append(lines, nl.Line)
+		if nl, ok := m.(NewLinesMsg); ok {
+			lines = append(lines, nl.Lines...)
 		}
 	}
 	if !equalStrings(lines, []string{"alpha", "beta"}) {
@@ -147,12 +147,44 @@ func TestStdinCancelStops(t *testing.T) {
 	msgs := rec.snapshot()
 	found := false
 	for _, m := range msgs {
-		if nl, ok := m.(NewLineMsg); ok && nl.Line == "hello" {
-			found = true
+		if nl, ok := m.(NewLinesMsg); ok {
+			for _, line := range nl.Lines {
+				if line == "hello" {
+					found = true
+				}
+			}
 		}
 	}
 	if !found {
 		t.Fatalf("did not observe 'hello' line; got %v", msgs)
+	}
+}
+
+func TestPumpBatchesLines(t *testing.T) {
+	const n = 500
+	var sb strings.Builder
+	for i := 0; i < n; i++ {
+		sb.WriteString("line\n")
+	}
+	rec := newRecorder()
+	src := &Stdin{R: strings.NewReader(sb.String())}
+	src.Start(context.Background(), rec)
+	rec.waitForTerminal(t)
+
+	msgs := rec.snapshot()
+	var batches int
+	var lines int
+	for _, m := range msgs {
+		if nl, ok := m.(NewLinesMsg); ok {
+			batches++
+			lines += len(nl.Lines)
+		}
+	}
+	if lines != n {
+		t.Fatalf("total lines = %d, want %d", lines, n)
+	}
+	if batches >= n/2 {
+		t.Fatalf("batches = %d, want < %d (batching not working)", batches, n/2)
 	}
 }
 

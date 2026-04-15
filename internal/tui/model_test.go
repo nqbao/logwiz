@@ -27,9 +27,9 @@ func newTestModel(t *testing.T) Model {
 	return mi.(Model)
 }
 
-func TestNewLineMsgAppendsToBuffer(t *testing.T) {
+func TestNewLinesMsgAppendsToBuffer(t *testing.T) {
 	m := newTestModel(t)
-	m2, _ := m.Update(source.NewLineMsg{Line: "hello"})
+	m2, _ := m.Update(source.NewLinesMsg{Lines: []string{"hello"}})
 	mm := m2.(Model)
 	if mm.buf.Len() != 1 {
 		t.Fatalf("len = %d, want 1", mm.buf.Len())
