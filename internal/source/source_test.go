@@ -224,44 +224,43 @@ func TestPumpAppliesParser(t *testing.T) {
 func TestFileTailSeekSkipsHead(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "big.log")
-	// 200 lines × 100 bytes each = 20 KiB. With tailBytes=1 KiB, only
-	// the last ~10 lines should survive.
+	// 2000 lines × 100 bytes each = ~200 KiB. Larger than the 64 KiB
+	// sample, so estimation kicks in. With MaxLines=50 and ~100 B/line
+	// the estimated budget is ~6 KiB → most of the file is skipped.
+	const lineLen = 99
+	const total = 2000
 	var sb strings.Builder
-	for i := 0; i < 200; i++ {
-		sb.WriteString(strings.Repeat("x", 99))
+	for i := 0; i < total; i++ {
+		sb.WriteString(strings.Repeat("x", lineLen))
 		sb.WriteString("\n")
 	}
-	full := sb.String()
-	if err := os.WriteFile(path, []byte(full), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	rec := newRecorder()
-	src := &File{Path: path, TailBytes: 1024}
+	src := &File{Path: path, MaxLines: 50}
 	src.Start(context.Background(), rec)
 	rec.waitForTerminal(t)
 
-	msgs := rec.snapshot()
-	lines := collectRaws(msgs)
+	lines := collectRaws(rec.snapshot())
 	if len(lines) == 0 {
 		t.Fatalf("no lines emitted")
 	}
-	// First emitted line must be the truncation marker.
 	if !strings.HasPrefix(lines[0], "[logwiz: skipped ") {
 		t.Errorf("first line = %q, want truncation marker", lines[0])
 	}
 	// Every surviving log line (after the marker) must be a full
-	// 99-x line — we must not have split a line mid-byte.
+	// line — we must not have split mid-byte when seeking.
 	for i, l := range lines[1:] {
-		if l != strings.Repeat("x", 99) {
-			t.Errorf("line %d after marker = %q, want 99 'x'", i+1, l)
+		if l != strings.Repeat("x", lineLen) {
+			t.Errorf("line %d after marker = %q (len=%d), want %d 'x'",
+				i+1, l, len(l), lineLen)
 		}
 	}
-	// We seeked to ~1 KiB from EOF, so we should keep far fewer than
-	// the original 200 lines but still something.
 	retained := len(lines) - 1
-	if retained == 0 || retained > 50 {
-		t.Errorf("retained %d lines, want 1 < n <= 50", retained)
+	if retained == 0 || retained > total/4 {
+		t.Errorf("retained %d lines, want 0 < n <= %d", retained, total/4)
 	}
 }
 
@@ -273,7 +272,7 @@ func TestFileNoTailSeekWhenSmall(t *testing.T) {
 	}
 
 	rec := newRecorder()
-	src := &File{Path: path, TailBytes: 1 << 20}
+	src := &File{Path: path, MaxLines: 10000}
 	src.Start(context.Background(), rec)
 	rec.waitForTerminal(t)
 
@@ -283,21 +282,76 @@ func TestFileNoTailSeekWhenSmall(t *testing.T) {
 	}
 }
 
-func TestFileTailSeekDisabledWhenZero(t *testing.T) {
+func TestFileTailSeekDisabledWhenMaxLinesZero(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "any.log")
-	if err := os.WriteFile(path, []byte("one\ntwo\n"), 0o644); err != nil {
+	// Deliberately larger than sampleSize so the only thing stopping
+	// tail-seek is MaxLines=0.
+	var sb strings.Builder
+	for i := 0; i < 1000; i++ {
+		sb.WriteString(strings.Repeat("y", 99))
+		sb.WriteString("\n")
+	}
+	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	rec := newRecorder()
-	src := &File{Path: path, TailBytes: 0}
+	src := &File{Path: path, MaxLines: 0}
 	src.Start(context.Background(), rec)
 	rec.waitForTerminal(t)
 
-	got := collectRaws(rec.snapshot())
-	if !equalStrings(got, []string{"one", "two"}) {
-		t.Fatalf("lines = %v, want [one two]", got)
+	lines := collectRaws(rec.snapshot())
+	if len(lines) != 1000 {
+		t.Fatalf("got %d lines, want 1000 (no seek expected with MaxLines=0)", len(lines))
+	}
+	if strings.HasPrefix(lines[0], "[logwiz:") {
+		t.Errorf("got truncation marker with MaxLines=0: %q", lines[0])
+	}
+}
+
+func TestFileTailSeekScalesWithLineSize(t *testing.T) {
+	// Files with bigger lines should produce bigger byte budgets so
+	// the user still gets roughly MaxLines lines back. This is the
+	// whole point of sample-and-estimate over a fixed byte cap.
+	dir := t.TempDir()
+	write := func(name string, lineLen, count int) string {
+		path := filepath.Join(dir, name)
+		var sb strings.Builder
+		for i := 0; i < count; i++ {
+			sb.WriteString(strings.Repeat("z", lineLen))
+			sb.WriteString("\n")
+		}
+		if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	run := func(path string) int {
+		rec := newRecorder()
+		src := &File{Path: path, MaxLines: 100}
+		src.Start(context.Background(), rec)
+		rec.waitForTerminal(t)
+		lines := collectRaws(rec.snapshot())
+		// Drop marker.
+		if len(lines) > 0 && strings.HasPrefix(lines[0], "[logwiz:") {
+			lines = lines[1:]
+		}
+		return len(lines)
+	}
+
+	// 2000 × ~100 B lines → ~200 KiB file. With MaxLines=100 and
+	// 1.25× headroom we expect ~125 lines retained (headroom can
+	// round up a bit depending on integer division).
+	shortRetained := run(write("short.log", 99, 2000))
+	// 1000 × ~1 KiB lines → ~1 MiB file. Same MaxLines, budget should
+	// scale to cover ~125 lines again.
+	longRetained := run(write("long.log", 1023, 1000))
+
+	for _, n := range []int{shortRetained, longRetained} {
+		if n < 80 || n > 200 {
+			t.Errorf("retained %d, want in [80, 200] for MaxLines=100 with 1.25× headroom", n)
+		}
 	}
 }
 

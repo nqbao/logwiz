@@ -55,11 +55,14 @@ run locally, append `tool` role message, re-request until done.
 
 ### File-mode tail-seek ✅
 
-Shipped: `--tail-bytes` (default 10 MiB). `source.File` stats the file; if larger, seeks
-to `size - tail-bytes`, discards the partial line at the boundary, and emits a synthetic
-`[logwiz: skipped N from head of file (tail-seek); ...]` LogMessage as the first line so
-the user can see that content was dropped. Smaller files and `--tail-bytes=0` read from
-the start as before.
+Shipped. `source.File` samples ~64 KiB near EOF to estimate average line size, then
+seeks backward far enough to cover `--max-lines` lines (with 25% headroom). When the
+estimate covers the whole file, no seek happens. Otherwise it discards the partial
+line at the seek boundary and emits a synthetic
+`[logwiz: skipped N from head of file (tail-seek); ...]` LogMessage as the first line.
+No extra user-facing flag: the budget tracks `--max-lines` automatically, so files
+with tiny lines and files with huge JSON lines both keep roughly the right number of
+lines in view.
 
 Scope limitation (deferred to v1.4+): skipped content is not accessible — you can't
 scroll back past the tail-seek point, and chat `search` will only see what's in the ring

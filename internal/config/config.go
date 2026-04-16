@@ -23,7 +23,6 @@ const (
 	DefaultSidebarWidth = 50
 	DefaultSystemPrompt = "You are helping analyze terminal logs. Be concise and grounded in the provided log text."
 	DefaultFormat       = "json"
-	DefaultTailBytes    = 10 << 20 // 10 MiB
 )
 
 // Env var names.
@@ -49,12 +48,6 @@ type Config struct {
 
 	// Format selects the line parser: "json" or "passthrough".
 	Format string
-
-	// TailBytes is the byte budget for reading from the tail of a file
-	// larger than this value. Files smaller than TailBytes are read in
-	// full from the start. Zero disables tail-seek (entire file is
-	// read; head-of-file content may still be evicted by --max-lines).
-	TailBytes int64
 }
 
 // fileConfig holds the subset of Config that can be set in
@@ -137,8 +130,6 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		"System prompt sent with each chat request")
 	fs.StringVar(&cfg.Format, "format", DefaultFormat,
 		`Line parser: "json" detects and colours JSON lines, "passthrough" renders everything as plain text`)
-	fs.Int64Var(&cfg.TailBytes, "tail-bytes", DefaultTailBytes,
-		"When opening a file larger than this, seek to the tail and skip earlier content (0 = read from start)")
 
 	fs.Usage = func() {
 		fmt.Fprintln(out, "Usage: logwiz [flags] [file]")
@@ -178,9 +169,6 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	}
 	if cfg.Format != "json" && cfg.Format != "passthrough" {
 		return Config{}, errors.New(`--format must be "json" or "passthrough"`)
-	}
-	if cfg.TailBytes < 0 {
-		return Config{}, errors.New("--tail-bytes must be >= 0")
 	}
 
 	return cfg, nil
