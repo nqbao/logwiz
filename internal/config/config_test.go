@@ -149,6 +149,36 @@ func TestLoadFileConfig(t *testing.T) {
 	}
 }
 
+func TestParseUsesFileConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgDir := filepath.Join(dir, ".logwiz")
+	if err := os.MkdirAll(cfgDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(`{
+		"openai_api_key": "sk-file",
+		"openai_base_url": "https://file.example/v1",
+		"openai_model": "file-model"
+	}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", dir)
+
+	cfg, err := Parse(nil, envFromMap(nil), io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.APIKey != "sk-file" {
+		t.Errorf("APIKey = %q, want sk-file", cfg.APIKey)
+	}
+	if cfg.BaseURL != "https://file.example/v1" {
+		t.Errorf("BaseURL = %q, want https://file.example/v1", cfg.BaseURL)
+	}
+	if cfg.Model != "file-model" {
+		t.Errorf("Model = %q, want file-model", cfg.Model)
+	}
+}
+
 func TestFileConfigBelowEnv(t *testing.T) {
 	dir := t.TempDir()
 	cfgDir := filepath.Join(dir, ".logwiz")
