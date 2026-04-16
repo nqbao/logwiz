@@ -10,6 +10,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/nqbao/logwiz/internal/buffer"
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 // TestMain forces TrueColor output so lipgloss renders ANSI escape codes
@@ -24,11 +25,11 @@ func TestMain(m *testing.M) {
 var noStyle = lipgloss.NewStyle()
 
 // newTestViewport creates a LogViewport backed by a fresh buffer filled with
-// the given lines.
+// the given raw log lines.
 func newTestViewport(width, height int, lines ...string) *LogViewport {
 	b := buffer.New(max(len(lines), 1))
 	for _, l := range lines {
-		b.Append(l)
+		b.Append(logmsg.LogMessage{Raw: l})
 	}
 	v := newLogViewport(b)
 	v.Width = width
@@ -189,8 +190,8 @@ func TestSetSize_AutoScrollGotosBottom(t *testing.T) {
 func TestOnNewLines_AutoScrollEnabled(t *testing.T) {
 	v := newTestViewport(80, 3, "a", "b", "c")
 	v.autoScroll = true
-	v.buf.Append("d")
-	v.buf.Append("e")
+	v.buf.Append(logmsg.LogMessage{Raw: "d"})
+	v.buf.Append(logmsg.LogMessage{Raw: "e"})
 	v.OnNewLines(2)
 	if !v.AtBottom() {
 		t.Errorf("OnNewLines with autoScroll should scroll to bottom; YOffset=%d", v.YOffset)
@@ -201,8 +202,8 @@ func TestOnNewLines_AutoScrollDisabled(t *testing.T) {
 	v := newTestViewport(80, 3, "a", "b", "c")
 	v.autoScroll = false
 	v.YOffset = 0
-	v.buf.Append("d")
-	v.buf.Append("e")
+	v.buf.Append(logmsg.LogMessage{Raw: "d"})
+	v.buf.Append(logmsg.LogMessage{Raw: "e"})
 	v.OnNewLines(2)
 	if v.YOffset != 0 {
 		t.Errorf("OnNewLines without autoScroll should not move; YOffset=%d", v.YOffset)
@@ -390,7 +391,7 @@ func TestView_EmptyBuffer(t *testing.T) {
 func TestView_SelectedRowHighlighted(t *testing.T) {
 	b := buffer.New(3)
 	for _, l := range []string{"alpha", "beta", "gamma"} {
-		b.Append(l)
+		b.Append(logmsg.LogMessage{Raw: l})
 	}
 	vSel := newLogViewport(b)
 	vSel.Width = 30
@@ -535,15 +536,15 @@ func TestWrap_SelectAtMapsToLogicalLine(t *testing.T) {
 func TestWrap_OnNewLinesIncrementalUpdate(t *testing.T) {
 	// Use explicit capacity=3 so no eviction occurs when the third line is appended.
 	b := buffer.New(3)
-	b.Append("ab")
-	b.Append("abcde")
+	b.Append(logmsg.LogMessage{Raw: "ab"})
+	b.Append(logmsg.LogMessage{Raw: "abcde"})
 	v := newLogViewport(b)
 	v.Wrap = true
 	v.Width = 5
 	v.Height = 10
 	v.recomputeWrapCache() // totalRows = 1+1 = 2, cache=[1,1]
 
-	b.Append("abcdefghij") // 2 rows at width=5; no eviction
+	b.Append(logmsg.LogMessage{Raw: "abcdefghij"}) // 2 rows at width=5; no eviction
 	v.OnNewLines(1)
 	if v.totalRows != 4 {
 		t.Errorf("totalRows after OnNewLines = %d, want 4", v.totalRows)
@@ -557,7 +558,7 @@ func TestWrap_OnNewLinesEviction(t *testing.T) {
 	// capacity=3. Fill it: "ab"(1),"abcde"(1),"abcdefghij"(2). totalRows=4, cache=[1,1,2]
 	b := buffer.New(3)
 	for _, l := range []string{"ab", "abcde", "abcdefghij"} {
-		b.Append(l)
+		b.Append(logmsg.LogMessage{Raw: l})
 	}
 	v := newLogViewport(b)
 	v.Wrap = true
@@ -570,7 +571,7 @@ func TestWrap_OnNewLinesEviction(t *testing.T) {
 	}
 
 	// Append "xyz" (1 row). Ring evicts "ab" (1 row). net: -1+1=0, totalRows stays 4.
-	b.Append("xyz")
+	b.Append(logmsg.LogMessage{Raw: "xyz"})
 	v.OnNewLines(1)
 	if v.totalRows != 4 {
 		t.Errorf("after eviction totalRows = %d, want 4", v.totalRows)

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 type recordingSender struct {
@@ -54,6 +56,19 @@ func (r *recordingSender) waitForTerminal(t *testing.T) {
 	}
 }
 
+// collectRaws extracts the Raw field of every LogMessage emitted.
+func collectRaws(msgs []any) []string {
+	var lines []string
+	for _, m := range msgs {
+		if nl, ok := m.(NewLinesMsg); ok {
+			for _, lm := range nl.Lines {
+				lines = append(lines, lm.Raw)
+			}
+		}
+	}
+	return lines
+}
+
 func TestStdinEmitsLinesThenEOF(t *testing.T) {
 	rec := newRecorder()
 	src := &Stdin{R: strings.NewReader("one\ntwo\nthree\n")}
@@ -62,14 +77,8 @@ func TestStdinEmitsLinesThenEOF(t *testing.T) {
 
 	msgs := rec.snapshot()
 	want := []string{"one", "two", "three"}
-	var lines []string
-	for _, m := range msgs {
-		if nl, ok := m.(NewLinesMsg); ok {
-			lines = append(lines, nl.Lines...)
-		}
-	}
-	if !equalStrings(lines, want) {
-		t.Fatalf("lines = %v, want %v", lines, want)
+	if got := collectRaws(msgs); !equalStrings(got, want) {
+		t.Fatalf("lines = %v, want %v", got, want)
 	}
 	if _, ok := msgs[len(msgs)-1].(EOFMsg); !ok {
 		t.Fatalf("last msg = %T, want EOFMsg", msgs[len(msgs)-1])
@@ -88,14 +97,8 @@ func TestFileEmitsLinesThenEOF(t *testing.T) {
 	rec.waitForTerminal(t)
 
 	msgs := rec.snapshot()
-	var lines []string
-	for _, m := range msgs {
-		if nl, ok := m.(NewLinesMsg); ok {
-			lines = append(lines, nl.Lines...)
-		}
-	}
-	if !equalStrings(lines, []string{"alpha", "beta"}) {
-		t.Fatalf("lines = %v", lines)
+	if got := collectRaws(msgs); !equalStrings(got, []string{"alpha", "beta"}) {
+		t.Fatalf("lines = %v", got)
 	}
 	if _, ok := msgs[len(msgs)-1].(EOFMsg); !ok {
 		t.Fatalf("last msg = %T, want EOFMsg", msgs[len(msgs)-1])
@@ -146,13 +149,9 @@ func TestStdinCancelStops(t *testing.T) {
 	// silently. Just confirm we captured the line.
 	msgs := rec.snapshot()
 	found := false
-	for _, m := range msgs {
-		if nl, ok := m.(NewLinesMsg); ok {
-			for _, line := range nl.Lines {
-				if line == "hello" {
-					found = true
-				}
-			}
+	for _, line := range collectRaws(msgs) {
+		if line == "hello" {
+			found = true
 		}
 	}
 	if !found {
@@ -185,6 +184,40 @@ func TestPumpBatchesLines(t *testing.T) {
 	}
 	if batches >= n/2 {
 		t.Fatalf("batches = %d, want < %d (batching not working)", batches, n/2)
+	}
+}
+
+// stubParser tags every line with a fixed attribute so tests can confirm
+// the parser is actually invoked by pump.
+type stubParser struct{}
+
+func (stubParser) Parse(raw string) logmsg.LogMessage {
+	return logmsg.LogMessage{
+		Raw:        raw,
+		Attributes: map[string]string{"tag": "stubbed"},
+	}
+}
+
+func TestPumpAppliesParser(t *testing.T) {
+	rec := newRecorder()
+	src := &Stdin{R: strings.NewReader("a\nb\n"), Parser: stubParser{}}
+	src.Start(context.Background(), rec)
+	rec.waitForTerminal(t)
+
+	msgs := rec.snapshot()
+	var seen []logmsg.LogMessage
+	for _, m := range msgs {
+		if nl, ok := m.(NewLinesMsg); ok {
+			seen = append(seen, nl.Lines...)
+		}
+	}
+	if len(seen) != 2 {
+		t.Fatalf("got %d messages, want 2", len(seen))
+	}
+	for i, lm := range seen {
+		if lm.Attr("tag") != "stubbed" {
+			t.Errorf("msg %d: Attr(tag) = %q, want stubbed", i, lm.Attr("tag"))
+		}
 	}
 }
 

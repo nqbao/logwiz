@@ -19,6 +19,7 @@ import (
 	"github.com/nqbao/logwiz/internal/buffer"
 	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
+	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
 	"github.com/nqbao/logwiz/internal/tui"
 )
@@ -48,16 +49,19 @@ func run() error {
 	}
 
 	// Decide source: explicit file > stdin (if piped). Reject if neither.
+	// Parser is the placeholder pass-through for now; real parsers will
+	// drop in here without touching the rest of the pipeline.
+	parser := logmsg.PassthroughParser{}
 	var (
 		src  source.Source
 		kind tui.SourceKind
 	)
 	switch {
 	case cfg.File != "":
-		src = &source.File{Path: cfg.File}
+		src = &source.File{Path: cfg.File, Parser: parser}
 		kind = tui.SourceFile
 	case !isatty.IsTerminal(os.Stdin.Fd()):
-		src = &source.Stdin{R: os.Stdin}
+		src = &source.Stdin{R: os.Stdin, Parser: parser}
 		kind = tui.SourceStdin
 	default:
 		fmt.Fprintln(os.Stderr, "logwiz: no input — pipe logs in or pass a file")

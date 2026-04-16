@@ -12,6 +12,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 // Sender is the subset of *tea.Program used by sources to push messages.
@@ -21,9 +23,9 @@ type Sender interface {
 	Send(msg any)
 }
 
-// NewLinesMsg carries one or more log lines read from the source.
+// NewLinesMsg carries one or more parsed log messages read from the source.
 // Batched at the source to avoid O(n) work per line downstream.
-type NewLinesMsg struct{ Lines []string }
+type NewLinesMsg struct{ Lines []logmsg.LogMessage }
 
 // EOFMsg indicates the source has finished (file EOF, or stdin closed).
 type EOFMsg struct{}
@@ -46,9 +48,16 @@ type Source interface {
 // it contains). A batch is flushed when it reaches maxBatch lines or when
 // flushDelay has elapsed since the first line in the current batch.
 //
+// Each raw line is run through parser before being added to the batch.
+// If parser is nil, logmsg.PassthroughParser is used.
+//
 // Callers that wrap os.Stdin or a file should pass the reader directly;
 // pump does its own buffering.
-func pump(ctx context.Context, r io.Reader, sender Sender) {
+func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser) {
+	if parser == nil {
+		parser = logmsg.PassthroughParser{}
+	}
+
 	scanner := bufio.NewScanner(r)
 	// Allow long lines (up to 1 MiB). Default bufio.Scanner buffer
 	// maxes out at 64 KiB which is easy to blow past in real logs.
@@ -59,14 +68,14 @@ func pump(ctx context.Context, r io.Reader, sender Sender) {
 		maxBatch   = 100
 		flushDelay = 10 * time.Millisecond
 	)
-	batch := make([]string, 0, maxBatch)
+	batch := make([]logmsg.LogMessage, 0, maxBatch)
 	var firstAt time.Time
 
 	flush := func() {
 		if len(batch) == 0 {
 			return
 		}
-		out := make([]string, len(batch))
+		out := make([]logmsg.LogMessage, len(batch))
 		copy(out, batch)
 		sender.Send(NewLinesMsg{Lines: out})
 		batch = batch[:0]
@@ -79,7 +88,7 @@ func pump(ctx context.Context, r io.Reader, sender Sender) {
 		if len(batch) == 0 {
 			firstAt = time.Now()
 		}
-		batch = append(batch, lastCRSegment(scanner.Text()))
+		batch = append(batch, parser.Parse(lastCRSegment(scanner.Text())))
 		if len(batch) >= maxBatch || time.Since(firstAt) >= flushDelay {
 			flush()
 		}

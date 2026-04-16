@@ -3,11 +3,13 @@
 // chat model.
 package buffer
 
-// Buffer is a fixed-size ring of strings. Appending past capacity
+import "github.com/nqbao/logwiz/internal/logmsg"
+
+// Buffer is a fixed-size ring of LogMessages. Appending past capacity
 // overwrites the oldest entry. Not safe for concurrent use; the TUI
 // keeps all mutations on the Bubble Tea event loop.
 type Buffer struct {
-	lines []string
+	lines []logmsg.LogMessage
 	head  int // index of the next slot to write
 	size  int // number of valid entries
 	cap   int
@@ -20,7 +22,7 @@ func New(capLines int) *Buffer {
 		capLines = 1
 	}
 	return &Buffer{
-		lines: make([]string, capLines),
+		lines: make([]logmsg.LogMessage, capLines),
 		cap:   capLines,
 	}
 }
@@ -31,19 +33,19 @@ func (b *Buffer) Cap() int { return b.cap }
 // Len returns the number of lines currently stored.
 func (b *Buffer) Len() int { return b.size }
 
-// Append adds a line to the buffer, evicting the oldest line if full.
-func (b *Buffer) Append(line string) {
-	b.lines[b.head] = line
+// Append adds a message to the buffer, evicting the oldest if full.
+func (b *Buffer) Append(msg logmsg.LogMessage) {
+	b.lines[b.head] = msg
 	b.head = (b.head + 1) % b.cap
 	if b.size < b.cap {
 		b.size++
 	}
 }
 
-// Snapshot returns all stored lines in chronological order. The
+// Snapshot returns all stored messages in chronological order. The
 // returned slice is a fresh copy and safe for the caller to retain.
-func (b *Buffer) Snapshot() []string {
-	out := make([]string, b.size)
+func (b *Buffer) Snapshot() []logmsg.LogMessage {
+	out := make([]logmsg.LogMessage, b.size)
 	start := (b.head - b.size + b.cap) % b.cap
 	for i := 0; i < b.size; i++ {
 		out[i] = b.lines[(start+i)%b.cap]
@@ -51,26 +53,26 @@ func (b *Buffer) Snapshot() []string {
 	return out
 }
 
-// Line returns the i-th line in chronological order (0 = oldest).
-// Returns "" for out-of-range indices.
-func (b *Buffer) Line(i int) string {
+// Line returns the i-th message in chronological order (0 = oldest).
+// Returns a zero-value LogMessage for out-of-range indices.
+func (b *Buffer) Line(i int) logmsg.LogMessage {
 	if i < 0 || i >= b.size {
-		return ""
+		return logmsg.LogMessage{}
 	}
 	start := (b.head - b.size + b.cap) % b.cap
 	return b.lines[(start+i)%b.cap]
 }
 
-// LastN returns the most recent n lines in chronological order. If n
-// exceeds the number of stored lines, the full snapshot is returned.
-func (b *Buffer) LastN(n int) []string {
+// LastN returns the most recent n messages in chronological order. If
+// n exceeds the number of stored messages, the full snapshot is returned.
+func (b *Buffer) LastN(n int) []logmsg.LogMessage {
 	if n <= 0 {
-		return []string{}
+		return []logmsg.LogMessage{}
 	}
 	if n >= b.size {
 		return b.Snapshot()
 	}
-	out := make([]string, n)
+	out := make([]logmsg.LogMessage, n)
 	start := (b.head - n + b.cap) % b.cap
 	for i := 0; i < n; i++ {
 		out[i] = b.lines[(start+i)%b.cap]
