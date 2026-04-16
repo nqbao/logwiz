@@ -13,6 +13,7 @@ const (
 	keyAltEnter = "ctrl+j"
 	keyHelp     = "?"
 	keyClear    = "c"
+	keyWrap     = "w"
 
 	// Log viewport scroll keys (mirrors viewport.DefaultKeyMap).
 	keyScrollDown      = "j"

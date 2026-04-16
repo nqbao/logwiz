@@ -100,6 +100,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  enter     send chat message (in input)",
 		"  ctrl+j    newline in chat input",
 		"  c         clear chat history",
+		"  w         toggle line wrap",
 		"  j / ↓     scroll logs down",
 		"  k / ↑     scroll logs up",
 		"  pgup/pgdn page logs",

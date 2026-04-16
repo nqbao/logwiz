@@ -176,6 +176,9 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.chatMsgs = nil
 		m.chatErr = ""
 		return m, nil
+	case keyWrap:
+		m.logs.ToggleWrap()
+		return m, nil
 	}
 
 	// Forward remaining keys to the log viewport.

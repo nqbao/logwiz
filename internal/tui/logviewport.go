@@ -177,6 +177,19 @@ func (v *LogViewport) maxYOffset() int {
 	return m
 }
 
+// ToggleWrap switches between soft-wrap and horizontal-scroll modes.
+// YOffset is clamped to the new maxYOffset after the mode switch.
+func (v *LogViewport) ToggleWrap() {
+	v.Wrap = !v.Wrap
+	if v.Wrap {
+		v.recomputeWrapCache()
+	}
+	v.YOffset = clamp(v.YOffset, 0, v.maxYOffset())
+	if v.autoScroll {
+		v.GotoBottom()
+	}
+}
+
 // SetSize updates dimensions and re-applies auto-scroll.
 // Triggers a full cache rebuild when Wrap is on and the width changed.
 func (v *LogViewport) SetSize(width, height int) {
