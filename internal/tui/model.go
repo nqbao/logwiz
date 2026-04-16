@@ -16,6 +16,7 @@ import (
 	"github.com/nqbao/logwiz/internal/buffer"
 	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
+	"github.com/nqbao/logwiz/internal/highlight"
 )
 
 // SourceKind is a label shown in the status bar.
@@ -38,8 +39,9 @@ type Model struct {
 	cfg        config.Config
 	sourceKind SourceKind
 
-	buf *buffer.Buffer
-	eof bool
+	buf        *buffer.Buffer
+	eof        bool
+	highlighter *highlight.Highlighter
 
 	logs LogViewport
 
@@ -74,17 +76,24 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	h := highlight.New()
+	h.Register("json", highlight.JSONRenderer)
+
+	lv := newLogViewport(buf)
+	lv.h = h
+
 	m := Model{
-		cfg:        cfg,
-		sourceKind: kind,
-		buf:        buf,
-		logs:       newLogViewport(buf),
-		convo:      viewport.New(0, 0),
-		input:      ta,
-		focus:      focusLogs,
-		chatClient: client,
-		ctx:        ctx,
-		cancel:     cancel,
+		cfg:         cfg,
+		sourceKind:  kind,
+		buf:         buf,
+		highlighter: h,
+		logs:        lv,
+		convo:       viewport.New(0, 0),
+		input:       ta,
+		focus:       focusLogs,
+		chatClient:  client,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 	return m
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/nqbao/logwiz/internal/buffer"
+	"github.com/nqbao/logwiz/internal/highlight"
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 // LogViewport renders log lines directly from *buffer.Buffer at View() time —
@@ -28,6 +30,7 @@ type LogViewport struct {
 	autoScroll bool // follow the tail when new lines arrive
 
 	buf *buffer.Buffer
+	h   *highlight.Highlighter // may be nil; display() falls back to Raw
 
 	// Wrap=true: per-line wrap-height cache keyed to wrapCacheWidth.
 	wrapCache      []int
@@ -51,6 +54,15 @@ func clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+// display returns the rendered (possibly ANSI-coloured) string for msg.
+// Falls back to msg.Raw when no highlighter is set.
+func (v *LogViewport) display(msg logmsg.LogMessage) string {
+	if v.h == nil {
+		return msg.Raw
+	}
+	return v.h.Display(msg)
 }
 
 // --- wrap-height cache ---
@@ -79,7 +91,7 @@ func (v *LogViewport) recomputeWrapCache() {
 	}
 	v.totalRows = 0
 	for i := 0; i < n; i++ {
-		h := v.lineWrapHeight(v.buf.Line(i).Raw)
+		h := v.lineWrapHeight(v.display(v.buf.Line(i)))
 		v.wrapCache[i] = h
 		v.totalRows += h
 	}
@@ -124,7 +136,7 @@ func (v *LogViewport) updateWrapCache(newLines int) {
 		start = 0
 	}
 	for i := start; i < bufLen; i++ {
-		h := v.lineWrapHeight(v.buf.Line(i).Raw)
+		h := v.lineWrapHeight(v.display(v.buf.Line(i)))
 		v.wrapCache = append(v.wrapCache, h)
 		v.totalRows += h
 	}
@@ -355,7 +367,7 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 	v.longestLineWidth = 0
 
 	for i := top; i < bot; i++ {
-		line := v.buf.Line(i).Raw
+		line := v.display(v.buf.Line(i))
 
 		if w := ansi.StringWidth(line); w > v.longestLineWidth {
 			v.longestLineWidth = w
@@ -396,7 +408,7 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 	first := true
 
 	for i := startLine; i < n && rowsWritten < v.Height; i++ {
-		line := v.buf.Line(i).Raw
+		line := v.display(v.buf.Line(i))
 		h := 1
 		if i < len(v.wrapCache) {
 			h = v.wrapCache[i]

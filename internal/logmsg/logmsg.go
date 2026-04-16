@@ -24,9 +24,11 @@ type MsgID struct {
 // Raw is the original line text after carriage-return sanitization
 // (see source.lastCRSegment). Attributes is nil for unparsed messages
 // — callers should use Attr to read individual keys safely.
+// Format is a hint to the syntax highlighter ("json", "" = passthrough).
 type LogMessage struct {
 	ID         MsgID
 	Raw        string
+	Format     string // "json", "" = passthrough
 	Attributes map[string]string
 }
 

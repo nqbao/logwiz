@@ -25,7 +25,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case source.NewLinesMsg:
 		for _, lm := range msg.Lines {
-			m.buf.Append(lm)
+			if evictedID, evicted := m.buf.Append(lm); evicted {
+				m.highlighter.Evict(evictedID)
+			}
 		}
 		m.logs.OnNewLines(len(msg.Lines))
 		return m, nil
