@@ -3,13 +3,19 @@ package source
 import (
 	"context"
 	"os"
+
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 // File reads a file from the beginning to EOF, then emits EOFMsg. It
 // does not follow the file for appends (that is a post-v1 feature;
 // see PLAN.md §8a).
+//
+// Parser is applied to each line before batching. Nil falls back to
+// logmsg.PassthroughParser.
 type File struct {
-	Path string
+	Path   string
+	Parser logmsg.Parser
 }
 
 // Start opens the file and pumps lines. If opening fails, an ErrMsg
@@ -34,6 +40,6 @@ func (f *File) Start(ctx context.Context, sender Sender) {
 			}
 		}()
 
-		pump(ctx, file, sender)
+		pump(ctx, file, sender, f.Parser)
 	}()
 }

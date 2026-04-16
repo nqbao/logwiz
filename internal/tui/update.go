@@ -24,8 +24,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onResize(msg.Width, msg.Height), nil
 
 	case source.NewLinesMsg:
-		for _, line := range msg.Lines {
-			m.buf.Append(line)
+		for _, lm := range msg.Lines {
+			m.buf.Append(lm)
 		}
 		m.logs.OnNewLines(len(msg.Lines))
 		return m, nil
@@ -224,7 +224,11 @@ func (m Model) submitChat() (tea.Model, tea.Cmd) {
 	m.input.Reset()
 	m.refreshConvoContent()
 
-	logLines := m.buf.LastN(m.cfg.ContextLines)
+	recent := m.buf.LastN(m.cfg.ContextLines)
+	logLines := make([]string, len(recent))
+	for i, lm := range recent {
+		logLines[i] = lm.Raw
+	}
 	history := m.chatMsgs[:len(m.chatMsgs)-1] // prior turns only
 	msgs := buildChatMessages(m.cfg.SystemPrompt, history, logLines, q)
 

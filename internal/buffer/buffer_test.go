@@ -3,7 +3,22 @@ package buffer
 import (
 	"reflect"
 	"testing"
+
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
+
+// raw wraps a string into a LogMessage for terser test setup.
+func raw(s string) logmsg.LogMessage { return logmsg.LogMessage{Raw: s} }
+
+// raws projects the Raw field of a LogMessage slice for comparisons
+// that don't care about the buffer-assigned MsgID.
+func raws(msgs []logmsg.LogMessage) []string {
+	out := make([]string, len(msgs))
+	for i, m := range msgs {
+		out[i] = m.Raw
+	}
+	return out
+}
 
 func TestNewClampsCap(t *testing.T) {
 	b := New(0)
@@ -18,34 +33,34 @@ func TestNewClampsCap(t *testing.T) {
 
 func TestAppendAndSnapshotBelowCap(t *testing.T) {
 	b := New(5)
-	b.Append("a")
-	b.Append("b")
-	b.Append("c")
+	b.Append(raw("a"))
+	b.Append(raw("b"))
+	b.Append(raw("c"))
 	if got, want := b.Len(), 3; got != want {
 		t.Fatalf("len = %d, want %d", got, want)
 	}
-	if got, want := b.Snapshot(), []string{"a", "b", "c"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("snapshot = %v, want %v", got, want)
+	if got, want := raws(b.Snapshot()), []string{"a", "b", "c"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("snapshot raws = %v, want %v", got, want)
 	}
 }
 
 func TestAppendWrapsPastCap(t *testing.T) {
 	b := New(3)
 	for _, line := range []string{"a", "b", "c", "d", "e"} {
-		b.Append(line)
+		b.Append(raw(line))
 	}
 	if got, want := b.Len(), 3; got != want {
 		t.Fatalf("len = %d, want %d", got, want)
 	}
-	if got, want := b.Snapshot(), []string{"c", "d", "e"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("snapshot = %v, want %v", got, want)
+	if got, want := raws(b.Snapshot()), []string{"c", "d", "e"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("snapshot raws = %v, want %v", got, want)
 	}
 }
 
 func TestLastN(t *testing.T) {
 	b := New(5)
 	for _, line := range []string{"a", "b", "c", "d"} {
-		b.Append(line)
+		b.Append(raw(line))
 	}
 	tests := []struct {
 		n    int
@@ -58,9 +73,9 @@ func TestLastN(t *testing.T) {
 		{10, []string{"a", "b", "c", "d"}}, // n > size
 	}
 	for _, tc := range tests {
-		got := b.LastN(tc.n)
+		got := raws(b.LastN(tc.n))
 		if !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("LastN(%d) = %v, want %v", tc.n, got, tc.want)
+			t.Errorf("LastN(%d) raws = %v, want %v", tc.n, got, tc.want)
 		}
 	}
 }
@@ -68,21 +83,21 @@ func TestLastN(t *testing.T) {
 func TestLastNAfterWrap(t *testing.T) {
 	b := New(3)
 	for _, line := range []string{"a", "b", "c", "d", "e"} {
-		b.Append(line)
+		b.Append(raw(line))
 	}
-	if got, want := b.LastN(2), []string{"d", "e"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("LastN(2) = %v, want %v", got, want)
+	if got, want := raws(b.LastN(2)), []string{"d", "e"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("LastN(2) raws = %v, want %v", got, want)
 	}
 }
 
 func TestSnapshotIsCopy(t *testing.T) {
 	b := New(3)
-	b.Append("a")
-	b.Append("b")
+	b.Append(raw("a"))
+	b.Append(raw("b"))
 	snap := b.Snapshot()
-	snap[0] = "mutated"
+	snap[0] = raw("mutated")
 	again := b.Snapshot()
-	if again[0] != "a" {
+	if again[0].Raw != "a" {
 		t.Fatalf("buffer mutated by caller via snapshot: %v", again)
 	}
 }
@@ -90,54 +105,103 @@ func TestSnapshotIsCopy(t *testing.T) {
 func TestLine(t *testing.T) {
 	// In-range, then ring-wrap case.
 	b := New(3)
-	b.Append("a")
-	b.Append("b")
-	b.Append("c")
+	b.Append(raw("a"))
+	b.Append(raw("b"))
+	b.Append(raw("c"))
 
-	if got := b.Line(0); got != "a" {
+	if got := b.Line(0).Raw; got != "a" {
 		t.Errorf("Line(0) = %q, want %q", got, "a")
 	}
-	if got := b.Line(1); got != "b" {
+	if got := b.Line(1).Raw; got != "b" {
 		t.Errorf("Line(1) = %q, want %q", got, "b")
 	}
-	if got := b.Line(2); got != "c" {
+	if got := b.Line(2).Raw; got != "c" {
 		t.Errorf("Line(2) = %q, want %q", got, "c")
 	}
 
 	// Out-of-range.
-	if got := b.Line(-1); got != "" {
-		t.Errorf("Line(-1) = %q, want \"\"", got)
+	if got := b.Line(-1); got.Raw != "" {
+		t.Errorf("Line(-1) = %q, want \"\"", got.Raw)
 	}
-	if got := b.Line(3); got != "" {
-		t.Errorf("Line(3) = %q, want \"\"", got)
+	if got := b.Line(3); got.Raw != "" {
+		t.Errorf("Line(3) = %q, want \"\"", got.Raw)
 	}
 
 	// Ring-wrap: append "d" evicts "a", buffer is now [b, c, d].
-	b.Append("d")
-	if got := b.Line(0); got != "b" {
+	b.Append(raw("d"))
+	if got := b.Line(0).Raw; got != "b" {
 		t.Errorf("after wrap Line(0) = %q, want %q", got, "b")
 	}
-	if got := b.Line(1); got != "c" {
+	if got := b.Line(1).Raw; got != "c" {
 		t.Errorf("after wrap Line(1) = %q, want %q", got, "c")
 	}
-	if got := b.Line(2); got != "d" {
+	if got := b.Line(2).Raw; got != "d" {
 		t.Errorf("after wrap Line(2) = %q, want %q", got, "d")
 	}
 }
 
 func TestLineEmptyBuffer(t *testing.T) {
 	b := New(4)
-	if got := b.Line(0); got != "" {
-		t.Errorf("Line(0) on empty buffer = %q, want \"\"", got)
+	if got := b.Line(0); got.Raw != "" {
+		t.Errorf("Line(0) on empty buffer = %q, want \"\"", got.Raw)
 	}
 }
 
 func TestEmptyBuffer(t *testing.T) {
 	b := New(4)
-	if got, want := b.Snapshot(), []string{}; !reflect.DeepEqual(got, want) {
+	if got, want := b.Snapshot(), []logmsg.LogMessage{}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("empty Snapshot = %v, want %v", got, want)
 	}
-	if got, want := b.LastN(5), []string{}; !reflect.DeepEqual(got, want) {
+	if got, want := b.LastN(5), []logmsg.LogMessage{}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("empty LastN = %v, want %v", got, want)
+	}
+}
+
+func TestAttributesRoundTrip(t *testing.T) {
+	b := New(3)
+	msg := logmsg.LogMessage{
+		Raw:        "raw line",
+		Attributes: map[string]string{"level": "INFO", "ts": "2026-04-16"},
+	}
+	b.Append(msg)
+
+	got := b.Line(0)
+	if got.Raw != "raw line" {
+		t.Errorf("Raw = %q, want %q", got.Raw, "raw line")
+	}
+	if got.Attr("level") != "INFO" {
+		t.Errorf("Attr(level) = %q, want INFO", got.Attr("level"))
+	}
+	if got.Attr("ts") != "2026-04-16" {
+		t.Errorf("Attr(ts) = %q, want 2026-04-16", got.Attr("ts"))
+	}
+}
+
+// TestAppendAssignsMonotonicIDs covers the stable-identity guarantee:
+// every appended message gets a unique, monotonically increasing
+// MsgID.Line, and the counter keeps climbing across ring evictions
+// (evicted IDs are not reused).
+func TestAppendAssignsMonotonicIDs(t *testing.T) {
+	b := New(3)
+	for _, line := range []string{"a", "b", "c", "d", "e"} {
+		b.Append(raw(line))
+	}
+	// Ring holds c, d, e with IDs 2, 3, 4.
+	got := b.Snapshot()
+	wantIDs := []uint64{2, 3, 4}
+	for i, m := range got {
+		if m.ID.Line != wantIDs[i] {
+			t.Errorf("Snapshot()[%d].ID.Line = %d, want %d", i, m.ID.Line, wantIDs[i])
+		}
+	}
+}
+
+// TestAppendOverridesCallerID ensures parsers can't spoof IDs: whatever
+// the caller sets is overwritten by the buffer's counter.
+func TestAppendOverridesCallerID(t *testing.T) {
+	b := New(2)
+	b.Append(logmsg.LogMessage{ID: logmsg.MsgID{Line: 999}, Raw: "first"})
+	if got := b.Line(0).ID.Line; got != 0 {
+		t.Errorf("Line(0).ID.Line = %d, want 0 (caller value ignored)", got)
 	}
 }

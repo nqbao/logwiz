@@ -9,6 +9,7 @@ import (
 	"github.com/nqbao/logwiz/internal/buffer"
 	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
+	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
 )
 
@@ -29,12 +30,12 @@ func newTestModel(t *testing.T) Model {
 
 func TestNewLinesMsgAppendsToBuffer(t *testing.T) {
 	m := newTestModel(t)
-	m2, _ := m.Update(source.NewLinesMsg{Lines: []string{"hello"}})
+	m2, _ := m.Update(source.NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "hello"}}})
 	mm := m2.(Model)
 	if mm.buf.Len() != 1 {
 		t.Fatalf("len = %d, want 1", mm.buf.Len())
 	}
-	if got := mm.buf.Snapshot()[0]; got != "hello" {
+	if got := mm.buf.Snapshot()[0].Raw; got != "hello" {
 		t.Fatalf("line = %q", got)
 	}
 }

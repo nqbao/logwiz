@@ -79,7 +79,7 @@ func (v *LogViewport) recomputeWrapCache() {
 	}
 	v.totalRows = 0
 	for i := 0; i < n; i++ {
-		h := v.lineWrapHeight(v.buf.Line(i))
+		h := v.lineWrapHeight(v.buf.Line(i).Raw)
 		v.wrapCache[i] = h
 		v.totalRows += h
 	}
@@ -124,7 +124,7 @@ func (v *LogViewport) updateWrapCache(newLines int) {
 		start = 0
 	}
 	for i := start; i < bufLen; i++ {
-		h := v.lineWrapHeight(v.buf.Line(i))
+		h := v.lineWrapHeight(v.buf.Line(i).Raw)
 		v.wrapCache = append(v.wrapCache, h)
 		v.totalRows += h
 	}
@@ -355,7 +355,7 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 	v.longestLineWidth = 0
 
 	for i := top; i < bot; i++ {
-		line := v.buf.Line(i)
+		line := v.buf.Line(i).Raw
 
 		if w := ansi.StringWidth(line); w > v.longestLineWidth {
 			v.longestLineWidth = w
@@ -396,7 +396,7 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 	first := true
 
 	for i := startLine; i < n && rowsWritten < v.Height; i++ {
-		line := v.buf.Line(i)
+		line := v.buf.Line(i).Raw
 		h := 1
 		if i < len(v.wrapCache) {
 			h = v.wrapCache[i]
