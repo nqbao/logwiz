@@ -1,0 +1,103 @@
+{
+  "templates": [
+    {"name": "web-get-ok",      "template": "{ip} - - [{ts}] \"GET /api/v1/{choice:users,orders,items,events} HTTP/1.1\" 200 {rand:100-8000}"},
+    {"name": "web-get-cached",  "template": "{ip} - - [{ts}] \"GET /static/{choice:app.js,app.css,logo.png,font.woff2} HTTP/1.1\" 304 0"},
+    {"name": "web-get-static",  "template": "{ip} - - [{ts}] \"GET /static/{choice:app.js,app.css,logo.png} HTTP/1.1\" 200 {rand:5000-80000}"},
+    {"name": "web-post-ok",     "template": "{ip} - - [{ts}] \"POST /api/v1/{choice:users,orders,sessions} HTTP/1.1\" {choice:200,201} {rand:200-1000}"},
+    {"name": "web-post-unauth", "template": "{ip} - - [{ts}] \"POST /api/v1/sessions HTTP/1.1\" 401 45"},
+    {"name": "web-post-bad",    "template": "{ip} - - [{ts}] \"POST /api/v1/{choice:users,orders} HTTP/1.1\" 400 {rand:50-300}"},
+    {"name": "web-notfound",    "template": "{ip} - - [{ts}] \"GET /{choice:admin,wp-login,phpmyadmin,.env} HTTP/1.1\" 404 12"},
+    {"name": "web-error",       "template": "{ip} - - [{ts}] \"GET /api/v1/{choice:users,orders} HTTP/1.1\" 500 {rand:100-500}"},
+    {"name": "web-healthz",     "template": "127.0.0.1 - - [{ts}] \"GET /healthz HTTP/1.1\" 200 4"},
+
+    {"name": "log-info-complete",  "template": "{ts} INFO  processed batch of {rand:10-200} items in {rand:10-500}ms"},
+    {"name": "log-info-retry",     "template": "{ts} INFO  retrying in {rand:1-30}s (attempt {rand:1-5}/5)"},
+    {"name": "log-info-connected", "template": "{ts} INFO  connected to {choice:db,cache,queue} at localhost:{rand:5432-6380}"},
+    {"name": "log-debug-cache",    "template": "{ts} DEBUG cache {choice:hit,hit,hit,miss} key={rand:1-9999}"},
+    {"name": "log-debug-query",    "template": "{ts} DEBUG query took {rand:1-80}ms rows={rand:0-5000}"},
+    {"name": "log-warn-queue",     "template": "{ts} WARN  queue depth {rand:80-200} exceeds threshold"},
+    {"name": "log-warn-memory",    "template": "{ts} WARN  high memory usage: {rand:75-95}%"},
+    {"name": "log-error-conn",     "template": "{ts} ERROR {choice:connection refused,timeout,unexpected EOF,context deadline exceeded}: worker {rand:1-8}"},
+    {"name": "log-error-upstream", "template": "{ts} ERROR failed to reach upstream after {rand:2-5} retries"},
+
+    {"name": "json-request",   "template": "{\"time\":\"{ts}\",\"level\":\"info\",\"msg\":\"request\",\"ms\":{rand:1-500},\"status\":{choice:200,200,200,201,204},\"path\":\"/api/v1/{choice:users,orders,items}\"}"},
+    {"name": "json-cache",     "template": "{\"time\":\"{ts}\",\"level\":\"debug\",\"msg\":\"cache {choice:hit,hit,miss}\",\"key\":\"{rand:1-9999}\",\"ttl\":{rand:60-3600}}"},
+    {"name": "json-slowquery", "template": "{\"time\":\"{ts}\",\"level\":\"warn\",\"msg\":\"slow query\",\"ms\":{rand:200-2000},\"table\":\"{choice:users,orders,events}\"}"},
+    {"name": "json-error",     "template": "{\"time\":\"{ts}\",\"level\":\"error\",\"msg\":\"handler failed\",\"error\":\"{choice:timeout,nil pointer dereference,EOF}\",\"path\":\"/api/v1/items/{rand:1-999}\"}"},
+    {"name": "json-worker",    "template": "{\"time\":\"{ts}\",\"level\":\"info\",\"msg\":\"worker heartbeat\",\"id\":{rand:1-8},\"queue\":{rand:0-200}}"},
+
+    {"name": "spin-build",    "template": "building... {rand:1-33}%{cr}building... {rand:34-66}%{cr}building... {rand:67-99}%{cr}building... done"},
+    {"name": "spin-download", "template": "downloading ({rand:1-50}/{rand:51-100}){cr}downloading ({rand:51-99}/{rand:51-100}){cr}download complete"},
+    {"name": "spin-compile",  "template": "compiling {rand:100-300} files...{cr}compiled in {rand:1-9}.{rand:0-9}s"},
+
+    {"name": "crash-startup",   "template": "{ts} INFO  application started, serving on :8080"},
+    {"name": "crash-request",   "template": "{ts} DEBUG received {choice:GET,POST,PUT} /{choice:users,orders,items}"},
+    {"name": "crash-panic",     "template": "panic: runtime error: {choice:index out of range,nil pointer dereference,interface conversion failed}"},
+    {"name": "crash-goroutine", "template": "goroutine {rand:1-20} [running]:"},
+    {"name": "crash-frame-fn",  "template": "main.{choice:handler,processItems,run,serve}(...)"},
+    {"name": "crash-frame-loc", "template": "\t/app/{choice:main,handler,server}.go:{rand:20-120} +0x{rand:100-999}"},
+    {"name": "crash-stdlib",    "template": "net/http.(*ServeMux).ServeHTTP(...)"},
+    {"name": "crash-exit",      "template": "exit status 2"}
+  ],
+  "presets": [
+    {
+      "name": "web-access",
+      "templates": [
+        {"name": "web-get-ok",      "weight": 60},
+        {"name": "web-get-cached",  "weight": 15},
+        {"name": "web-get-static",  "weight": 10},
+        {"name": "web-post-ok",     "weight": 7},
+        {"name": "web-post-unauth", "weight": 3},
+        {"name": "web-post-bad",    "weight": 2},
+        {"name": "web-notfound",    "weight": 2},
+        {"name": "web-error",       "weight": 0.5},
+        {"name": "web-healthz",     "weight": 0.5}
+      ]
+    },
+    {
+      "name": "errors",
+      "templates": [
+        {"name": "log-info-complete",  "weight": 20},
+        {"name": "log-info-retry",     "weight": 5},
+        {"name": "log-info-connected", "weight": 5},
+        {"name": "log-debug-cache",    "weight": 25},
+        {"name": "log-debug-query",    "weight": 20},
+        {"name": "log-warn-queue",     "weight": 10},
+        {"name": "log-warn-memory",    "weight": 5},
+        {"name": "log-error-conn",     "weight": 7},
+        {"name": "log-error-upstream", "weight": 3}
+      ]
+    },
+    {
+      "name": "json",
+      "templates": [
+        {"name": "json-request",   "weight": 60},
+        {"name": "json-cache",     "weight": 20},
+        {"name": "json-slowquery", "weight": 10},
+        {"name": "json-error",     "weight": 5},
+        {"name": "json-worker",    "weight": 5}
+      ]
+    },
+    {
+      "name": "spinner",
+      "templates": [
+        {"name": "spin-build",    "weight": 33},
+        {"name": "spin-download", "weight": 33},
+        {"name": "spin-compile",  "weight": 34}
+      ]
+    },
+    {
+      "name": "crash",
+      "templates": [
+        {"name": "crash-startup",   "weight": 20},
+        {"name": "crash-request",   "weight": 20},
+        {"name": "crash-panic",     "weight": 8},
+        {"name": "crash-goroutine", "weight": 7},
+        {"name": "crash-frame-fn",  "weight": 15},
+        {"name": "crash-frame-loc", "weight": 15},
+        {"name": "crash-stdlib",    "weight": 10},
+        {"name": "crash-exit",      "weight": 5}
+      ]
+    }
+  ]
+}

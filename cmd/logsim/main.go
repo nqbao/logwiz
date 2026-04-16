@@ -20,30 +20,10 @@
 //
 // # Custom templates and presets
 //
-// Pass -config to extend or override built-ins:
+// Pass -config to extend or override built-ins. The file uses the same JSON
+// format as builtins.json (a "templates" array and a "presets" array).
 //
 //	logsim -config myapp.json -pattern my-app
-//
-// Config file format (JSON):
-//
-//	{
-//	  "templates": [
-//	    {"name": "ok",  "template": "[{ts}] INFO  OK in {rand:1-500}ms"},
-//	    {"name": "err", "template": "[{ts}] ERROR {choice:timeout,reset}"}
-//	  ],
-//	  "presets": [
-//	    {
-//	      "name": "my-app",
-//	      "templates": [
-//	        {"name": "ok",  "weight": 90},
-//	        {"name": "err", "weight": 10}
-//	      ]
-//	    }
-//	  ]
-//	}
-//
-// Custom templates/presets are merged with built-ins. Duplicate names override
-// the built-in. Use -list to see all available preset names.
 //
 // # Template variables
 //
@@ -56,6 +36,7 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -66,6 +47,9 @@ import (
 	"strings"
 	"time"
 )
+
+//go:embed builtins.json
+var builtinsData []byte
 
 // WeightedRef pairs a template name with a relative sampling weight.
 type WeightedRef struct {
@@ -85,106 +69,73 @@ type entry struct {
 	weight float64
 }
 
-// tmplMap is the template registry: name → raw template string.
-// Populated from built-ins; -config files extend or override it.
-var tmplMap = map[string]string{
-	// --- web-access ---
-	"web-get-ok":      `{ip} - - [{ts}] "GET /api/v1/{choice:users,orders,items,events} HTTP/1.1" 200 {rand:100-8000}`,
-	"web-get-cached":  `{ip} - - [{ts}] "GET /static/{choice:app.js,app.css,logo.png,font.woff2} HTTP/1.1" 304 0`,
-	"web-get-static":  `{ip} - - [{ts}] "GET /static/{choice:app.js,app.css,logo.png} HTTP/1.1" 200 {rand:5000-80000}`,
-	"web-post-ok":     `{ip} - - [{ts}] "POST /api/v1/{choice:users,orders,sessions} HTTP/1.1" {choice:200,201} {rand:200-1000}`,
-	"web-post-unauth": `{ip} - - [{ts}] "POST /api/v1/sessions HTTP/1.1" 401 45`,
-	"web-post-bad":    `{ip} - - [{ts}] "POST /api/v1/{choice:users,orders} HTTP/1.1" 400 {rand:50-300}`,
-	"web-notfound":    `{ip} - - [{ts}] "GET /{choice:admin,wp-login,phpmyadmin,.env} HTTP/1.1" 404 12`,
-	"web-error":       `{ip} - - [{ts}] "GET /api/v1/{choice:users,orders} HTTP/1.1" 500 {rand:100-500}`,
-	"web-healthz":     `127.0.0.1 - - [{ts}] "GET /healthz HTTP/1.1" 200 4`,
+var (
+	tmplMap    = map[string]string{}
+	presetMap  = map[string]PresetDef{}
+	presetOrder []string
+)
 
-	// --- errors (structured leveled log) ---
-	"log-info-complete":  `{ts} INFO  processed batch of {rand:10-200} items in {rand:10-500}ms`,
-	"log-info-retry":     `{ts} INFO  retrying in {rand:1-30}s (attempt {rand:1-5}/5)`,
-	"log-info-connected": `{ts} INFO  connected to {choice:db,cache,queue} at localhost:{rand:5432-6380}`,
-	"log-debug-cache":    `{ts} DEBUG cache {choice:hit,hit,hit,miss} key={rand:1-9999}`,
-	"log-debug-query":    `{ts} DEBUG query took {rand:1-80}ms rows={rand:0-5000}`,
-	"log-warn-queue":     `{ts} WARN  queue depth {rand:80-200} exceeds threshold`,
-	"log-warn-memory":    `{ts} WARN  high memory usage: {rand:75-95}%`,
-	"log-error-conn":     `{ts} ERROR {choice:connection refused,timeout,unexpected EOF,context deadline exceeded}: worker {rand:1-8}`,
-	"log-error-upstream": `{ts} ERROR failed to reach upstream after {rand:2-5} retries`,
-
-	// --- json (structured JSON logs) ---
-	"json-request":   `{"time":"{ts}","level":"info","msg":"request","ms":{rand:1-500},"status":{choice:200,200,200,201,204},"path":"/api/v1/{choice:users,orders,items}"}`,
-	"json-cache":     `{"time":"{ts}","level":"debug","msg":"cache {choice:hit,hit,miss}","key":"{rand:1-9999}","ttl":{rand:60-3600}}`,
-	"json-slowquery": `{"time":"{ts}","level":"warn","msg":"slow query","ms":{rand:200-2000},"table":"{choice:users,orders,events}"}`,
-	"json-error":     `{"time":"{ts}","level":"error","msg":"handler failed","error":"{choice:timeout,nil pointer dereference,EOF}","path":"/api/v1/items/{rand:1-999}"}`,
-	"json-worker":    `{"time":"{ts}","level":"info","msg":"worker heartbeat","id":{rand:1-8},"queue":{rand:0-200}}`,
-
-	// --- spinner (lines with {cr} to stress logwiz CR handling) ---
-	"spin-build":    `building... {rand:1-33}%{cr}building... {rand:34-66}%{cr}building... {rand:67-99}%{cr}building... done`,
-	"spin-download": `downloading ({rand:1-50}/{rand:51-100}){cr}downloading ({rand:51-99}/{rand:51-100}){cr}download complete`,
-	"spin-compile":  `compiling {rand:100-300} files...{cr}compiled in {rand:1-9}.{rand:0-9}s`,
-
-	// --- crash (Go panic traceback fragments) ---
-	"crash-startup":   `{ts} INFO  application started, serving on :8080`,
-	"crash-request":   `{ts} DEBUG received {choice:GET,POST,PUT} /{choice:users,orders,items}`,
-	"crash-panic":     `panic: runtime error: {choice:index out of range,nil pointer dereference,interface conversion failed}`,
-	"crash-goroutine": `goroutine {rand:1-20} [running]:`,
-	"crash-frame-fn":  `main.{choice:handler,processItems,run,serve}(...)`,
-	"crash-frame-loc": "\t/app/{choice:main,handler,server}.go:{rand:20-120} +0x{rand:100-999}",
-	"crash-stdlib":    `net/http.(*ServeMux).ServeHTTP(...)`,
-	"crash-exit":      `exit status 2`,
+func init() {
+	if err := applyConfig(builtinsData, "builtins.json"); err != nil {
+		panic("logsim: invalid built-in data: " + err.Error())
+	}
 }
 
-// presetMap is the preset registry: name → PresetDef.
-var presetMap = map[string]PresetDef{
-	// Weights reflect real-world traffic distributions.
-	"web-access": {Name: "web-access", Templates: []WeightedRef{
-		{"web-get-ok", 60},    // most requests succeed
-		{"web-get-cached", 15}, // many assets are cached
-		{"web-get-static", 10}, // uncached asset loads
-		{"web-post-ok", 7},    // form submissions
-		{"web-post-unauth", 3}, // auth failures
-		{"web-post-bad", 2},   // malformed requests
-		{"web-notfound", 2},   // 404s (scanners, typos)
-		{"web-error", 0.5},    // server errors are rare
-		{"web-healthz", 0.5},  // health checks trickle in
-	}},
-	// Weights reflect typical app log distributions: mostly debug/info, few errors.
-	"errors": {Name: "errors", Templates: []WeightedRef{
-		{"log-info-complete", 20},
-		{"log-info-retry", 5},
-		{"log-info-connected", 5},
-		{"log-debug-cache", 25},
-		{"log-debug-query", 20},
-		{"log-warn-queue", 10},
-		{"log-warn-memory", 5},
-		{"log-error-conn", 7},
-		{"log-error-upstream", 3},
-	}},
-	"json": {Name: "json", Templates: []WeightedRef{
-		{"json-request", 60},
-		{"json-cache", 20},
-		{"json-slowquery", 10},
-		{"json-error", 5},
-		{"json-worker", 5},
-	}},
-	"spinner": {Name: "spinner", Templates: []WeightedRef{
-		{"spin-build", 33},
-		{"spin-download", 33},
-		{"spin-compile", 34},
-	}},
-	"crash": {Name: "crash", Templates: []WeightedRef{
-		{"crash-startup", 20},
-		{"crash-request", 20},
-		{"crash-panic", 8},
-		{"crash-goroutine", 7},
-		{"crash-frame-fn", 15},
-		{"crash-frame-loc", 15},
-		{"crash-stdlib", 10},
-		{"crash-exit", 5},
-	}},
+// configFile is the JSON structure accepted by both builtins.json and -config files.
+type configFile struct {
+	Templates []struct {
+		Name     string `json:"name"`
+		Template string `json:"template"`
+	} `json:"templates"`
+	Presets []struct {
+		Name      string `json:"name"`
+		Templates []struct {
+			Name   string  `json:"name"`
+			Weight float64 `json:"weight"`
+		} `json:"templates"`
+	} `json:"presets"`
 }
 
-// presetOrder controls the display order of -list output.
-var presetOrder = []string{"web-access", "errors", "json", "spinner", "crash"}
+// applyConfig parses data and merges its templates and presets into the global
+// registries. Duplicate names override existing entries.
+func applyConfig(data []byte, source string) error {
+	var cf configFile
+	if err := json.Unmarshal(data, &cf); err != nil {
+		return fmt.Errorf("parsing %s: %w", source, err)
+	}
+	for i, t := range cf.Templates {
+		if t.Name == "" {
+			return fmt.Errorf("%s: template %d missing name", source, i)
+		}
+		tmplMap[t.Name] = t.Template
+	}
+	for _, p := range cf.Presets {
+		if p.Name == "" {
+			return fmt.Errorf("%s: preset missing name", source)
+		}
+		if len(p.Templates) == 0 {
+			return fmt.Errorf("%s: preset %q has no templates", source, p.Name)
+		}
+		refs := make([]WeightedRef, len(p.Templates))
+		for i, t := range p.Templates {
+			refs[i] = WeightedRef{Name: t.Name, Weight: t.Weight}
+		}
+		if _, exists := presetMap[p.Name]; !exists {
+			presetOrder = append(presetOrder, p.Name)
+		}
+		presetMap[p.Name] = PresetDef{Name: p.Name, Templates: refs}
+	}
+	return nil
+}
+
+// loadConfig reads a JSON config file and merges it via applyConfig.
+func loadConfig(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	return applyConfig(data, path)
+}
 
 // varRe matches template variables. The leading [a-zA-Z] prevents matching
 // plain JSON object braces ({"key":...}) which would otherwise be confused
@@ -224,57 +175,6 @@ func expand(tmpl string, seq int) string {
 			return m // unknown variable — leave as-is
 		}
 	})
-}
-
-// configFile is the JSON structure accepted by -config.
-type configFile struct {
-	Templates []struct {
-		Name     string `json:"name"`
-		Template string `json:"template"`
-	} `json:"templates"`
-	Presets []struct {
-		Name      string `json:"name"`
-		Templates []struct {
-			Name   string  `json:"name"`
-			Weight float64 `json:"weight"`
-		} `json:"templates"`
-	} `json:"presets"`
-}
-
-// loadConfig reads a JSON config file and merges its templates and presets
-// into the global registries. Duplicate names override built-ins.
-func loadConfig(path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("reading %s: %w", path, err)
-	}
-	var cf configFile
-	if err := json.Unmarshal(data, &cf); err != nil {
-		return fmt.Errorf("parsing %s: %w", path, err)
-	}
-	for i, t := range cf.Templates {
-		if t.Name == "" {
-			return fmt.Errorf("%s: template %d missing name", path, i)
-		}
-		tmplMap[t.Name] = t.Template
-	}
-	for _, p := range cf.Presets {
-		if p.Name == "" {
-			return fmt.Errorf("%s: preset missing name", path)
-		}
-		if len(p.Templates) == 0 {
-			return fmt.Errorf("%s: preset %q has no templates", path, p.Name)
-		}
-		refs := make([]WeightedRef, len(p.Templates))
-		for i, t := range p.Templates {
-			refs[i] = WeightedRef{Name: t.Name, Weight: t.Weight}
-		}
-		if _, exists := presetMap[p.Name]; !exists {
-			presetOrder = append(presetOrder, p.Name)
-		}
-		presetMap[p.Name] = PresetDef{Name: p.Name, Templates: refs}
-	}
-	return nil
 }
 
 // buildEntries resolves the named presets into a flat weighted sampling table.
