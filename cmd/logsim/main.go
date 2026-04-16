@@ -192,7 +192,7 @@ func loadConfig(path string) ([]PatternDef, error) {
 }
 
 func main() {
-	patternName := flag.String("pattern", "web-access", "pattern name to use")
+	patternName := flag.String("pattern", "web-access", "comma-separated pattern names to mix (e.g. web-access,errors)")
 	rate := flag.Float64("rate", 10, "lines per second (0 = burst as fast as possible)")
 	lines := flag.Int("lines", 0, "number of lines to emit (0 = infinite)")
 	configFile := flag.String("config", "", "JSON file with custom pattern definitions")
@@ -204,6 +204,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Emit log lines to stdout for piping into logwiz:")
 		fmt.Fprintln(os.Stderr, "  logsim | logwiz")
 		fmt.Fprintln(os.Stderr, "  logsim -pattern errors -rate 50 -lines 1000 | logwiz")
+		fmt.Fprintln(os.Stderr, "  logsim -pattern web-access,errors,json | logwiz")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "Flags:")
 		flag.PrintDefaults()
@@ -232,17 +233,24 @@ func main() {
 		return
 	}
 
-	// Find the requested pattern.
-	var def *PatternDef
-	for i := range patterns {
-		if patterns[i].Name == *patternName {
-			def = &patterns[i]
-			break
+	// Collect templates from all requested patterns (comma-separated).
+	// Templates from all named patterns are merged into one pool; a
+	// random pick from that pool determines each emitted line.
+	var templates []string
+	for _, name := range strings.Split(*patternName, ",") {
+		name = strings.TrimSpace(name)
+		var found bool
+		for i := range patterns {
+			if patterns[i].Name == name {
+				templates = append(templates, patterns[i].Templates...)
+				found = true
+				break
+			}
 		}
-	}
-	if def == nil {
-		fmt.Fprintf(os.Stderr, "logsim: unknown pattern %q (use -list to see available patterns)\n", *patternName)
-		os.Exit(1)
+		if !found {
+			fmt.Fprintf(os.Stderr, "logsim: unknown pattern %q (use -list to see available patterns)\n", name)
+			os.Exit(1)
+		}
 	}
 
 	// Emit lines.
@@ -257,7 +265,7 @@ func main() {
 		if ticker != nil {
 			<-ticker.C
 		}
-		tmpl := def.Templates[rand.Intn(len(def.Templates))]
+		tmpl := templates[rand.Intn(len(templates))]
 		fmt.Println(expand(tmpl, seq))
 	}
 }
