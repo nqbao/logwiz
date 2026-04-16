@@ -62,7 +62,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Action != tea.MouseActionPress {
 			return m, nil
 		}
-		if m.sidebarOpen {
+
+		if msg.Shift && m.sidebarOpen {
 			switch msg.Button {
 			case tea.MouseButtonWheelUp:
 				m.convo.ScrollUp(3)
@@ -71,6 +72,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
 			m.logs.ScrollUp(3)
