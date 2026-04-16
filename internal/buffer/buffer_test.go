@@ -205,3 +205,34 @@ func TestAppendOverridesCallerID(t *testing.T) {
 		t.Errorf("Line(0).ID.Line = %d, want 0 (caller value ignored)", got)
 	}
 }
+
+// TestAppendEvictionSignal verifies that Append reports no eviction while the
+// buffer has free slots, and reports the correct evicted MsgID once full.
+func TestAppendEvictionSignal(t *testing.T) {
+	b := New(3)
+
+	for i, line := range []string{"a", "b", "c"} {
+		_, evicted := b.Append(raw(line))
+		if evicted {
+			t.Errorf("Append #%d: evicted=true, want false (buffer not yet full)", i)
+		}
+	}
+
+	// Now full: next append evicts "a" (ID=0).
+	evictedID, evicted := b.Append(raw("d"))
+	if !evicted {
+		t.Fatal("Append when full: evicted=false, want true")
+	}
+	if evictedID.Line != 0 {
+		t.Errorf("evicted ID = %d, want 0 (oldest)", evictedID.Line)
+	}
+
+	// Next append evicts "b" (ID=1).
+	evictedID, evicted = b.Append(raw("e"))
+	if !evicted {
+		t.Fatal("second eviction: evicted=false, want true")
+	}
+	if evictedID.Line != 1 {
+		t.Errorf("evicted ID = %d, want 1", evictedID.Line)
+	}
+}

@@ -49,9 +49,13 @@ func run() error {
 	}
 
 	// Decide source: explicit file > stdin (if piped). Reject if neither.
-	// Parser is the placeholder pass-through for now; real parsers will
-	// drop in here without touching the rest of the pipeline.
-	parser := logmsg.PassthroughParser{}
+	var parser logmsg.Parser
+	switch cfg.Format {
+	case "json":
+		parser = logmsg.JSONParser{}
+	default:
+		parser = logmsg.PassthroughParser{}
+	}
 	var (
 		src  source.Source
 		kind tui.SourceKind

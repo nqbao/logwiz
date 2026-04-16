@@ -37,14 +37,22 @@ func (b *Buffer) Len() int { return b.size }
 // Append adds a message to the buffer, evicting the oldest if full.
 // The buffer assigns the message's MsgID.Line; any value the caller
 // set is overwritten so IDs stay monotonic and unique.
-func (b *Buffer) Append(msg logmsg.LogMessage) {
+// Returns the evicted message's ID and true when an eviction occurred.
+func (b *Buffer) Append(msg logmsg.LogMessage) (logmsg.MsgID, bool) {
 	msg.ID.Line = b.nextLine
 	b.nextLine++
+	evicted := b.size == b.cap
+	var evictedID logmsg.MsgID
+	if evicted {
+		// When full, b.head points at the oldest slot (about to be overwritten).
+		evictedID = b.lines[b.head].ID
+	}
 	b.lines[b.head] = msg
 	b.head = (b.head + 1) % b.cap
 	if b.size < b.cap {
 		b.size++
 	}
+	return evictedID, evicted
 }
 
 // Snapshot returns all stored messages in chronological order. The
