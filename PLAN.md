@@ -10,9 +10,14 @@ focus model, help overlay, EOF badge, `\r` handling, SIGTERM to process group.
 `source.pump` batches lines into `NewLinesMsg{ Lines []string }`, fixing O(n)-per-line
 UI refresh on high-volume streams.
 
+### ✅ File-mode tail-seek
+`source.File` samples near EOF to estimate line size, seeks backward to cover
+`--max-lines` lines, and emits a truncation marker when content is skipped. Keeps
+startup O(budget) instead of O(fileSize) on large files. No new user-facing flag.
+
 ---
 
-## v1.1 — Message foundation + agentic chat + file tail-seek
+## v1.1 — Message foundation + agentic chat
 
 ### New: `internal/logrec`
 
@@ -53,22 +58,6 @@ Always inject current viewport messages as system context. Expose two tools:
 `internal/chat.Client` gains tool-call support: send `tools`, handle `tool_calls` response,
 run locally, append `tool` role message, re-request until done.
 
-### File-mode tail-seek ✅
-
-Shipped. `source.File` samples ~64 KiB near EOF to estimate average line size, then
-seeks backward far enough to cover `--max-lines` lines (with 25% headroom). When the
-estimate covers the whole file, no seek happens. Otherwise it discards the partial
-line at the seek boundary and emits a synthetic
-`[logwiz: skipped N from head of file (tail-seek); ...]` LogMessage as the first line.
-No extra user-facing flag: the budget tracks `--max-lines` automatically, so files
-with tiny lines and files with huge JSON lines both keep roughly the right number of
-lines in view.
-
-Scope limitation (deferred to v1.4+): skipped content is not accessible — you can't
-scroll back past the tail-seek point, and chat `search` will only see what's in the ring
-buffer. True full-file navigation needs a `FileBackedSource` that memory-maps the file
-and builds a line-offset index lazily, then serves paged reads on scroll.
-
 ---
 
 ## v1.2 — Navigation + filter + format profiles
@@ -107,6 +96,5 @@ and builds a line-offset index lazily, then serves paged reads on scroll.
 | ---- | ---------- |
 | Huge log bursts | Source batching (shipped) |
 | AnchorParser holds message open | 200ms idle timeout + EOF flush |
-| Tail-seek lands mid-message | `[truncated]` marker; at most one message lost |
 | Huge single messages (10k-line trace) | `--max-bytes` cap |
 | API key in crash logs | Never log request bodies |
