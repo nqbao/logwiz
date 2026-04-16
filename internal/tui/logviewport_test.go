@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
 	"github.com/nqbao/logwiz/internal/buffer"
@@ -191,7 +191,7 @@ func TestOnNewLines_AutoScrollEnabled(t *testing.T) {
 	v.autoScroll = true
 	v.buf.Append("d")
 	v.buf.Append("e")
-	v.OnNewLines()
+	v.OnNewLines(2)
 	if !v.AtBottom() {
 		t.Errorf("OnNewLines with autoScroll should scroll to bottom; YOffset=%d", v.YOffset)
 	}
@@ -203,7 +203,7 @@ func TestOnNewLines_AutoScrollDisabled(t *testing.T) {
 	v.YOffset = 0
 	v.buf.Append("d")
 	v.buf.Append("e")
-	v.OnNewLines()
+	v.OnNewLines(2)
 	if v.YOffset != 0 {
 		t.Errorf("OnNewLines without autoScroll should not move; YOffset=%d", v.YOffset)
 	}
@@ -437,5 +437,157 @@ func TestView_ScrollLeft(t *testing.T) {
 	out := v.View(noStyle)
 	if !strings.Contains(out, "abcde") {
 		t.Errorf("after ScrollLeft expected 'abcde', got:\n%s", out)
+	}
+}
+
+// --- Wrap mode ---
+
+// newWrapViewport creates a LogViewport with Wrap=true.
+func newWrapViewport(width, height int, lines ...string) *LogViewport {
+	v := newTestViewport(width, height, lines...)
+	v.Wrap = true
+	v.recomputeWrapCache()
+	return v
+}
+
+func TestWrap_LineWrapHeight(t *testing.T) {
+	v := newWrapViewport(10, 20)
+	cases := []struct {
+		line string
+		want int
+	}{
+		{"", 1},           // empty line occupies one row
+		{"abcde", 1},      // fits exactly (5 < 10)
+		{"abcdefghij", 1}, // exactly 10 chars → 1 row
+		{"abcdefghijk", 2}, // 11 chars → 2 rows
+		{"abcdefghijabcdefghij", 2}, // 20 chars → 2 rows
+		{"abcdefghijabcdefghija", 3}, // 21 chars → 3 rows
+	}
+	for _, tc := range cases {
+		got := v.lineWrapHeight(tc.line)
+		if got != tc.want {
+			t.Errorf("lineWrapHeight(%q) = %d, want %d", tc.line, got, tc.want)
+		}
+	}
+}
+
+func TestWrap_TotalRows(t *testing.T) {
+	// width=5: "ab"→1 row, "abcde"→1 row, "abcdefghij"→2 rows. total=4
+	v := newWrapViewport(5, 10, "ab", "abcde", "abcdefghij")
+	if v.totalRows != 4 {
+		t.Errorf("totalRows = %d, want 4", v.totalRows)
+	}
+}
+
+func TestWrap_MaxYOffset(t *testing.T) {
+	// width=5, height=3. "abcdefghij" → 2 rows. total=4 rows. maxYOffset=4-3=1
+	v := newWrapViewport(5, 3, "ab", "abcde", "abcdefghij")
+	if got := v.maxYOffset(); got != 1 {
+		t.Errorf("maxYOffset = %d, want 1", got)
+	}
+}
+
+func TestWrap_ViewRendersWrappedLine(t *testing.T) {
+	// width=5, so "abcdefghij" wraps to ["abcde", "fghij"]
+	v := newWrapViewport(5, 4, "hello", "abcdefghij")
+	out := v.View(noStyle)
+	if !strings.Contains(out, "hello") {
+		t.Errorf("wrap View() missing 'hello'; got:\n%s", out)
+	}
+	if !strings.Contains(out, "abcde") {
+		t.Errorf("wrap View() missing first wrap segment 'abcde'; got:\n%s", out)
+	}
+	if !strings.Contains(out, "fghij") {
+		t.Errorf("wrap View() missing second wrap segment 'fghij'; got:\n%s", out)
+	}
+}
+
+func TestWrap_ScrollMovesInScreenRows(t *testing.T) {
+	// width=5. Line 0: "abcde" (1 row). Line 1: "abcdefghij" (2 rows). total=3 rows.
+	// height=2 → maxYOffset=1.
+	v := newWrapViewport(5, 2, "abcde", "abcdefghij")
+	v.ScrollDown(1)
+	if v.YOffset != 1 {
+		t.Errorf("YOffset = %d, want 1 (screen row)", v.YOffset)
+	}
+	// At YOffset=1 we start in the middle of line 1 (wrapRow=0 of "abcdefghij").
+	out := v.View(noStyle)
+	if !strings.Contains(out, "abcde") {
+		t.Errorf("after scroll, first wrap of line 1 should be visible; got:\n%s", out)
+	}
+}
+
+func TestWrap_SelectAtMapsToLogicalLine(t *testing.T) {
+	// width=5. Line 0: "abcde" (1 row). Line 1: "abcdefghij" (2 rows).
+	v := newWrapViewport(5, 5, "abcde", "abcdefghij")
+	// Screen row 1 → first wrap of line 1.
+	v.SelectAt(1)
+	if v.Selected != 1 {
+		t.Errorf("SelectAt(1) = %d, want 1 (logical line)", v.Selected)
+	}
+	// Screen row 2 → second wrap of line 1, still logical line 1.
+	v.SelectAt(2)
+	if v.Selected != 1 {
+		t.Errorf("SelectAt(2) on wrapped line = %d, want 1", v.Selected)
+	}
+}
+
+func TestWrap_OnNewLinesIncrementalUpdate(t *testing.T) {
+	// Use explicit capacity=3 so no eviction occurs when the third line is appended.
+	b := buffer.New(3)
+	b.Append("ab")
+	b.Append("abcde")
+	v := newLogViewport(b)
+	v.Wrap = true
+	v.Width = 5
+	v.Height = 10
+	v.recomputeWrapCache() // totalRows = 1+1 = 2, cache=[1,1]
+
+	b.Append("abcdefghij") // 2 rows at width=5; no eviction
+	v.OnNewLines(1)
+	if v.totalRows != 4 {
+		t.Errorf("totalRows after OnNewLines = %d, want 4", v.totalRows)
+	}
+	if len(v.wrapCache) != 3 {
+		t.Errorf("wrapCache len = %d, want 3", len(v.wrapCache))
+	}
+}
+
+func TestWrap_OnNewLinesEviction(t *testing.T) {
+	// capacity=3. Fill it: "ab"(1),"abcde"(1),"abcdefghij"(2). totalRows=4, cache=[1,1,2]
+	b := buffer.New(3)
+	for _, l := range []string{"ab", "abcde", "abcdefghij"} {
+		b.Append(l)
+	}
+	v := newLogViewport(b)
+	v.Wrap = true
+	v.Width = 5
+	v.Height = 10
+	v.recomputeWrapCache()
+
+	if v.totalRows != 4 {
+		t.Fatalf("initial totalRows = %d, want 4", v.totalRows)
+	}
+
+	// Append "xyz" (1 row). Ring evicts "ab" (1 row). net: -1+1=0, totalRows stays 4.
+	b.Append("xyz")
+	v.OnNewLines(1)
+	if v.totalRows != 4 {
+		t.Errorf("after eviction totalRows = %d, want 4", v.totalRows)
+	}
+	if len(v.wrapCache) != 3 {
+		t.Errorf("wrapCache len = %d, want 3", len(v.wrapCache))
+	}
+}
+
+func TestWrap_RecomputeOnWidthChange(t *testing.T) {
+	v := newWrapViewport(5, 10, "abcdefghij") // 2 rows at width=5
+	if v.totalRows != 2 {
+		t.Fatalf("initial totalRows = %d, want 2", v.totalRows)
+	}
+	// Resize to width=10: same line now fits in 1 row.
+	v.SetSize(10, 10)
+	if v.totalRows != 1 {
+		t.Errorf("after resize totalRows = %d, want 1", v.totalRows)
 	}
 }

@@ -27,7 +27,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, line := range msg.Lines {
 			m.buf.Append(line)
 		}
-		m.logs.OnNewLines()
+		m.logs.OnNewLines(len(msg.Lines))
 		return m, nil
 
 	case source.EOFMsg:
