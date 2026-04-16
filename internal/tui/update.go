@@ -27,7 +27,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, line := range msg.Lines {
 			m.buf.Append(line)
 		}
-		m.refreshLogsContent()
+		if m.autoScroll {
+			m.logs.GotoBottom(m.buf)
+		}
 		return m, nil
 
 	case source.EOFMsg:
@@ -74,12 +76,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.Button {
+		case tea.MouseButtonLeft:
+			m.logs.SelectAt(msg.Y, m.buf)
 		case tea.MouseButtonWheelUp:
 			m.logs.ScrollUp(3)
 			m.autoScroll = false
 		case tea.MouseButtonWheelDown:
-			m.logs.ScrollDown(3)
-			if m.logs.AtBottom() {
+			m.logs.ScrollDown(3, m.buf)
+			if m.logs.AtBottom(m.buf) {
 				m.autoScroll = true
 			}
 		}
@@ -95,6 +99,9 @@ func (m Model) onResize(w, h int) Model {
 
 	m.logs.Width = lay.logsWidth
 	m.logs.Height = lay.paneHeight
+	if m.autoScroll {
+		m.logs.GotoBottom(m.buf)
+	}
 
 	// Sidebar outer border: -2. Input box inner border: -2.
 	innerW := lay.sidebarWidth - 2
@@ -117,7 +124,6 @@ func (m Model) onResize(w, h int) Model {
 	m.convo.Width = innerW
 	m.convo.Height = convoH
 
-	m.refreshLogsContent()
 	m.refreshConvoContent()
 	return m
 }
@@ -190,26 +196,34 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Pass remaining keys (j/k, PgUp/PgDn, arrows) to the log viewport.
-	var cmd tea.Cmd
-	prevAtBottom := m.logs.AtBottom()
-	m.logs, cmd = m.logs.Update(msg)
+	prevAtBottom := m.logs.AtBottom(m.buf)
+	switch msg.String() {
+	case keyScrollDown, keyArrowDown:
+		m.logs.ScrollDown(1, m.buf)
+	case keyScrollUp, keyArrowUp:
+		m.logs.ScrollUp(1)
+	case keyPageDown, keyPageDownSpace, keyPageDownF:
+		m.logs.PageDown(m.buf)
+	case keyPageUp, keyPageUpB:
+		m.logs.PageUp()
+	case keyHalfPageDown, keyHalfPageDownCtrl:
+		m.logs.HalfPageDown(m.buf)
+	case keyHalfPageUp, keyHalfPageUpCtrl:
+		m.logs.HalfPageUp()
+	case keyScrollLeft, keyArrowLeft:
+		m.logs.ScrollLeft(1)
+	case keyScrollRight, keyArrowRight:
+		m.logs.ScrollRight(1)
+	}
 	// If user scrolls up, disable auto-scroll; re-enable when they
 	// return to the bottom.
-	if prevAtBottom && !m.logs.AtBottom() {
+	if prevAtBottom && !m.logs.AtBottom(m.buf) {
 		m.autoScroll = false
 	}
-	if m.logs.AtBottom() {
+	if m.logs.AtBottom(m.buf) {
 		m.autoScroll = true
 	}
-	return m, cmd
-}
-
-func (m *Model) refreshLogsContent() {
-	content := strings.Join(m.buf.Snapshot(), "\n")
-	m.logs.SetContent(content)
-	if m.autoScroll {
-		m.logs.GotoBottom()
-	}
+	return m, nil
 }
 
 func (m *Model) refreshConvoContent() {

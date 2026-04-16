@@ -52,4 +52,8 @@ var (
 
 	styleHelp = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("244"))
+
+	styleSelectedRow = lipgloss.NewStyle().
+				Background(lipgloss.Color("237")).
+				Foreground(lipgloss.Color("255"))
 )

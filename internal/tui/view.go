@@ -16,10 +16,7 @@ func (m Model) View() string {
 
 	lay := computeLayout(m.width, m.height, m.sidebarOpen, m.cfg.SidebarWidth)
 
-	logsView := lipgloss.NewStyle().
-		Width(lay.logsWidth).
-		Height(lay.paneHeight).
-		Render(m.logs.View())
+	logsView := m.logs.View(m.buf, styleSelectedRow)
 
 	var body string
 	if m.sidebarOpen {

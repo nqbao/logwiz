@@ -13,6 +13,25 @@ const (
 	keyAltEnter = "ctrl+j"
 	keyHelp     = "?"
 	keyClear    = "c"
+
+	// Log viewport scroll keys (mirrors viewport.DefaultKeyMap).
+	keyScrollDown      = "j"
+	keyScrollUp        = "k"
+	keyArrowDown       = "down"
+	keyArrowUp         = "up"
+	keyPageDown        = "pgdown"
+	keyPageDownSpace   = " "
+	keyPageDownF       = "f"
+	keyPageUp          = "pgup"
+	keyPageUpB         = "b"
+	keyHalfPageDown    = "d"
+	keyHalfPageDownCtrl = "ctrl+d"
+	keyHalfPageUp      = "u"
+	keyHalfPageUpCtrl  = "ctrl+u"
+	keyScrollLeft      = "h"
+	keyArrowLeft       = "left"
+	keyScrollRight     = "l"
+	keyArrowRight      = "right"
 )
 
 // isQuitKey returns true for q or ctrl+c when the logs pane is focused
