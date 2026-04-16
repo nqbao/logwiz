@@ -27,15 +27,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, line := range msg.Lines {
 			m.buf.Append(line)
 		}
-		if m.autoScroll {
-			m.logs.GotoBottom(m.buf)
-		}
+		m.logs.OnNewLines()
 		return m, nil
 
 	case source.EOFMsg:
 		m.eof = true
 		if m.sourceKind == SourceFile {
-			m.autoScroll = false
+			m.logs.autoScroll = false
 			m.logs.GotoTop()
 		}
 		return m, nil
@@ -75,18 +73,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		switch msg.Button {
-		case tea.MouseButtonLeft:
-			m.logs.SelectAt(msg.Y, m.buf)
-		case tea.MouseButtonWheelUp:
-			m.logs.ScrollUp(3)
-			m.autoScroll = false
-		case tea.MouseButtonWheelDown:
-			m.logs.ScrollDown(3, m.buf)
-			if m.logs.AtBottom(m.buf) {
-				m.autoScroll = true
-			}
-		}
+		m.logs.Update(msg)
 		return m, nil
 	}
 	return m, nil
@@ -97,11 +84,7 @@ func (m Model) onResize(w, h int) Model {
 	m.height = h
 	lay := computeLayout(w, h, m.sidebarOpen, m.cfg.SidebarWidth)
 
-	m.logs.Width = lay.logsWidth
-	m.logs.Height = lay.paneHeight
-	if m.autoScroll {
-		m.logs.GotoBottom(m.buf)
-	}
+	m.logs.SetSize(lay.logsWidth, lay.paneHeight)
 
 	// Sidebar outer border: -2. Input box inner border: -2.
 	innerW := lay.sidebarWidth - 2
@@ -195,34 +178,8 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Pass remaining keys (j/k, PgUp/PgDn, arrows) to the log viewport.
-	prevAtBottom := m.logs.AtBottom(m.buf)
-	switch msg.String() {
-	case keyScrollDown, keyArrowDown:
-		m.logs.ScrollDown(1, m.buf)
-	case keyScrollUp, keyArrowUp:
-		m.logs.ScrollUp(1)
-	case keyPageDown, keyPageDownSpace, keyPageDownF:
-		m.logs.PageDown(m.buf)
-	case keyPageUp, keyPageUpB:
-		m.logs.PageUp()
-	case keyHalfPageDown, keyHalfPageDownCtrl:
-		m.logs.HalfPageDown(m.buf)
-	case keyHalfPageUp, keyHalfPageUpCtrl:
-		m.logs.HalfPageUp()
-	case keyScrollLeft, keyArrowLeft:
-		m.logs.ScrollLeft(1)
-	case keyScrollRight, keyArrowRight:
-		m.logs.ScrollRight(1)
-	}
-	// If user scrolls up, disable auto-scroll; re-enable when they
-	// return to the bottom.
-	if prevAtBottom && !m.logs.AtBottom(m.buf) {
-		m.autoScroll = false
-	}
-	if m.logs.AtBottom(m.buf) {
-		m.autoScroll = true
-	}
+	// Forward remaining keys to the log viewport.
+	m.logs.Update(msg)
 	return m, nil
 }
 

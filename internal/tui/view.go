@@ -16,7 +16,7 @@ func (m Model) View() string {
 
 	lay := computeLayout(m.width, m.height, m.sidebarOpen, m.cfg.SidebarWidth)
 
-	logsView := m.logs.View(m.buf, styleSelectedRow)
+	logsView := m.logs.View(styleSelectedRow)
 
 	var body string
 	if m.sidebarOpen {

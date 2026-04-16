@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/nqbao/logwiz/internal/buffer"
@@ -15,15 +16,17 @@ type LogViewport struct {
 	Width  int
 	Height int
 
-	YOffset  int // top visible logical row index
-	xOffset  int // horizontal scroll in terminal columns
-	Selected int // selected row index; -1 = none
+	YOffset    int  // top visible logical row index
+	xOffset    int  // horizontal scroll in terminal columns
+	Selected   int  // selected row index; -1 = none
+	autoScroll bool // follow the tail when new lines arrive
 
+	buf              *buffer.Buffer
 	longestLineWidth int // updated each View() call; used to clamp horizontal scroll
 }
 
-func newLogViewport() LogViewport {
-	return LogViewport{Selected: -1}
+func newLogViewport(buf *buffer.Buffer) LogViewport {
+	return LogViewport{buf: buf, Selected: -1, autoScroll: true}
 }
 
 // clamp returns v clamped to [lo, hi].
@@ -37,13 +40,21 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-// maxYOffset returns the largest valid YOffset for the given buffer.
-func (v *LogViewport) maxYOffset(buf *buffer.Buffer) int {
-	m := buf.Len() - v.Height
+func (v *LogViewport) maxYOffset() int {
+	m := v.buf.Len() - v.Height
 	if m < 0 {
 		m = 0
 	}
 	return m
+}
+
+// SetSize updates the viewport dimensions and re-applies auto-scroll if active.
+func (v *LogViewport) SetSize(width, height int) {
+	v.Width = width
+	v.Height = height
+	if v.autoScroll {
+		v.GotoBottom()
+	}
 }
 
 // AtTop reports whether the viewport is scrolled to the very top.
@@ -52,8 +63,8 @@ func (v *LogViewport) AtTop() bool {
 }
 
 // AtBottom reports whether the viewport is scrolled to the very bottom.
-func (v *LogViewport) AtBottom(buf *buffer.Buffer) bool {
-	return v.YOffset >= v.maxYOffset(buf)
+func (v *LogViewport) AtBottom() bool {
+	return v.YOffset >= v.maxYOffset()
 }
 
 // ScrollUp scrolls up by n logical rows (clamped at top).
@@ -65,42 +76,30 @@ func (v *LogViewport) ScrollUp(n int) {
 }
 
 // ScrollDown scrolls down by n logical rows (clamped at bottom).
-func (v *LogViewport) ScrollDown(n int, buf *buffer.Buffer) {
+func (v *LogViewport) ScrollDown(n int) {
 	v.YOffset += n
-	if m := v.maxYOffset(buf); v.YOffset > m {
+	if m := v.maxYOffset(); v.YOffset > m {
 		v.YOffset = m
 	}
 }
 
 // PageUp scrolls up by one viewport height.
-func (v *LogViewport) PageUp() {
-	v.ScrollUp(v.Height)
-}
+func (v *LogViewport) PageUp() { v.ScrollUp(v.Height) }
 
 // PageDown scrolls down by one viewport height.
-func (v *LogViewport) PageDown(buf *buffer.Buffer) {
-	v.ScrollDown(v.Height, buf)
-}
+func (v *LogViewport) PageDown() { v.ScrollDown(v.Height) }
 
 // HalfPageUp scrolls up by half a viewport height.
-func (v *LogViewport) HalfPageUp() {
-	v.ScrollUp(v.Height / 2)
-}
+func (v *LogViewport) HalfPageUp() { v.ScrollUp(v.Height / 2) }
 
 // HalfPageDown scrolls down by half a viewport height.
-func (v *LogViewport) HalfPageDown(buf *buffer.Buffer) {
-	v.ScrollDown(v.Height/2, buf)
-}
+func (v *LogViewport) HalfPageDown() { v.ScrollDown(v.Height / 2) }
 
 // GotoTop scrolls to the very beginning.
-func (v *LogViewport) GotoTop() {
-	v.YOffset = 0
-}
+func (v *LogViewport) GotoTop() { v.YOffset = 0 }
 
 // GotoBottom scrolls to the very end.
-func (v *LogViewport) GotoBottom(buf *buffer.Buffer) {
-	v.YOffset = v.maxYOffset(buf)
-}
+func (v *LogViewport) GotoBottom() { v.YOffset = v.maxYOffset() }
 
 // ScrollLeft scrolls left by n columns (clamped at 0).
 func (v *LogViewport) ScrollLeft(n int) {
@@ -119,8 +118,8 @@ func (v *LogViewport) ScrollRight(n int) {
 }
 
 // ScrollPercent returns the scroll position as a value in [0, 1].
-func (v *LogViewport) ScrollPercent(buf *buffer.Buffer) float64 {
-	maxY := v.maxYOffset(buf)
+func (v *LogViewport) ScrollPercent() float64 {
+	maxY := v.maxYOffset()
 	if maxY == 0 {
 		return 1.0
 	}
@@ -128,22 +127,79 @@ func (v *LogViewport) ScrollPercent(buf *buffer.Buffer) float64 {
 }
 
 // SelectAt maps a screen-relative Y coordinate to a logical row index.
-// Call this from a tea.MouseMsg left-click handler.
-func (v *LogViewport) SelectAt(screenY int, buf *buffer.Buffer) {
-	n := buf.Len()
+func (v *LogViewport) SelectAt(screenY int) {
+	n := v.buf.Len()
 	if n == 0 {
 		v.Selected = -1
 		return
 	}
-	row := v.YOffset + screenY
-	v.Selected = clamp(row, 0, n-1)
+	v.Selected = clamp(v.YOffset+screenY, 0, n-1)
 }
 
-// View renders the visible portion of buf into a fixed Width×Height string.
+// OnNewLines should be called after lines are appended to the buffer.
+// It scrolls to the bottom when auto-scroll is active.
+func (v *LogViewport) OnNewLines() {
+	if v.autoScroll {
+		v.GotoBottom()
+	}
+}
+
+// Update handles tea.KeyMsg and tea.MouseMsg for the log pane.
+// The caller is responsible for filtering out messages that belong to other
+// widgets (e.g. shift+wheel for the chat pane).
+func (v *LogViewport) Update(msg tea.Msg) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		prevAtBottom := v.AtBottom()
+		switch msg.String() {
+		case keyScrollDown, keyArrowDown:
+			v.ScrollDown(1)
+		case keyScrollUp, keyArrowUp:
+			v.ScrollUp(1)
+		case keyPageDown, keyPageDownSpace, keyPageDownF:
+			v.PageDown()
+		case keyPageUp, keyPageUpB:
+			v.PageUp()
+		case keyHalfPageDown, keyHalfPageDownCtrl:
+			v.HalfPageDown()
+		case keyHalfPageUp, keyHalfPageUpCtrl:
+			v.HalfPageUp()
+		case keyScrollLeft, keyArrowLeft:
+			v.ScrollLeft(1)
+		case keyScrollRight, keyArrowRight:
+			v.ScrollRight(1)
+		}
+		if prevAtBottom && !v.AtBottom() {
+			v.autoScroll = false
+		}
+		if v.AtBottom() {
+			v.autoScroll = true
+		}
+
+	case tea.MouseMsg:
+		if msg.Action != tea.MouseActionPress {
+			return
+		}
+		switch msg.Button {
+		case tea.MouseButtonLeft:
+			v.SelectAt(msg.Y)
+		case tea.MouseButtonWheelUp:
+			v.ScrollUp(3)
+			v.autoScroll = false
+		case tea.MouseButtonWheelDown:
+			v.ScrollDown(3)
+			if v.AtBottom() {
+				v.autoScroll = true
+			}
+		}
+	}
+}
+
+// View renders the visible portion of the buffer into a fixed Width×Height string.
 // Lines are ANSI-aware: horizontal scroll via xOffset, and the selected row
 // is rendered with selectedStyle.
-func (v *LogViewport) View(buf *buffer.Buffer, selectedStyle lipgloss.Style) string {
-	n := buf.Len()
+func (v *LogViewport) View(selectedStyle lipgloss.Style) string {
+	n := v.buf.Len()
 	top := clamp(v.YOffset, 0, max(0, n-1))
 	bot := clamp(top+v.Height, top, n)
 
@@ -151,7 +207,7 @@ func (v *LogViewport) View(buf *buffer.Buffer, selectedStyle lipgloss.Style) str
 	v.longestLineWidth = 0
 
 	for i := top; i < bot; i++ {
-		line := buf.Line(i)
+		line := v.buf.Line(i)
 
 		// Track longest for horizontal-scroll clamping.
 		if w := ansi.StringWidth(line); w > v.longestLineWidth {
