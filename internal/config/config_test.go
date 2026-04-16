@@ -15,6 +15,7 @@ func envFromMap(m map[string]string) func(string) (string, bool) {
 }
 
 func TestParseDefaults(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	cfg, err := Parse(nil, envFromMap(nil), io.Discard)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
@@ -37,6 +38,7 @@ func TestParseDefaults(t *testing.T) {
 }
 
 func TestParseEnvFallback(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	env := envFromMap(map[string]string{
 		EnvAPIKey:  "sk-env",
 		EnvBaseURL: "https://env.example/v1",
@@ -58,6 +60,7 @@ func TestParseEnvFallback(t *testing.T) {
 }
 
 func TestParseFlagOverridesEnv(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	env := envFromMap(map[string]string{
 		EnvAPIKey:  "sk-env",
 		EnvBaseURL: "https://env.example/v1",
@@ -84,6 +87,7 @@ func TestParseFlagOverridesEnv(t *testing.T) {
 }
 
 func TestParsePositionalFile(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	cfg, err := Parse([]string{"server.log"}, envFromMap(nil), io.Discard)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
@@ -94,6 +98,7 @@ func TestParsePositionalFile(t *testing.T) {
 }
 
 func TestParseTooManyPositionals(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	_, err := Parse([]string{"a.log", "b.log"}, envFromMap(nil), io.Discard)
 	if err == nil {
 		t.Fatal("expected error for two positional args")
@@ -101,6 +106,7 @@ func TestParseTooManyPositionals(t *testing.T) {
 }
 
 func TestParseInvalidNumbers(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	cases := [][]string{
 		{"--max-lines", "0"},
 		{"--context-lines", "0"},
@@ -165,6 +171,7 @@ func TestFileConfigBelowEnv(t *testing.T) {
 }
 
 func TestParseEmptyEnvTreatedAsUnset(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	// An env var present but empty should fall back to the default.
 	env := envFromMap(map[string]string{EnvModel: ""})
 	cfg, err := Parse(nil, env, io.Discard)
