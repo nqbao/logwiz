@@ -376,7 +376,7 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 			line = ansi.Cut(line, v.xOffset, v.xOffset+v.Width)
 		}
 		if i == v.Selected {
-			line = selectedStyle.Width(v.Width).Render(line)
+			line = selectedStyle.Width(v.Width).Render(ansi.Strip(line))
 		}
 
 		if i > top {
@@ -422,7 +422,7 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 		for wr := wStart; wr < h && rowsWritten < v.Height; wr++ {
 			segment := ansi.Cut(line, wr*v.Width, (wr+1)*v.Width)
 			if i == v.Selected {
-				segment = selectedStyle.Width(v.Width).Render(segment)
+				segment = selectedStyle.Width(v.Width).Render(ansi.Strip(segment))
 			}
 			if !first {
 				sb.WriteByte('\n')
