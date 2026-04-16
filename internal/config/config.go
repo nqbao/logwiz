@@ -18,7 +18,7 @@ import (
 const (
 	DefaultBaseURL      = "https://api.openai.com/v1"
 	DefaultModel        = "gpt-4o-mini"
-	DefaultMaxLines     = 5000
+	DefaultMaxLines     = 50000
 	DefaultContextLines = 300
 	DefaultSidebarWidth = 50
 	DefaultSystemPrompt = "You are helping analyze terminal logs. Be concise and grounded in the provided log text."

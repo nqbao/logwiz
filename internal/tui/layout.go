@@ -38,7 +38,7 @@ func computeLayout(width, height int, sidebarOpen bool, sidebarPref int) layout 
 		sb = 10
 	}
 
-	logsW := width - sb
+	logsW := width - sb - 1 // 1 col for the divider
 	if logsW < 10 {
 		logsW = 10
 	}
