@@ -191,6 +191,10 @@ func (v *LogViewport) Update(msg tea.Msg) {
 			if v.AtBottom() {
 				v.autoScroll = true
 			}
+		case tea.MouseButtonWheelLeft:
+			v.ScrollLeft(3)
+		case tea.MouseButtonWheelRight:
+			v.ScrollRight(3)
 		}
 	}
 }
