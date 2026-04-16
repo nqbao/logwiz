@@ -49,7 +49,13 @@ func run() error {
 	}
 
 	// Decide source: explicit file > stdin (if piped). Reject if neither.
-	parser := logmsg.JSONParser{}
+	var parser logmsg.Parser
+	switch cfg.Format {
+	case "json":
+		parser = logmsg.JSONParser{}
+	default:
+		parser = logmsg.PassthroughParser{}
+	}
 	var (
 		src  source.Source
 		kind tui.SourceKind

@@ -22,6 +22,7 @@ const (
 	DefaultContextLines = 300
 	DefaultSidebarWidth = 50
 	DefaultSystemPrompt = "You are helping analyze terminal logs. Be concise and grounded in the provided log text."
+	DefaultFormat       = "json"
 )
 
 // Env var names.
@@ -44,6 +45,9 @@ type Config struct {
 	// File is the path to read when not reading from stdin. Empty
 	// means stdin mode.
 	File string
+
+	// Format selects the line parser: "json" or "passthrough".
+	Format string
 }
 
 // fileConfig holds the subset of Config that can be set in
@@ -124,6 +128,8 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		"Chat sidebar width in columns")
 	fs.StringVar(&cfg.SystemPrompt, "system-prompt", DefaultSystemPrompt,
 		"System prompt sent with each chat request")
+	fs.StringVar(&cfg.Format, "format", DefaultFormat,
+		`Line parser: "json" detects and colours JSON lines, "passthrough" renders everything as plain text`)
 
 	fs.Usage = func() {
 		fmt.Fprintln(out, "Usage: logwiz [flags] [file]")
@@ -160,6 +166,9 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	}
 	if cfg.SidebarWidth < 10 {
 		return Config{}, errors.New("--sidebar-width must be >= 10")
+	}
+	if cfg.Format != "json" && cfg.Format != "passthrough" {
+		return Config{}, errors.New(`--format must be "json" or "passthrough"`)
 	}
 
 	return cfg, nil
