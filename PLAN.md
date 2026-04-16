@@ -10,9 +10,14 @@ focus model, help overlay, EOF badge, `\r` handling, SIGTERM to process group.
 `source.pump` batches lines into `NewLinesMsg{ Lines []string }`, fixing O(n)-per-line
 UI refresh on high-volume streams.
 
+### ✅ File-mode tail-seek
+`source.File` samples near EOF to estimate line size, seeks backward to cover
+`--max-lines` lines, and emits a truncation marker when content is skipped. Keeps
+startup O(budget) instead of O(fileSize) on large files. No new user-facing flag.
+
 ---
 
-## v1.1 — Message foundation + agentic chat + file tail-seek
+## v1.1 — Message foundation + agentic chat
 
 ### New: `internal/logrec`
 
@@ -53,11 +58,6 @@ Always inject current viewport messages as system context. Expose two tools:
 `internal/chat.Client` gains tool-call support: send `tools`, handle `tool_calls` response,
 run locally, append `tool` role message, re-request until done.
 
-### File-mode tail-seek
-
-Byte-seek backward from EOF, advance to first message boundary. Emit `[truncated]` marker
-when seek skips content. `--max-lines` / `--max-bytes` enforced at seek time.
-
 ---
 
 ## v1.2 — Navigation + filter + format profiles
@@ -84,6 +84,9 @@ when seek skips content. `--max-lines` / `--max-bytes` enforced at seek time.
 - `--tee` / `--out` to mirror stdin to stdout/file
 - Copy answer to clipboard, retry last prompt
 - SQL-over-fields, bookmarks, timeline navigation
+- Full large-file navigation: `FileBackedSource` with mmap + lazy line-offset index
+  + paged reads on scroll, so users can view any part of a multi-GB file without
+  loading it all into the ring buffer. Tail-seek remains the fast-startup default.
 
 ---
 
@@ -93,6 +96,5 @@ when seek skips content. `--max-lines` / `--max-bytes` enforced at seek time.
 | ---- | ---------- |
 | Huge log bursts | Source batching (shipped) |
 | AnchorParser holds message open | 200ms idle timeout + EOF flush |
-| Tail-seek lands mid-message | `[truncated]` marker; at most one message lost |
 | Huge single messages (10k-line trace) | `--max-bytes` cap |
 | API key in crash logs | Never log request bodies |
