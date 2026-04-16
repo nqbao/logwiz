@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 // LogViewport renders log lines directly from *buffer.Buffer at View() time —
@@ -37,37 +36,6 @@ type LogViewport struct {
 
 	// Wrap=false: longest visible line width for horizontal-scroll clamping.
 	longestLineWidth int
-
-	// longestAttrWidth tracks the widest value seen for each LogMessage
-	// attribute key. Populated lazily during rendering; stays nil for
-	// the passthrough parser (no attributes => no map). Future column
-	// rendering / alignment can read this via MaxAttrWidth.
-	longestAttrWidth map[string]int
-}
-
-// MaxAttrWidth returns the widest value seen for the given attribute
-// key during rendering, or 0 if no message has carried that key yet.
-func (v *LogViewport) MaxAttrWidth(key string) int {
-	if v.longestAttrWidth == nil {
-		return 0
-	}
-	return v.longestAttrWidth[key]
-}
-
-// observeAttrWidths bumps longestAttrWidth for each attribute on msg.
-// No-op for messages with no attributes (the passthrough-parser path).
-func (v *LogViewport) observeAttrWidths(msg logmsg.LogMessage) {
-	if len(msg.Attributes) == 0 {
-		return
-	}
-	if v.longestAttrWidth == nil {
-		v.longestAttrWidth = make(map[string]int, len(msg.Attributes))
-	}
-	for k, val := range msg.Attributes {
-		if w := ansi.StringWidth(val); w > v.longestAttrWidth[k] {
-			v.longestAttrWidth[k] = w
-		}
-	}
 }
 
 func newLogViewport(buf *buffer.Buffer) LogViewport {
@@ -387,10 +355,7 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 	v.longestLineWidth = 0
 
 	for i := top; i < bot; i++ {
-		msg := v.buf.Line(i)
-		line := msg.Raw
-
-		v.observeAttrWidths(msg)
+		line := v.buf.Line(i).Raw
 
 		if w := ansi.StringWidth(line); w > v.longestLineWidth {
 			v.longestLineWidth = w
@@ -431,9 +396,7 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 	first := true
 
 	for i := startLine; i < n && rowsWritten < v.Height; i++ {
-		msg := v.buf.Line(i)
-		line := msg.Raw
-		v.observeAttrWidths(msg)
+		line := v.buf.Line(i).Raw
 		h := 1
 		if i < len(v.wrapCache) {
 			h = v.wrapCache[i]
