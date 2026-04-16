@@ -62,7 +62,7 @@ func run() error {
 	)
 	switch {
 	case cfg.File != "":
-		src = &source.File{Path: cfg.File, Parser: parser}
+		src = &source.File{Path: cfg.File, Parser: parser, TailBytes: cfg.TailBytes}
 		kind = tui.SourceFile
 	case !isatty.IsTerminal(os.Stdin.Fd()):
 		src = &source.Stdin{R: os.Stdin, Parser: parser}

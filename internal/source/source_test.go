@@ -221,6 +221,86 @@ func TestPumpAppliesParser(t *testing.T) {
 	}
 }
 
+func TestFileTailSeekSkipsHead(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "big.log")
+	// 200 lines × 100 bytes each = 20 KiB. With tailBytes=1 KiB, only
+	// the last ~10 lines should survive.
+	var sb strings.Builder
+	for i := 0; i < 200; i++ {
+		sb.WriteString(strings.Repeat("x", 99))
+		sb.WriteString("\n")
+	}
+	full := sb.String()
+	if err := os.WriteFile(path, []byte(full), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := newRecorder()
+	src := &File{Path: path, TailBytes: 1024}
+	src.Start(context.Background(), rec)
+	rec.waitForTerminal(t)
+
+	msgs := rec.snapshot()
+	lines := collectRaws(msgs)
+	if len(lines) == 0 {
+		t.Fatalf("no lines emitted")
+	}
+	// First emitted line must be the truncation marker.
+	if !strings.HasPrefix(lines[0], "[logwiz: skipped ") {
+		t.Errorf("first line = %q, want truncation marker", lines[0])
+	}
+	// Every surviving log line (after the marker) must be a full
+	// 99-x line — we must not have split a line mid-byte.
+	for i, l := range lines[1:] {
+		if l != strings.Repeat("x", 99) {
+			t.Errorf("line %d after marker = %q, want 99 'x'", i+1, l)
+		}
+	}
+	// We seeked to ~1 KiB from EOF, so we should keep far fewer than
+	// the original 200 lines but still something.
+	retained := len(lines) - 1
+	if retained == 0 || retained > 50 {
+		t.Errorf("retained %d lines, want 1 < n <= 50", retained)
+	}
+}
+
+func TestFileNoTailSeekWhenSmall(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "small.log")
+	if err := os.WriteFile(path, []byte("a\nb\nc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := newRecorder()
+	src := &File{Path: path, TailBytes: 1 << 20}
+	src.Start(context.Background(), rec)
+	rec.waitForTerminal(t)
+
+	got := collectRaws(rec.snapshot())
+	if !equalStrings(got, []string{"a", "b", "c"}) {
+		t.Fatalf("lines = %v, want [a b c] (no truncation marker expected)", got)
+	}
+}
+
+func TestFileTailSeekDisabledWhenZero(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "any.log")
+	if err := os.WriteFile(path, []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := newRecorder()
+	src := &File{Path: path, TailBytes: 0}
+	src.Start(context.Background(), rec)
+	rec.waitForTerminal(t)
+
+	got := collectRaws(rec.snapshot())
+	if !equalStrings(got, []string{"one", "two"}) {
+		t.Fatalf("lines = %v, want [one two]", got)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

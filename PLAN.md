@@ -53,10 +53,18 @@ Always inject current viewport messages as system context. Expose two tools:
 `internal/chat.Client` gains tool-call support: send `tools`, handle `tool_calls` response,
 run locally, append `tool` role message, re-request until done.
 
-### File-mode tail-seek
+### File-mode tail-seek ✅
 
-Byte-seek backward from EOF, advance to first message boundary. Emit `[truncated]` marker
-when seek skips content. `--max-lines` / `--max-bytes` enforced at seek time.
+Shipped: `--tail-bytes` (default 10 MiB). `source.File` stats the file; if larger, seeks
+to `size - tail-bytes`, discards the partial line at the boundary, and emits a synthetic
+`[logwiz: skipped N from head of file (tail-seek); ...]` LogMessage as the first line so
+the user can see that content was dropped. Smaller files and `--tail-bytes=0` read from
+the start as before.
+
+Scope limitation (deferred to v1.4+): skipped content is not accessible — you can't
+scroll back past the tail-seek point, and chat `search` will only see what's in the ring
+buffer. True full-file navigation needs a `FileBackedSource` that memory-maps the file
+and builds a line-offset index lazily, then serves paged reads on scroll.
 
 ---
 
@@ -84,6 +92,9 @@ when seek skips content. `--max-lines` / `--max-bytes` enforced at seek time.
 - `--tee` / `--out` to mirror stdin to stdout/file
 - Copy answer to clipboard, retry last prompt
 - SQL-over-fields, bookmarks, timeline navigation
+- Full large-file navigation: `FileBackedSource` with mmap + lazy line-offset index
+  + paged reads on scroll, so users can view any part of a multi-GB file without
+  loading it all into the ring buffer. Tail-seek remains the fast-startup default.
 
 ---
 
