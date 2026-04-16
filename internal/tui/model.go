@@ -41,8 +41,7 @@ type Model struct {
 	buf *buffer.Buffer
 	eof bool
 
-	logs       viewport.Model
-	autoScroll bool
+	logs LogViewport
 
 	sidebarOpen bool
 	convo       viewport.Model // chat conversation viewport
@@ -79,9 +78,8 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 		cfg:        cfg,
 		sourceKind: kind,
 		buf:        buf,
-		logs:       viewport.New(0, 0),
+		logs:       newLogViewport(buf),
 		convo:      viewport.New(0, 0),
-		autoScroll: true,
 		input:      ta,
 		focus:      focusLogs,
 		chatClient: client,

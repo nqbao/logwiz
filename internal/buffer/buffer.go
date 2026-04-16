@@ -51,6 +51,16 @@ func (b *Buffer) Snapshot() []string {
 	return out
 }
 
+// Line returns the i-th line in chronological order (0 = oldest).
+// Returns "" for out-of-range indices.
+func (b *Buffer) Line(i int) string {
+	if i < 0 || i >= b.size {
+		return ""
+	}
+	start := (b.head - b.size + b.cap) % b.cap
+	return b.lines[(start+i)%b.cap]
+}
+
 // LastN returns the most recent n lines in chronological order. If n
 // exceeds the number of stored lines, the full snapshot is returned.
 func (b *Buffer) LastN(n int) []string {

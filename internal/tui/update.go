@@ -27,13 +27,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, line := range msg.Lines {
 			m.buf.Append(line)
 		}
-		m.refreshLogsContent()
+		m.logs.OnNewLines(len(msg.Lines))
 		return m, nil
 
 	case source.EOFMsg:
 		m.eof = true
 		if m.sourceKind == SourceFile {
-			m.autoScroll = false
+			m.logs.autoScroll = false
 			m.logs.GotoTop()
 		}
 		return m, nil
@@ -73,16 +73,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
-			m.logs.ScrollUp(3)
-			m.autoScroll = false
-		case tea.MouseButtonWheelDown:
-			m.logs.ScrollDown(3)
-			if m.logs.AtBottom() {
-				m.autoScroll = true
-			}
-		}
+		m.logs.Update(msg)
 		return m, nil
 	}
 	return m, nil
@@ -93,8 +84,7 @@ func (m Model) onResize(w, h int) Model {
 	m.height = h
 	lay := computeLayout(w, h, m.sidebarOpen, m.cfg.SidebarWidth)
 
-	m.logs.Width = lay.logsWidth
-	m.logs.Height = lay.paneHeight
+	m.logs.SetSize(lay.logsWidth, lay.paneHeight)
 
 	// Sidebar outer border: -2. Input box inner border: -2.
 	innerW := lay.sidebarWidth - 2
@@ -117,7 +107,6 @@ func (m Model) onResize(w, h int) Model {
 	m.convo.Width = innerW
 	m.convo.Height = convoH
 
-	m.refreshLogsContent()
 	m.refreshConvoContent()
 	return m
 }
@@ -187,29 +176,14 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.chatMsgs = nil
 		m.chatErr = ""
 		return m, nil
+	case keyWrap:
+		m.logs.ToggleWrap()
+		return m, nil
 	}
 
-	// Pass remaining keys (j/k, PgUp/PgDn, arrows) to the log viewport.
-	var cmd tea.Cmd
-	prevAtBottom := m.logs.AtBottom()
-	m.logs, cmd = m.logs.Update(msg)
-	// If user scrolls up, disable auto-scroll; re-enable when they
-	// return to the bottom.
-	if prevAtBottom && !m.logs.AtBottom() {
-		m.autoScroll = false
-	}
-	if m.logs.AtBottom() {
-		m.autoScroll = true
-	}
-	return m, cmd
-}
-
-func (m *Model) refreshLogsContent() {
-	content := strings.Join(m.buf.Snapshot(), "\n")
-	m.logs.SetContent(content)
-	if m.autoScroll {
-		m.logs.GotoBottom()
-	}
+	// Forward remaining keys to the log viewport.
+	m.logs.Update(msg)
+	return m, nil
 }
 
 func (m *Model) refreshConvoContent() {

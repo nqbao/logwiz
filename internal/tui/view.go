@@ -16,10 +16,7 @@ func (m Model) View() string {
 
 	lay := computeLayout(m.width, m.height, m.sidebarOpen, m.cfg.SidebarWidth)
 
-	logsView := lipgloss.NewStyle().
-		Width(lay.logsWidth).
-		Height(lay.paneHeight).
-		Render(m.logs.View())
+	logsView := m.logs.View(styleSelectedRow)
 
 	var body string
 	if m.sidebarOpen {
@@ -103,6 +100,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  enter     send chat message (in input)",
 		"  ctrl+j    newline in chat input",
 		"  c         clear chat history",
+		"  w         toggle line wrap",
 		"  j / ↓     scroll logs down",
 		"  k / ↑     scroll logs up",
 		"  pgup/pgdn page logs",
