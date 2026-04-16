@@ -9,10 +9,11 @@ import "github.com/nqbao/logwiz/internal/logmsg"
 // overwrites the oldest entry. Not safe for concurrent use; the TUI
 // keeps all mutations on the Bubble Tea event loop.
 type Buffer struct {
-	lines []logmsg.LogMessage
-	head  int // index of the next slot to write
-	size  int // number of valid entries
-	cap   int
+	lines    []logmsg.LogMessage
+	head     int    // index of the next slot to write
+	size     int    // number of valid entries
+	cap      int
+	nextLine uint64 // monotonically increasing line number
 }
 
 // New creates a Buffer that retains at most capLines lines. capLines
@@ -34,7 +35,11 @@ func (b *Buffer) Cap() int { return b.cap }
 func (b *Buffer) Len() int { return b.size }
 
 // Append adds a message to the buffer, evicting the oldest if full.
+// The buffer assigns the message's MsgID.Line; any value the caller
+// set is overwritten so IDs stay monotonic and unique.
 func (b *Buffer) Append(msg logmsg.LogMessage) {
+	msg.ID.Line = b.nextLine
+	b.nextLine++
 	b.lines[b.head] = msg
 	b.head = (b.head + 1) % b.cap
 	if b.size < b.cap {
