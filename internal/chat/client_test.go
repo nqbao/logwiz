@@ -10,9 +10,20 @@ import (
 	"testing"
 )
 
+// requestBody is a minimal shape of the chat-completions request body,
+// used only by tests to inspect what the SDK sends.
+type requestBody struct {
+	Model    string `json:"model"`
+	Messages []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	} `json:"messages"`
+	Stream bool `json:"stream"`
+}
+
 func TestCompleteHappyPath(t *testing.T) {
 	var gotAuth, gotCT, gotPath string
-	var gotBody Request
+	var gotBody requestBody
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
@@ -60,6 +71,7 @@ func TestCompleteTrailingSlashInBaseURL(t *testing.T) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Errorf("path = %q", r.URL.Path)
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
 	}))
 	defer srv.Close()
