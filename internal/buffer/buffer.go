@@ -127,6 +127,22 @@ func (b *Buffer) Range(start, n int) []IndexedLine {
 	return out
 }
 
+// CountRegex counts every line matching re from chronological index since
+// onward. It is cheaper than SearchRegex because it never allocates a
+// result slice.
+func (b *Buffer) CountRegex(re *regexp.Regexp, since int) int {
+	if since < 0 {
+		since = 0
+	}
+	total := 0
+	for i := since; i < b.size; i++ {
+		if re.MatchString(b.Line(i).Raw) {
+			total++
+		}
+	}
+	return total
+}
+
 // SearchRegex iterates the buffer starting at chronological index since,
 // counts every line matching re as a total match, and collects up to limit
 // of them. It returns:

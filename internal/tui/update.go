@@ -481,6 +481,8 @@ func labelFor(name string) string {
 		return "reading logs"
 	case "search_regex":
 		return "searching logs"
+	case "count_regex":
+		return "counting logs"
 	default:
 		return "thinking"
 	}

@@ -23,10 +23,10 @@ type Registry struct {
 	tools map[string]Tool
 }
 
-// NewDefault returns a Registry with the standard read/tail/search_regex tools.
+// NewDefault returns a Registry with the standard tools.
 func NewDefault() *Registry {
 	r := &Registry{tools: make(map[string]Tool)}
-	for _, t := range []Tool{readTool{}, tailTool{}, searchTool{}} {
+	for _, t := range []Tool{readTool{}, tailTool{}, searchTool{}, countTool{}} {
 		r.tools[t.Spec().Name] = t
 	}
 	return r
@@ -35,7 +35,7 @@ func NewDefault() *Registry {
 // Specs returns the tool specifications for all registered tools.
 func (r *Registry) Specs() []chat.ToolSpec {
 	// Return in a stable order.
-	names := []string{"read", "tail", "search_regex"}
+	names := []string{"read", "tail", "search_regex", "count_regex"}
 	out := make([]chat.ToolSpec, 0, len(names))
 	for _, name := range names {
 		if t, ok := r.tools[name]; ok {

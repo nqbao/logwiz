@@ -192,17 +192,73 @@ func TestSearchBadArgs(t *testing.T) {
 	}
 }
 
+func TestCountBasic(t *testing.T) {
+	buf := makeBuffer("ERROR: a", "INFO: ok", "ERROR: b", "WARN: c")
+	args := json.RawMessage(`{"pattern":"ERROR"}`)
+	result, err := countTool{}.Execute(args, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "total_matches=2\n" {
+		t.Errorf("count result = %q, want total_matches=2", result)
+	}
+}
+
+func TestCountCaseInsensitive(t *testing.T) {
+	buf := makeBuffer("error: x", "Error: y", "INFO: z")
+	args := json.RawMessage(`{"pattern":"error","case_insensitive":true}`)
+	result, err := countTool{}.Execute(args, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "total_matches=2\n" {
+		t.Errorf("count result = %q, want total_matches=2", result)
+	}
+}
+
+func TestCountSinceLine(t *testing.T) {
+	buf := makeBuffer("hit0", "hit1", "hit2")
+	args := json.RawMessage(`{"pattern":"hit","since_line":1}`)
+	result, err := countTool{}.Execute(args, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "total_matches=2\n" {
+		t.Errorf("count result = %q, want total_matches=2", result)
+	}
+}
+
+func TestCountBadRegex(t *testing.T) {
+	buf := makeBuffer("a")
+	_, err := countTool{}.Execute(json.RawMessage(`{"pattern":"[bad"}`), buf)
+	if err == nil {
+		t.Fatal("expected error for bad regex")
+	}
+}
+
+func TestCountEmptyBuffer(t *testing.T) {
+	buf := buffer.New(5)
+	args := json.RawMessage(`{"pattern":"x"}`)
+	result, err := countTool{}.Execute(args, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != "total_matches=0\n" {
+		t.Errorf("count result = %q, want total_matches=0", result)
+	}
+}
+
 func TestRegistrySpecs(t *testing.T) {
 	r := NewDefault()
 	specs := r.Specs()
-	if len(specs) != 3 {
-		t.Fatalf("specs len = %d, want 3", len(specs))
+	if len(specs) != 4 {
+		t.Fatalf("specs len = %d, want 4", len(specs))
 	}
 	names := map[string]bool{}
 	for _, s := range specs {
 		names[s.Name] = true
 	}
-	for _, want := range []string{"read", "tail", "search_regex"} {
+	for _, want := range []string{"read", "tail", "search_regex", "count_regex"} {
 		if !names[want] {
 			t.Errorf("missing tool %q in specs", want)
 		}
