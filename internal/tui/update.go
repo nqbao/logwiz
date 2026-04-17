@@ -364,6 +364,19 @@ func (m Model) submitChat() (tea.Model, tea.Cmd) {
 	if m.chatLoading {
 		return m, nil
 	}
+
+	if q == "/clear" {
+		m.input.Reset()
+		m.chatMsgs = nil
+		m.chatErr = ""
+		m.turns = nil
+		m.turnIdxByMsg = make(map[int]int)
+		m.activeTurn = -1
+		m.sessionSample = nil
+		m.refreshConvoContent()
+		return m, nil
+	}
+
 	if m.chatClient == nil {
 		m.chatErr = "chat is not configured (set OPENAI_API_KEY or --api-key)"
 		return m, nil
