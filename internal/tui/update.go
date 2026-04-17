@@ -35,12 +35,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onResize(msg.Width, msg.Height), nil
 
 	case source.NewLinesMsg:
+		evictions := 0
 		for _, lm := range msg.Lines {
 			if evictedID, evicted := m.buf.Append(lm); evicted {
 				m.highlighter.Evict(evictedID)
+				evictions++
 			}
 		}
 		m.logs.OnNewLines(len(msg.Lines))
+		if m.searchRe != nil {
+			m.updateSearch(len(msg.Lines), evictions)
+		}
 		return m, nil
 
 	case source.EOFMsg:
