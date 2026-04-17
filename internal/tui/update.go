@@ -95,14 +95,21 @@ case tea.KeyMsg:
 			return m, nil
 		}
 
-		if msg.Shift && m.sidebarOpen {
-			switch msg.Button {
-			case tea.MouseButtonWheelUp:
-				m.convo.ScrollUp(3)
-			case tea.MouseButtonWheelDown:
-				m.convo.ScrollDown(3)
+		if m.sidebarOpen {
+			if msg.Shift {
+				switch msg.Button {
+				case tea.MouseButtonWheelUp:
+					m.convo.ScrollUp(3)
+				case tea.MouseButtonWheelDown:
+					m.convo.ScrollDown(3)
+				}
+				return m, nil
 			}
-			return m, nil
+			// Only pass wheel scroll through to logs; block clicks so the
+			// sidebar doesn't accidentally trigger log-row highlighting.
+			if msg.Button != tea.MouseButtonWheelUp && msg.Button != tea.MouseButtonWheelDown {
+				return m, nil
+			}
 		}
 
 		m.logs.Update(msg)
