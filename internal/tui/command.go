@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -15,8 +16,15 @@ var cmdRegistry = map[string]cmdHandler{
 	"search": cmdSearch,
 	"clear":  cmdClear,
 	"help":   cmdHelp,
+	"model":  cmdModel,
 	"quit":   cmdQuit,
 }
+
+// infoErr is returned by handlers that want to keep the palette open and
+// display a dim informational line instead of a red error.
+type infoErr struct{ msg string }
+
+func (e infoErr) Error() string { return e.msg }
 
 // dispatchCommand parses raw (the value of cmdInput), resolves the handler,
 // and runs it. On success the palette is closed and layout is recomputed.
@@ -29,6 +37,7 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 	if raw == "" {
 		m.cmdActive = false
 		m.cmdErr = ""
+		m.cmdInfo = ""
 		m.cmdInput.Blur()
 		m = m.onResize(m.width, m.height)
 		return m, nil
@@ -36,6 +45,7 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 
 	if raw[0] != ':' && raw[0] != '/' {
 		m.cmdErr = "prefix commands with : or /"
+		m.cmdInfo = ""
 		return m, nil
 	}
 	raw = strings.TrimSpace(raw[1:])
@@ -59,13 +69,21 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 
 	newM, cmd, err := handler(m, strings.TrimSpace(args))
 	if err != nil {
-		m.cmdErr = err.Error()
+		var ie infoErr
+		if errors.As(err, &ie) {
+			m.cmdInfo = ie.msg
+			m.cmdErr = ""
+		} else {
+			m.cmdErr = err.Error()
+			m.cmdInfo = ""
+		}
 		return m, nil
 	}
 
 	// Close the palette and recompute layout.
 	newM.cmdActive = false
 	newM.cmdErr = ""
+	newM.cmdInfo = ""
 	newM.cmdInput.Blur()
 	newM = newM.onResize(newM.width, newM.height)
 	return newM, cmd
@@ -90,6 +108,17 @@ func cmdSearch(m Model, args string) (Model, tea.Cmd, error) {
 		return m, nil, err
 	}
 	runSearch(&m, re)
+	return m, nil, nil
+}
+
+func cmdModel(m Model, args string) (Model, tea.Cmd, error) {
+	if args == "" {
+		return m, nil, infoErr{"current model: " + m.cfg.Model}
+	}
+	m.cfg.Model = args
+	if m.chatClient != nil {
+		m.chatClient.SetModel(args)
+	}
 	return m, nil, nil
 }
 

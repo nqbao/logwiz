@@ -52,6 +52,8 @@ func (m Model) renderCommandPalette(width int) string {
 	content := m.cmdInput.View()
 	if m.cmdErr != "" {
 		content += "\n" + styleErr.Render(m.cmdErr)
+	} else if m.cmdInfo != "" {
+		content += "\n" + styleDim.Render(m.cmdInfo)
 	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

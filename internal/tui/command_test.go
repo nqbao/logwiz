@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nqbao/logwiz/internal/logmsg"
@@ -135,6 +136,42 @@ func TestDispatchCommand_NoPrefixKeepsPaletteOpen(t *testing.T) {
 	}
 	if m2.cmdErr == "" {
 		t.Error("cmdErr should be set for unprefixed input")
+	}
+}
+
+// TestDispatchCommand_ModelNoArgs shows current model as dim info, keeps palette open.
+func TestDispatchCommand_ModelNoArgs(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.cfg.Model = "gpt-4o"
+
+	m2, _ := m.dispatchCommand(":model")
+	if !m2.cmdActive {
+		t.Error("cmdActive should remain true when :model shows info")
+	}
+	if m2.cmdErr != "" {
+		t.Errorf("cmdErr = %q, want empty (info should not be an error)", m2.cmdErr)
+	}
+	if m2.cmdInfo == "" {
+		t.Error("cmdInfo should be set to current model name")
+	}
+	if !strings.Contains(m2.cmdInfo, "gpt-4o") {
+		t.Errorf("cmdInfo = %q, should contain model name", m2.cmdInfo)
+	}
+}
+
+// TestDispatchCommand_ModelWithArg changes the model and closes the palette.
+func TestDispatchCommand_ModelWithArg(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.cfg.Model = "gpt-4o-mini"
+
+	m2, _ := m.dispatchCommand(":model claude-sonnet-4-6")
+	if m2.cmdActive {
+		t.Error("cmdActive should be false after :model <name>")
+	}
+	if m2.cfg.Model != "claude-sonnet-4-6" {
+		t.Errorf("cfg.Model = %q, want claude-sonnet-4-6", m2.cfg.Model)
 	}
 }
 

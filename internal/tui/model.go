@@ -81,6 +81,7 @@ type Model struct {
 	cmdActive bool
 	cmdInput  textinput.Model
 	cmdErr    string
+	cmdInfo   string // dim informational line shown below the input
 
 	// Search state.
 	searchRe      *regexp.Regexp

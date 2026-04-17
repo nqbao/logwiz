@@ -211,8 +211,8 @@ func (m Model) cmdRows() int {
 	if !m.cmdActive {
 		return 0
 	}
-	if m.cmdErr != "" {
-		return 4 // border_top + input + error + border_bottom
+	if m.cmdErr != "" || m.cmdInfo != "" {
+		return 4 // border_top + input + info/error + border_bottom
 	}
 	return 3 // border_top + input + border_bottom
 }
@@ -267,6 +267,7 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case keyEscape:
 			m.cmdActive = false
 			m.cmdErr = ""
+			m.cmdInfo = ""
 			m.cmdInput.Blur()
 			m = m.onResize(m.width, m.height)
 			return m, nil
