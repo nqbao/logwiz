@@ -125,7 +125,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 	ta.SetHeight(3)
 
 	ci := textinput.New()
-	ci.Prompt = ":"
+	ci.Prompt = ""
 	ci.CharLimit = 200
 
 	ctx, cancel := context.WithCancel(context.Background())
