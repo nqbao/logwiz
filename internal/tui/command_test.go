@@ -7,12 +7,12 @@ import (
 )
 
 // TestDispatchCommand_NormalizesLeadingColon verifies :search and /search
-// both work the same as the bare form.
+// both work the same way.
 func TestDispatchCommand_NormalizesLeadingColon(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 
-	for _, raw := range []string{"search foo", ":search foo", "/search foo"} {
+	for _, raw := range []string{":search foo", "/search foo"} {
 		// Seed the buffer with a matching line.
 		m.buf.Append(logmsg.LogMessage{Raw: "foo bar"})
 
@@ -34,7 +34,7 @@ func TestDispatchCommand_UnknownCommand(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 
-	m2, _ := m.dispatchCommand("frobnicate")
+	m2, _ := m.dispatchCommand(":frobnicate")
 	if !m2.cmdActive {
 		t.Error("cmdActive should remain true after unknown command")
 	}
@@ -48,7 +48,7 @@ func TestDispatchCommand_BadRegex(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 
-	m2, _ := m.dispatchCommand("search (")
+	m2, _ := m.dispatchCommand(":search (")
 	if !m2.cmdActive {
 		t.Error("cmdActive should remain true after bad regex")
 	}
@@ -65,7 +65,7 @@ func TestDispatchCommand_Chat(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 
-	m2, _ := m.dispatchCommand("chat hello world")
+	m2, _ := m.dispatchCommand(":chat hello world")
 	if m2.cmdActive {
 		t.Error("cmdActive should be false after :chat")
 	}
@@ -86,7 +86,7 @@ func TestDispatchCommand_Clear(t *testing.T) {
 	m.cmdActive = true
 	m.chatErr = "some error"
 
-	m2, _ := m.dispatchCommand("clear")
+	m2, _ := m.dispatchCommand(":clear")
 	if m2.cmdActive {
 		t.Error("cmdActive should be false after :clear")
 	}
@@ -100,7 +100,7 @@ func TestDispatchCommand_Help(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 
-	m2, _ := m.dispatchCommand("help")
+	m2, _ := m.dispatchCommand(":help")
 	if m2.cmdActive {
 		t.Error("cmdActive should be false after :help")
 	}
@@ -123,6 +123,21 @@ func TestDispatchCommand_EmptyInput(t *testing.T) {
 	}
 }
 
+// TestDispatchCommand_NoPrefixKeepsPaletteOpen verifies that unprefixed input
+// leaves the palette open with an error (reserved for future natural input).
+func TestDispatchCommand_NoPrefixKeepsPaletteOpen(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+
+	m2, _ := m.dispatchCommand("chat hello")
+	if !m2.cmdActive {
+		t.Error("cmdActive should remain true for unprefixed input")
+	}
+	if m2.cmdErr == "" {
+		t.Error("cmdErr should be set for unprefixed input")
+	}
+}
+
 // TestDispatchCommand_Search sets searchRe and positions viewport.
 func TestDispatchCommand_Search(t *testing.T) {
 	m := newTestModel(t)
@@ -131,7 +146,7 @@ func TestDispatchCommand_Search(t *testing.T) {
 	m.buf.Append(logmsg.LogMessage{Raw: "beta"})
 	m.buf.Append(logmsg.LogMessage{Raw: "alpha again"})
 
-	m2, _ := m.dispatchCommand("search alpha")
+	m2, _ := m.dispatchCommand(":search alpha")
 	if m2.cmdActive {
 		t.Error("cmdActive should be false after :search")
 	}

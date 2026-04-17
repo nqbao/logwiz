@@ -21,12 +21,24 @@ var cmdRegistry = map[string]cmdHandler{
 // dispatchCommand parses raw (the value of cmdInput), resolves the handler,
 // and runs it. On success the palette is closed and layout is recomputed.
 // On error cmdErr is set and the palette stays open.
+// Input must be prefixed with : or / to be treated as a command; unprefixed
+// input is reserved for future natural-language handling.
 func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 	raw = strings.TrimSpace(raw)
-	// Tolerate a leading : or / the user may have typed after the prompt.
-	if len(raw) > 0 && (raw[0] == ':' || raw[0] == '/') {
-		raw = strings.TrimSpace(raw[1:])
+
+	if raw == "" {
+		m.cmdActive = false
+		m.cmdErr = ""
+		m.cmdInput.Blur()
+		m = m.onResize(m.width, m.height)
+		return m, nil
 	}
+
+	if raw[0] != ':' && raw[0] != '/' {
+		m.cmdErr = "prefix commands with : or /"
+		return m, nil
+	}
+	raw = strings.TrimSpace(raw[1:])
 
 	name, args, _ := strings.Cut(raw, " ")
 	name = strings.ToLower(strings.TrimSpace(name))

@@ -188,7 +188,7 @@ func TestPaletteEscCancels(t *testing.T) {
 func TestPaletteEnterChatOpensSidebar(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
-	m.cmdInput.SetValue("chat hello")
+	m.cmdInput.SetValue(":chat hello")
 
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	mm := m2.(Model)
