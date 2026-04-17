@@ -127,6 +127,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 
 	ci := textinput.New()
 	ci.Prompt = ""
+	ci.Placeholder = ":command  or  /command"
 	ci.CharLimit = 200
 
 	ctx, cancel := context.WithCancel(context.Background())
