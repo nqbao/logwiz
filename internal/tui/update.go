@@ -26,6 +26,9 @@ type ChatErrMsg struct{ Err error }
 // spinnerTickMsg drives the spinner animation while chatLoading is true.
 type spinnerTickMsg struct{}
 
+// hintTickMsg cycles the textarea placeholder hint.
+type hintTickMsg struct{}
+
 var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
 // Update handles all tea messages.
@@ -85,6 +88,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, spinnerCmd()
 		}
 		return m, nil
+
+	case hintTickMsg:
+		m.hintIdx = (m.hintIdx + 1) % len(inputHints)
+		m.input.Placeholder = inputHints[m.hintIdx]
+		return m, hintTickCmd()
 
 	case tea.KeyMsg:
 		return m.onKey(msg)
@@ -196,6 +204,13 @@ func (m Model) runChatStep() tea.Cmd {
 func spinnerCmd() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
 		return spinnerTickMsg{}
+	})
+}
+
+// hintTickCmd schedules a placeholder hint rotation every 4 seconds.
+func hintTickCmd() tea.Cmd {
+	return tea.Tick(4*time.Second, func(time.Time) tea.Msg {
+		return hintTickMsg{}
 	})
 }
 

@@ -85,6 +85,8 @@ type Model struct {
 	toolBudget   int         // remaining tool round-trips in current question
 	spinnerTick  int
 
+	hintIdx int // cycles through inputHints
+
 	// sessionSample is the one-shot log snapshot captured on first submit.
 	sessionSample []string
 
@@ -93,10 +95,18 @@ type Model struct {
 	cancel context.CancelFunc
 }
 
+// inputHints cycles through the textarea placeholder.
+var inputHints = []string{
+	"Ask a question about the logs...",
+	"Type /clear to reset the chat",
+	"e.g. what errors occurred recently?",
+	"e.g. summarize the last 50 lines",
+}
+
 // New builds a ready-to-run Model.
 func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Client, reg *tools.Registry) Model {
 	ta := textarea.New()
-	ta.Placeholder = "Ask a question about the logs..."
+	ta.Placeholder = inputHints[0]
 	ta.Prompt = ""
 	ta.CharLimit = 2000
 	ta.ShowLineNumbers = false
@@ -131,7 +141,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 
 // Init is required by tea.Model.
 func (m Model) Init() tea.Cmd {
-	return textarea.Blink
+	return tea.Batch(textarea.Blink, hintTickCmd())
 }
 
 // Context returns the cancelable context used for chat requests so
