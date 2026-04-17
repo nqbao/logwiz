@@ -59,7 +59,13 @@ func (m Model) renderSidebar(lay layout) string {
 	if inputInnerW < 1 {
 		inputInnerW = 1
 	}
-	inputView := styleInputBox.Width(inputInnerW).Render(m.input.View())
+	var inputContent string
+	if m.chatLoading {
+		inputContent = styleDim.Render("waiting for response...")
+	} else {
+		inputContent = m.input.View()
+	}
+	inputView := styleInputBox.Width(inputInnerW).Render(inputContent)
 
 	inner := lipgloss.JoinVertical(lipgloss.Left, header, convoBox, inputView)
 	return styleSidebarBox.Width(innerW).Render(inner)

@@ -240,6 +240,15 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// When the chat input has focus, let it swallow characters first.
 	if m.focus == focusChat && m.sidebarOpen {
+		// While a request is in flight, block all input except Esc/Tab to blur.
+		if m.chatLoading {
+			switch msg.String() {
+			case keyEscape, keyTab:
+				m.input.Blur()
+				m.focus = focusLogs
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case keyEscape:
 			m.input.Blur()
