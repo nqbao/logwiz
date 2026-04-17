@@ -26,8 +26,6 @@ type ChatErrMsg struct{ Err error }
 // spinnerTickMsg drives the spinner animation while chatLoading is true.
 type spinnerTickMsg struct{}
 
-// hintTickMsg cycles the textarea placeholder hint.
-type hintTickMsg struct{}
 
 var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
@@ -89,12 +87,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case hintTickMsg:
-		m.hintIdx = (m.hintIdx + 1) % len(inputHints)
-		m.input.Placeholder = inputHints[m.hintIdx]
-		return m, hintTickCmd()
-
-	case tea.KeyMsg:
+case tea.KeyMsg:
 		return m.onKey(msg)
 
 	case tea.MouseMsg:
@@ -207,12 +200,6 @@ func spinnerCmd() tea.Cmd {
 	})
 }
 
-// hintTickCmd schedules a placeholder hint rotation every 4 seconds.
-func hintTickCmd() tea.Cmd {
-	return tea.Tick(4*time.Second, func(time.Time) tea.Msg {
-		return hintTickMsg{}
-	})
-}
 
 func (m Model) onResize(w, h int) Model {
 	m.width = w
@@ -410,6 +397,8 @@ func (m Model) submitChat() (tea.Model, tea.Cmd) {
 	m.chatErr = ""
 	m.chatLoading = true
 	m.input.Reset()
+	m.hintIdx = (m.hintIdx + 1) % len(inputHints)
+	m.input.Placeholder = inputHints[m.hintIdx]
 
 	// Register a new turn.
 	m.turns = append(m.turns, turnActivity{

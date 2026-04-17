@@ -141,7 +141,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 
 // Init is required by tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, hintTickCmd())
+	return textarea.Blink
 }
 
 // Context returns the cancelable context used for chat requests so
