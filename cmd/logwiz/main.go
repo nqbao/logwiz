@@ -21,6 +21,7 @@ import (
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
+	"github.com/nqbao/logwiz/internal/tools"
 	"github.com/nqbao/logwiz/internal/tui"
 )
 
@@ -80,7 +81,8 @@ func run() error {
 		client = chat.New(cfg.BaseURL, cfg.APIKey, cfg.Model)
 	}
 
-	model := tui.New(cfg, kind, buf, client)
+	registry := tools.NewDefault()
+	model := tui.New(cfg, kind, buf, client, registry)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 

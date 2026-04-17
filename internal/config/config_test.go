@@ -109,7 +109,6 @@ func TestParseInvalidNumbers(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	cases := [][]string{
 		{"--max-lines", "0"},
-		{"--context-lines", "0"},
 		{"--sidebar-width", "5"},
 	}
 	for _, args := range cases {

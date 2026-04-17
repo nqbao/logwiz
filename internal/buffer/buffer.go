@@ -3,7 +3,11 @@
 // chat model.
 package buffer
 
-import "github.com/nqbao/logwiz/internal/logmsg"
+import (
+	"regexp"
+
+	"github.com/nqbao/logwiz/internal/logmsg"
+)
 
 // Buffer is a fixed-size ring of LogMessages. Appending past capacity
 // overwrites the oldest entry. Not safe for concurrent use; the TUI
@@ -91,4 +95,82 @@ func (b *Buffer) LastN(n int) []logmsg.LogMessage {
 		out[i] = b.lines[(start+i)%b.cap]
 	}
 	return out
+}
+
+// IndexedLine pairs a chronological index with a log message.
+type IndexedLine struct {
+	Index int
+	Msg   logmsg.LogMessage
+}
+
+// Range returns up to n messages starting at chronological index start,
+// each paired with its absolute index. Indices outside [0, Len()) are
+// clamped silently.
+func (b *Buffer) Range(start, n int) []IndexedLine {
+	if b.size == 0 || n <= 0 {
+		return nil
+	}
+	if start < 0 {
+		start = 0
+	}
+	if start >= b.size {
+		return nil
+	}
+	end := start + n
+	if end > b.size {
+		end = b.size
+	}
+	out := make([]IndexedLine, 0, end-start)
+	for i := start; i < end; i++ {
+		out = append(out, IndexedLine{Index: i, Msg: b.Line(i)})
+	}
+	return out
+}
+
+// CountRegex counts every line matching re from chronological index since
+// onward. It is cheaper than SearchRegex because it never allocates a
+// result slice.
+func (b *Buffer) CountRegex(re *regexp.Regexp, since int) int {
+	if since < 0 {
+		since = 0
+	}
+	total := 0
+	for i := since; i < b.size; i++ {
+		if re.MatchString(b.Line(i).Raw) {
+			total++
+		}
+	}
+	return total
+}
+
+// SearchRegex iterates the buffer starting at chronological index since,
+// counts every line matching re as a total match, and collects up to limit
+// of them. It returns:
+//   - matches: the first limit matching lines with their indices
+//   - total: the total number of matches from since onward
+//   - nextSince: the chronological index immediately after the last returned
+//     match (use as since for the next page), or -1 if all matches were returned
+func (b *Buffer) SearchRegex(re *regexp.Regexp, since, limit int) (matches []IndexedLine, total int, nextSince int) {
+	if since < 0 {
+		since = 0
+	}
+	nextSince = -1
+	for i := since; i < b.size; i++ {
+		msg := b.Line(i)
+		if re.MatchString(msg.Raw) {
+			total++
+			if len(matches) < limit {
+				matches = append(matches, IndexedLine{Index: i, Msg: msg})
+				if len(matches) == limit {
+					// Record next_since as the index after this last collected match.
+					nextSince = i + 1
+				}
+			}
+		}
+	}
+	// If we collected fewer than limit (all matches fit), nextSince stays -1.
+	if total <= limit {
+		nextSince = -1
+	}
+	return matches, total, nextSince
 }

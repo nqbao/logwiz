@@ -11,6 +11,7 @@ import (
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
+	"github.com/nqbao/logwiz/internal/tools"
 )
 
 func newTestModel(t *testing.T) Model {
@@ -22,7 +23,7 @@ func newTestModel(t *testing.T) Model {
 		SystemPrompt: "sys",
 		Model:        "m",
 	}
-	m := New(cfg, SourceStdin, buffer.New(cfg.MaxLines), nil)
+	m := New(cfg, SourceStdin, buffer.New(cfg.MaxLines), nil, tools.NewDefault())
 	// Simulate an initial resize so layout-dependent code works.
 	mi, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	return mi.(Model)
