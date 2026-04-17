@@ -15,6 +15,9 @@ const (
 	keyClear    = "c"
 	keyWrap     = "w"
 
+	keyNextMatch = "n"
+	keyPrevMatch = "N"
+
 	// Log viewport scroll keys (mirrors viewport.DefaultKeyMap).
 	keyScrollDown      = "j"
 	keyScrollUp        = "k"

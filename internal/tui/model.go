@@ -8,9 +8,11 @@ package tui
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -75,6 +77,16 @@ type Model struct {
 
 	help bool
 
+	// Command palette state.
+	cmdActive bool
+	cmdInput  textinput.Model
+	cmdErr    string
+
+	// Search state.
+	searchRe      *regexp.Regexp
+	searchMatches []int
+	searchCursor  int
+
 	chatClient *chat.Client
 	toolsReg   *tools.Registry
 
@@ -112,6 +124,10 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 	ta.ShowLineNumbers = false
 	ta.SetHeight(3)
 
+	ci := textinput.New()
+	ci.Prompt = ":"
+	ci.CharLimit = 200
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	h := highlight.New()
@@ -128,6 +144,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 		logs:         lv,
 		convo:        viewport.New(0, 0),
 		input:        ta,
+		cmdInput:     ci,
 		focus:        focusLogs,
 		chatClient:   client,
 		toolsReg:     reg,

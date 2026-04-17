@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"regexp"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/nqbao/logwiz/internal/chat"
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 // TestChatStepWithToolCallsExecutesTool verifies that when ChatStepMsg
@@ -149,3 +151,118 @@ func TestToolBudgetExhaustion(t *testing.T) {
 
 // Compile-time check that tea.Model is satisfied (update returns tea.Model).
 var _ tea.Model = Model{}
+
+// --- Command palette key tests ---
+
+// TestSlashKeyOpensPalette verifies that / sets cmdActive and does not open sidebar.
+func TestSlashKeyOpensPalette(t *testing.T) {
+	m := newTestModel(t)
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mm := m2.(Model)
+	if !mm.cmdActive {
+		t.Fatal("'/' should set cmdActive=true")
+	}
+	if mm.sidebarOpen {
+		t.Fatal("'/' should not open sidebar directly")
+	}
+}
+
+// TestPaletteEscCancels verifies Esc while palette is open closes it.
+func TestPaletteEscCancels(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.cmdErr = "some error"
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	mm := m2.(Model)
+	if mm.cmdActive {
+		t.Error("Esc should close the command palette")
+	}
+	if mm.cmdErr != "" {
+		t.Error("Esc should clear cmdErr")
+	}
+}
+
+// TestPaletteEnterChatOpensSidebar verifies Enter on :chat hello opens sidebar
+// with the pre-filled text and focuses chat.
+func TestPaletteEnterChatOpensSidebar(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.cmdInput.SetValue("chat hello")
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm := m2.(Model)
+	if mm.cmdActive {
+		t.Error("cmdActive should be false after successful :chat")
+	}
+	if !mm.sidebarOpen {
+		t.Error("sidebar should be open after :chat")
+	}
+	if mm.focus != focusChat {
+		t.Errorf("focus = %v, want focusChat", mm.focus)
+	}
+	if got := mm.input.Value(); got != "hello" {
+		t.Errorf("input value = %q, want %q", got, "hello")
+	}
+}
+
+// TestNKeyAdvancesSearchCursor verifies n advances cursor and wraps.
+func TestNKeyAdvancesSearchCursor(t *testing.T) {
+	m := newTestModel(t)
+	m.buf.Append(logmsg.LogMessage{Raw: "hit one"})
+	m.buf.Append(logmsg.LogMessage{Raw: "miss"})
+	m.buf.Append(logmsg.LogMessage{Raw: "hit two"})
+
+	// Seed search state manually.
+	m.searchMatches = []int{0, 2}
+	m.searchCursor = 0
+	m.logs.Selected = 0
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	mm := m2.(Model)
+	if mm.searchCursor != 1 {
+		t.Errorf("searchCursor = %d after n, want 1", mm.searchCursor)
+	}
+	if mm.logs.Selected != 2 {
+		t.Errorf("logs.Selected = %d, want 2 (index of 'hit two')", mm.logs.Selected)
+	}
+
+	// n wraps back to 0.
+	m3, _ := mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	mm = m3.(Model)
+	if mm.searchCursor != 0 {
+		t.Errorf("searchCursor = %d after wrap, want 0", mm.searchCursor)
+	}
+}
+
+// TestShiftNKeyGoesPrev verifies N goes backward.
+func TestShiftNKeyGoesPrev(t *testing.T) {
+	m := newTestModel(t)
+	m.searchMatches = []int{0, 2, 4}
+	m.searchCursor = 1
+	m.logs.Selected = 2
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	mm := m2.(Model)
+	if mm.searchCursor != 0 {
+		t.Errorf("searchCursor = %d after N, want 0", mm.searchCursor)
+	}
+}
+
+// TestEscClearsSearchWhenNoSidebar verifies Esc clears search state.
+func TestEscClearsSearchWhenNoSidebar(t *testing.T) {
+	m := newTestModel(t)
+	m.searchRe = regexp.MustCompile("hit")
+	m.searchMatches = []int{0, 1}
+	m.searchCursor = 0
+	m.logs.Selected = 0
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	mm := m2.(Model)
+	if mm.searchRe != nil || mm.searchMatches != nil {
+		t.Error("Esc should clear search state when sidebar is not open")
+	}
+	if mm.logs.Selected != -1 {
+		t.Errorf("logs.Selected = %d, want -1 after search clear", mm.logs.Selected)
+	}
+}

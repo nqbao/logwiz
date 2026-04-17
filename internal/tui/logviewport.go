@@ -297,6 +297,33 @@ func (v *LogViewport) OnNewLines(n int) {
 	}
 }
 
+// JumpTo scrolls the viewport so that logicalLine is visible roughly 1/3 from
+// the top, selects it, and disables auto-scroll.
+func (v *LogViewport) JumpTo(logicalLine int) {
+	n := v.buf.Len()
+	if n == 0 {
+		return
+	}
+	logicalLine = clamp(logicalLine, 0, n-1)
+	v.Selected = logicalLine
+	v.autoScroll = false
+
+	if !v.Wrap {
+		target := logicalLine - v.Height/3
+		v.YOffset = clamp(target, 0, v.maxYOffset())
+		return
+	}
+
+	// Wrap mode: find the screen row that corresponds to logicalLine.
+	v.ensureWrapCache()
+	screenRow := 0
+	for i := 0; i < logicalLine && i < len(v.wrapCache); i++ {
+		screenRow += v.wrapCache[i]
+	}
+	target := screenRow - v.Height/3
+	v.YOffset = clamp(target, 0, v.maxYOffset())
+}
+
 // Update handles tea.KeyMsg and tea.MouseMsg for the log pane.
 func (v *LogViewport) Update(msg tea.Msg) {
 	switch msg := msg.(type) {
