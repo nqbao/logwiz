@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -11,11 +12,21 @@ import (
 	"github.com/nqbao/logwiz/internal/source"
 )
 
-// ChatReplyMsg carries a successful assistant response back to the UI.
+// ChatReplyMsg is kept for backward compatibility with existing tests.
+// New code uses ChatStepMsg internally.
 type ChatReplyMsg struct{ Content string }
+
+// ChatStepMsg carries one assistant response (may have tool calls) back
+// to the update loop.
+type ChatStepMsg struct{ Assistant chat.Message }
 
 // ChatErrMsg carries a chat request failure.
 type ChatErrMsg struct{ Err error }
+
+// spinnerTickMsg drives the spinner animation while chatLoading is true.
+type spinnerTickMsg struct{}
+
+var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
 // Update handles all tea messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -45,16 +56,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.eof = true
 		return m, nil
 
+	// Legacy message kept for test compatibility.
 	case ChatReplyMsg:
 		m.chatLoading = false
 		m.chatMsgs = append(m.chatMsgs, chat.Message{Role: "assistant", Content: msg.Content})
 		m.refreshConvoContent()
 		return m, nil
 
+	case ChatStepMsg:
+		return m.onChatStep(msg.Assistant)
+
 	case ChatErrMsg:
 		m.chatLoading = false
 		m.chatErr = msg.Err.Error()
+		if m.activeTurn >= 0 {
+			m.turns[m.activeTurn].Done = true
+			m.turns[m.activeTurn].Errored = true
+			m.turns[m.activeTurn].FinishedAt = time.Now()
+			m.activeTurn = -1
+		}
 		m.refreshConvoContent()
+		return m, nil
+
+	case spinnerTickMsg:
+		if m.chatLoading {
+			m.spinnerTick++
+			m.refreshConvoContent()
+			return m, spinnerCmd()
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -79,6 +108,95 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// onChatStep processes one assistant response in the agent loop.
+func (m Model) onChatStep(asst chat.Message) (tea.Model, tea.Cmd) {
+	m.chatMsgs = append(m.chatMsgs, asst)
+
+	// No tool calls: the assistant gave a final answer.
+	if len(asst.ToolCalls) == 0 {
+		if m.activeTurn >= 0 {
+			m.turns[m.activeTurn].Done = true
+			m.turns[m.activeTurn].FinishedAt = time.Now()
+			m.turnIdxByMsg[len(m.chatMsgs)-1] = m.activeTurn
+			m.activeTurn = -1
+		}
+		m.chatLoading = false
+		m.refreshConvoContent()
+		return m, nil
+	}
+
+	// Tool calls present: execute them and continue the loop.
+	if m.activeTurn >= 0 {
+		ta := &m.turns[m.activeTurn]
+		for _, call := range asst.ToolCalls {
+			ta.LastTool = call.Name
+			ta.LastLabel = labelFor(call.Name)
+			var result string
+			if m.toolsReg != nil {
+				result = m.toolsReg.Run(call.Name, []byte(call.Arguments), m.buf)
+			} else {
+				result = "error: tools not configured"
+			}
+			m.chatMsgs = append(m.chatMsgs, chat.Message{
+				Role:       "tool",
+				ToolCallID: call.ID,
+				Name:       call.Name,
+				Content:    result,
+			})
+			ta.ToolCount++
+		}
+
+		m.toolBudget--
+		if m.toolBudget <= 0 {
+			// Inject a budget-exhaustion notice into the last tool message.
+			if len(m.chatMsgs) > 0 {
+				last := &m.chatMsgs[len(m.chatMsgs)-1]
+				if last.Role == "tool" {
+					last.Content += "\n\n[Tool budget exhausted — answer with information gathered so far.]"
+				}
+			}
+		}
+	}
+
+	m.refreshConvoContent()
+	return m, m.runChatStep()
+}
+
+// runChatStep fires an async chat request using the current chatMsgs.
+func (m Model) runChatStep() tea.Cmd {
+	msgs := buildChatMessages(
+		m.cfg.EffectiveSystemPrompt(),
+		m.sessionSample,
+		m.chatMsgs,
+		"", // question already appended; history covers it
+	)
+
+	var specs []chat.ToolSpec
+	if m.toolsReg != nil && m.toolBudget > 0 {
+		specs = m.toolsReg.Specs()
+	}
+
+	client := m.chatClient
+	ctx := m.ctx
+	return func() tea.Msg {
+		reply, err := client.Complete(ctx, msgs, specs)
+		if err != nil {
+			if ctx.Err() == context.Canceled {
+				return nil
+			}
+			return ChatErrMsg{Err: err}
+		}
+		return ChatStepMsg{Assistant: reply}
+	}
+}
+
+// spinnerCmd schedules one spinner tick after 100 ms.
+func spinnerCmd() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
+		return spinnerTickMsg{}
+	})
 }
 
 func (m Model) onResize(w, h int) Model {
@@ -177,6 +295,10 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyClear:
 		m.chatMsgs = nil
 		m.chatErr = ""
+		m.turns = nil
+		m.turnIdxByMsg = make(map[int]int)
+		m.activeTurn = -1
+		m.sessionSample = nil
 		return m, nil
 	case keyWrap:
 		m.logs.ToggleWrap()
@@ -194,10 +316,29 @@ func (m *Model) refreshConvoContent() {
 		return
 	}
 	var lines []string
-	for _, msg := range m.chatMsgs {
-		lines = append(lines, renderMessage(msg, w))
+	for i, msg := range m.chatMsgs {
+		// Skip intermediate tool call/result messages — they are not rendered
+		// directly. Only render user messages and final assistant messages.
+		if msg.Role == "tool" {
+			continue
+		}
+		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 && msg.Content == "" {
+			continue
+		}
+		if msg.Role == "assistant" {
+			lines = append(lines, renderMessageWithActivity(msg, w, m.turnIdxByMsg[i], m.turns))
+		} else {
+			lines = append(lines, renderMessage(msg, w))
+		}
 		lines = append(lines, "")
 	}
+
+	// Live activity placeholder while loading.
+	if m.chatLoading && m.activeTurn >= 0 {
+		lines = append(lines, renderActivityLine(m.turns[m.activeTurn], m.spinnerTick, w))
+		lines = append(lines, "")
+	}
+
 	if m.chatErr != "" {
 		lines = append(lines, styleErr.Width(w).Render("error: "+m.chatErr))
 	}
@@ -205,8 +346,7 @@ func (m *Model) refreshConvoContent() {
 	m.convo.GotoBottom()
 }
 
-// submitChat takes the current input, validates it, and kicks off a
-// chat request.
+// submitChat takes the current input, validates it, and kicks off the agent loop.
 func (m Model) submitChat() (tea.Model, tea.Cmd) {
 	q := strings.TrimSpace(m.input.Value())
 	if q == "" {
@@ -220,32 +360,30 @@ func (m Model) submitChat() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Capture session sample on the very first submit.
+	if len(m.chatMsgs) == 0 && m.cfg.ContextLines > 0 {
+		recent := m.buf.LastN(m.cfg.ContextLines)
+		m.sessionSample = make([]string, len(recent))
+		for i, lm := range recent {
+			m.sessionSample[i] = lm.Raw
+		}
+	}
+
 	m.chatMsgs = append(m.chatMsgs, chat.Message{Role: "user", Content: q})
 	m.chatErr = ""
 	m.chatLoading = true
 	m.input.Reset()
+
+	// Register a new turn.
+	m.turns = append(m.turns, turnActivity{
+		Started:   time.Now(),
+		LastLabel: "thinking",
+	})
+	m.activeTurn = len(m.turns) - 1
+	m.toolBudget = MaxToolTurns
+
 	m.refreshConvoContent()
-
-	recent := m.buf.LastN(m.cfg.ContextLines)
-	logLines := make([]string, len(recent))
-	for i, lm := range recent {
-		logLines[i] = lm.Raw
-	}
-	history := m.chatMsgs[:len(m.chatMsgs)-1] // prior turns only
-	msgs := buildChatMessages(m.cfg.SystemPrompt, history, logLines, q)
-
-	client := m.chatClient
-	ctx := m.ctx
-	return m, func() tea.Msg {
-		reply, err := client.Complete(ctx, msgs)
-		if err != nil {
-			if ctx.Err() == context.Canceled {
-				return nil
-			}
-			return ChatErrMsg{Err: err}
-		}
-		return ChatReplyMsg{Content: reply}
-	}
+	return m, tea.Batch(m.runChatStep(), spinnerCmd())
 }
 
 // statusLine composes the bottom bar text.
@@ -283,10 +421,7 @@ func (m Model) statusLine(lay layout) string {
 }
 
 // visualWidth is a cheap visual length helper that ignores ANSI codes.
-// lipgloss styles embed escape sequences, but for status-bar padding
-// the rendered rune count of the raw text is close enough.
 func visualWidth(s string) int {
-	// Strip ANSI escapes: ESC [ ... <letter>
 	n := 0
 	inEsc := false
 	for _, r := range s {
@@ -313,4 +448,18 @@ func truncate(s string, n int) string {
 		return s[:n]
 	}
 	return s[:n-3] + "..."
+}
+
+// labelFor maps a tool name to a human-readable activity label.
+func labelFor(name string) string {
+	switch name {
+	case "tail":
+		return "sampling logs"
+	case "read":
+		return "reading logs"
+	case "search_regex":
+		return "searching logs"
+	default:
+		return "thinking"
+	}
 }

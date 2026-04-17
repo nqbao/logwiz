@@ -2,6 +2,7 @@ package buffer
 
 import (
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/nqbao/logwiz/internal/logmsg"
@@ -234,5 +235,128 @@ func TestAppendEvictionSignal(t *testing.T) {
 	}
 	if evictedID.Line != 1 {
 		t.Errorf("evicted ID = %d, want 1", evictedID.Line)
+	}
+}
+
+func TestRange(t *testing.T) {
+	b := New(5)
+	for _, line := range []string{"a", "b", "c", "d", "e"} {
+		b.Append(raw(line))
+	}
+
+	tests := []struct {
+		start, n int
+		want     []string
+	}{
+		{0, 3, []string{"a", "b", "c"}},
+		{3, 2, []string{"d", "e"}},
+		{3, 10, []string{"d", "e"}}, // clamp to end
+		{5, 2, nil},                 // start past end
+		{0, 0, nil},                 // n=0
+	}
+	for _, tc := range tests {
+		got := b.Range(tc.start, tc.n)
+		var gotRaws []string
+		for _, il := range got {
+			gotRaws = append(gotRaws, il.Msg.Raw)
+		}
+		if !reflect.DeepEqual(gotRaws, tc.want) {
+			t.Errorf("Range(%d,%d) = %v, want %v", tc.start, tc.n, gotRaws, tc.want)
+		}
+	}
+}
+
+func TestRangeAfterWrap(t *testing.T) {
+	b := New(3)
+	for _, line := range []string{"a", "b", "c", "d", "e"} {
+		b.Append(raw(line))
+	}
+	// Buffer holds c,d,e at indices 0,1,2.
+	got := b.Range(1, 2)
+	if len(got) != 2 || got[0].Msg.Raw != "d" || got[1].Msg.Raw != "e" {
+		t.Errorf("Range after wrap = %v", got)
+	}
+	if got[0].Index != 1 || got[1].Index != 2 {
+		t.Errorf("Range indices wrong: %v", got)
+	}
+}
+
+func TestSearchRegexBasic(t *testing.T) {
+	b := New(10)
+	for _, line := range []string{"foo bar", "baz", "foo qux", "nope"} {
+		b.Append(raw(line))
+	}
+
+	re := regexp.MustCompile("foo")
+	matches, total, nextSince := b.SearchRegex(re, 0, 10)
+	if total != 2 {
+		t.Errorf("total = %d, want 2", total)
+	}
+	if nextSince != -1 {
+		t.Errorf("nextSince = %d, want -1 (all fit)", nextSince)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("len(matches) = %d, want 2", len(matches))
+	}
+	if matches[0].Msg.Raw != "foo bar" || matches[1].Msg.Raw != "foo qux" {
+		t.Errorf("unexpected matches: %v", matches)
+	}
+}
+
+func TestSearchRegexLimit(t *testing.T) {
+	b := New(10)
+	for _, line := range []string{"hit1", "miss", "hit2", "hit3", "miss"} {
+		b.Append(raw(line))
+	}
+
+	re := regexp.MustCompile("hit")
+	matches, total, nextSince := b.SearchRegex(re, 0, 2)
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+	if len(matches) != 2 {
+		t.Fatalf("len(matches) = %d, want 2", len(matches))
+	}
+	// nextSince should be the index after the last collected match (index 2).
+	if nextSince != 3 {
+		t.Errorf("nextSince = %d, want 3", nextSince)
+	}
+}
+
+func TestSearchRegexSinceLine(t *testing.T) {
+	b := New(10)
+	for _, line := range []string{"hit0", "hit1", "hit2"} {
+		b.Append(raw(line))
+	}
+
+	re := regexp.MustCompile("hit")
+	matches, total, _ := b.SearchRegex(re, 1, 10)
+	if total != 2 {
+		t.Errorf("total = %d, want 2 (starting from index 1)", total)
+	}
+	if len(matches) != 2 || matches[0].Msg.Raw != "hit1" {
+		t.Errorf("unexpected matches: %v", matches)
+	}
+}
+
+func TestSearchRegexEmptyBuffer(t *testing.T) {
+	b := New(5)
+	re := regexp.MustCompile("x")
+	matches, total, nextSince := b.SearchRegex(re, 0, 10)
+	if len(matches) != 0 || total != 0 || nextSince != -1 {
+		t.Errorf("empty buffer: matches=%v total=%d nextSince=%d", matches, total, nextSince)
+	}
+}
+
+func TestSearchRegexAfterWrap(t *testing.T) {
+	b := New(3)
+	for _, line := range []string{"a", "hit1", "b", "hit2", "c"} {
+		b.Append(raw(line))
+	}
+	// Buffer holds: b, hit2, c at indices 0,1,2
+	re := regexp.MustCompile("hit")
+	matches, total, _ := b.SearchRegex(re, 0, 10)
+	if total != 1 || len(matches) != 1 || matches[0].Msg.Raw != "hit2" {
+		t.Errorf("SearchRegex after wrap: total=%d matches=%v", total, matches)
 	}
 }

@@ -4,11 +4,14 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/packages/param"
+	"github.com/openai/openai-go/shared"
 )
 
 // Client talks to an OpenAI-compatible /chat/completions endpoint.
@@ -32,38 +35,57 @@ func New(baseURL, apiKey, model string) *Client {
 }
 
 // Complete sends msgs to the chat-completions endpoint and returns the
-// assistant's reply text.
-func (c *Client) Complete(ctx context.Context, msgs []Message) (string, error) {
+// assistant's reply as a Message (with ToolCalls populated when the model
+// requests tool use). Pass nil or an empty slice for tools when not using
+// function calling.
+func (c *Client) Complete(ctx context.Context, msgs []Message, tools []ToolSpec) (Message, error) {
 	if c.apiKey == "" {
-		return "", errors.New("chat: API key is not configured")
+		return Message{}, errors.New("chat: API key is not configured")
 	}
 	if c.model == "" {
-		return "", errors.New("chat: model is not configured")
+		return Message{}, errors.New("chat: model is not configured")
 	}
 	if len(msgs) == 0 {
-		return "", errors.New("chat: no messages to send")
+		return Message{}, errors.New("chat: no messages to send")
 	}
 
-	completion, err := c.inner.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+	req := openai.ChatCompletionNewParams{
 		Model:    openai.ChatModel(c.model),
 		Messages: toSDKMessages(msgs),
-	})
+	}
+	if len(tools) > 0 {
+		req.Tools = toSDKTools(tools)
+	}
+
+	completion, err := c.inner.Chat.Completions.New(ctx, req)
 	if err != nil {
 		var apiErr *openai.Error
 		if errors.As(err, &apiErr) {
 			if apiErr.Message != "" {
-				return "", fmt.Errorf("chat: %s (status %d)", apiErr.Message, apiErr.StatusCode)
+				return Message{}, fmt.Errorf("chat: %s (status %d)", apiErr.Message, apiErr.StatusCode)
 			}
-			return "", fmt.Errorf("chat: unexpected status %d", apiErr.StatusCode)
+			return Message{}, fmt.Errorf("chat: unexpected status %d", apiErr.StatusCode)
 		}
-		return "", fmt.Errorf("chat: %w", err)
+		return Message{}, fmt.Errorf("chat: %w", err)
 	}
 
 	if len(completion.Choices) == 0 {
-		return "", errors.New("chat: response contained no choices")
+		return Message{}, errors.New("chat: response contained no choices")
 	}
 
-	return completion.Choices[0].Message.Content, nil
+	choice := completion.Choices[0].Message
+	out := Message{
+		Role:    "assistant",
+		Content: choice.Content,
+	}
+	for _, tc := range choice.ToolCalls {
+		out.ToolCalls = append(out.ToolCalls, ToolCall{
+			ID:        tc.ID,
+			Name:      tc.Function.Name,
+			Arguments: tc.Function.Arguments,
+		})
+	}
+	return out, nil
 }
 
 func toSDKMessages(msgs []Message) []openai.ChatCompletionMessageParamUnion {
@@ -73,9 +95,49 @@ func toSDKMessages(msgs []Message) []openai.ChatCompletionMessageParamUnion {
 		case "system":
 			out[i] = openai.SystemMessage(m.Content)
 		case "assistant":
-			out[i] = openai.AssistantMessage(m.Content)
+			if len(m.ToolCalls) > 0 {
+				p := openai.ChatCompletionAssistantMessageParam{}
+				if m.Content != "" {
+					p.Content = openai.ChatCompletionAssistantMessageParamContentUnion{
+						OfString: param.NewOpt(m.Content),
+					}
+				}
+				p.ToolCalls = make([]openai.ChatCompletionMessageToolCallParam, len(m.ToolCalls))
+				for j, tc := range m.ToolCalls {
+					p.ToolCalls[j] = openai.ChatCompletionMessageToolCallParam{
+						ID: tc.ID,
+						Function: openai.ChatCompletionMessageToolCallFunctionParam{
+							Name:      tc.Name,
+							Arguments: tc.Arguments,
+						},
+					}
+				}
+				out[i] = openai.ChatCompletionMessageParamUnion{OfAssistant: &p}
+			} else {
+				out[i] = openai.AssistantMessage(m.Content)
+			}
+		case "tool":
+			out[i] = openai.ToolMessage(m.Content, m.ToolCallID)
 		default:
 			out[i] = openai.UserMessage(m.Content)
+		}
+	}
+	return out
+}
+
+func toSDKTools(specs []ToolSpec) []openai.ChatCompletionToolParam {
+	out := make([]openai.ChatCompletionToolParam, len(specs))
+	for i, s := range specs {
+		var fp shared.FunctionParameters
+		if len(s.Parameters) > 0 {
+			_ = json.Unmarshal(s.Parameters, &fp)
+		}
+		out[i] = openai.ChatCompletionToolParam{
+			Function: shared.FunctionDefinitionParam{
+				Name:        s.Name,
+				Description: param.NewOpt(s.Description),
+				Parameters:  fp,
+			},
 		}
 	}
 	return out

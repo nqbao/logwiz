@@ -8,6 +8,7 @@ package tui
 
 import (
 	"context"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -17,6 +18,7 @@ import (
 	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/highlight"
+	"github.com/nqbao/logwiz/internal/tools"
 )
 
 // SourceKind is a label shown in the status bar.
@@ -34,13 +36,28 @@ const (
 	focusChat
 )
 
+// MaxToolTurns is the maximum number of tool round-trips per user question.
+const MaxToolTurns = 6
+
+// turnActivity records status for one assistant turn (from user question to
+// final answer). It is displayed as a dim activity line in the sidebar.
+type turnActivity struct {
+	Started    time.Time
+	FinishedAt time.Time
+	ToolCount  int
+	LastTool   string // "search_regex" | "read" | "tail" | ""
+	LastLabel  string // "searching logs" etc.
+	Done       bool
+	Errored    bool
+}
+
 // Model is the root Bubble Tea model.
 type Model struct {
 	cfg        config.Config
 	sourceKind SourceKind
 
-	buf        *buffer.Buffer
-	eof        bool
+	buf         *buffer.Buffer
+	eof         bool
 	highlighter *highlight.Highlighter
 
 	logs LogViewport
@@ -59,6 +76,17 @@ type Model struct {
 	help bool
 
 	chatClient *chat.Client
+	toolsReg   *tools.Registry
+
+	// Agent loop state.
+	turns        []turnActivity
+	turnIdxByMsg map[int]int // chatMsgs index -> turns index (final assistant only)
+	activeTurn   int         // index into turns; -1 when idle
+	toolBudget   int         // remaining tool round-trips in current question
+	spinnerTick  int
+
+	// sessionSample is the one-shot log snapshot captured on first submit.
+	sessionSample []string
 
 	// ctx controls in-flight chat requests; cancelled on quit.
 	ctx    context.Context
@@ -66,7 +94,7 @@ type Model struct {
 }
 
 // New builds a ready-to-run Model.
-func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Client) Model {
+func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Client, reg *tools.Registry) Model {
 	ta := textarea.New()
 	ta.Placeholder = "Ask a question about the logs..."
 	ta.Prompt = ""
@@ -83,17 +111,20 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 	lv.h = h
 
 	m := Model{
-		cfg:         cfg,
-		sourceKind:  kind,
-		buf:         buf,
-		highlighter: h,
-		logs:        lv,
-		convo:       viewport.New(0, 0),
-		input:       ta,
-		focus:       focusLogs,
-		chatClient:  client,
-		ctx:         ctx,
-		cancel:      cancel,
+		cfg:          cfg,
+		sourceKind:   kind,
+		buf:          buf,
+		highlighter:  h,
+		logs:         lv,
+		convo:        viewport.New(0, 0),
+		input:        ta,
+		focus:        focusLogs,
+		chatClient:   client,
+		toolsReg:     reg,
+		turnIdxByMsg: make(map[int]int),
+		activeTurn:   -1,
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 	return m
 }

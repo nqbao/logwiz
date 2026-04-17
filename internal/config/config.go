@@ -19,9 +19,9 @@ const (
 	DefaultBaseURL      = "https://api.openai.com/v1"
 	DefaultModel        = "gpt-4o-mini"
 	DefaultMaxLines     = 50000
-	DefaultContextLines = 300
+	DefaultContextLines = 10
 	DefaultSidebarWidth = 50
-	DefaultSystemPrompt = "You are helping analyze terminal logs. Be concise and grounded in the provided log text."
+	DefaultSystemPrompt = "You are logwiz, an assistant analyzing terminal logs. You have access to tools: tail(n), read(start, n), search_regex(pattern, max, case_insensitive, since_line). Use them to fetch the log data you need — do not guess. Indexes are absolute line numbers in the current buffer (0 = oldest). Cite line numbers when giving findings. Keep answers concise."
 	DefaultFormat       = "json"
 )
 
@@ -41,6 +41,14 @@ type Config struct {
 	ContextLines int
 	SidebarWidth int
 	SystemPrompt string
+
+	// InstructionsFile is a path to a file whose content is appended to
+	// SystemPrompt at runtime.
+	InstructionsFile string
+
+	// Instructions holds the content of InstructionsFile after parsing.
+	// It is not settable via flags; it is derived from InstructionsFile.
+	Instructions string
 
 	// File is the path to read when not reading from stdin. Empty
 	// means stdin mode.
@@ -123,11 +131,13 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	fs.IntVar(&cfg.MaxLines, "max-lines", DefaultMaxLines,
 		"Rolling buffer size in lines")
 	fs.IntVar(&cfg.ContextLines, "context-lines", DefaultContextLines,
-		"Lines of log context sent per chat turn")
+		"Recent lines sampled once at chat session start; 0 disables")
 	fs.IntVar(&cfg.SidebarWidth, "sidebar-width", DefaultSidebarWidth,
 		"Chat sidebar width in columns")
 	fs.StringVar(&cfg.SystemPrompt, "system-prompt", DefaultSystemPrompt,
 		"System prompt sent with each chat request")
+	fs.StringVar(&cfg.InstructionsFile, "instructions-file", "",
+		"Path to a file with extra instructions appended to the system prompt")
 	fs.StringVar(&cfg.Format, "format", DefaultFormat,
 		`Line parser: "json" detects and colours JSON lines, "passthrough" renders everything as plain text`)
 
@@ -161,14 +171,22 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	if cfg.MaxLines < 1 {
 		return Config{}, errors.New("--max-lines must be >= 1")
 	}
-	if cfg.ContextLines < 1 {
-		return Config{}, errors.New("--context-lines must be >= 1")
+	if cfg.ContextLines < 0 {
+		return Config{}, errors.New("--context-lines must be >= 0")
 	}
 	if cfg.SidebarWidth < 10 {
 		return Config{}, errors.New("--sidebar-width must be >= 10")
 	}
 	if cfg.Format != "json" && cfg.Format != "passthrough" {
 		return Config{}, errors.New(`--format must be "json" or "passthrough"`)
+	}
+
+	if cfg.InstructionsFile != "" {
+		data, err := os.ReadFile(cfg.InstructionsFile)
+		if err != nil {
+			return Config{}, fmt.Errorf("--instructions-file: %w", err)
+		}
+		cfg.Instructions = strings.TrimRight(string(data), "\n")
 	}
 
 	return cfg, nil
@@ -178,4 +196,13 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 // os.Args[1:], os.LookupEnv, and os.Stderr.
 func ParseOSArgs() (Config, error) {
 	return Parse(os.Args[1:], os.LookupEnv, os.Stderr)
+}
+
+// EffectiveSystemPrompt returns the system prompt with any
+// instructions-file content appended.
+func (c Config) EffectiveSystemPrompt() string {
+	if c.Instructions == "" {
+		return c.SystemPrompt
+	}
+	return c.SystemPrompt + "\n\n" + c.Instructions
 }

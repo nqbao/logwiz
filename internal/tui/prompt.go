@@ -6,31 +6,37 @@ import (
 	"github.com/nqbao/logwiz/internal/chat"
 )
 
-// buildChatMessages composes the full message list sent to the chat
-// endpoint:
+// buildChatMessages composes the full message list sent to the chat endpoint:
 //
 //  1. system prompt
-//  2. prior conversation turns
-//  3. the user question, prefixed with a fenced code block containing
-//     the most recent logLines
+//  2. If sessionSample is non-empty and history is empty (first turn): a second
+//     system message with the fenced sample and a note about tools.
+//  3. history verbatim (includes assistant tool_call messages and tool results)
+//  4. user question (no log stuffing on follow-up turns)
 //
-// Keeping this in a pure function makes the exact prompt shape easy to
-// unit-test and tweak without touching the TUI.
-func buildChatMessages(systemPrompt string, history []chat.Message, logLines []string, question string) []chat.Message {
-	msgs := make([]chat.Message, 0, len(history)+2)
+// For agent continuation calls (where the last message in msgs is a tool
+// result), pass an empty question; the function detects this and omits
+// the extra user turn.
+func buildChatMessages(systemPrompt string, sessionSample []string, history []chat.Message, question string) []chat.Message {
+	msgs := make([]chat.Message, 0, len(history)+3)
 	msgs = append(msgs, chat.Message{Role: "system", Content: systemPrompt})
+
+	// Inject the one-shot sample only on the very first user turn.
+	if len(sessionSample) > 0 && len(history) == 0 {
+		var b strings.Builder
+		b.WriteString("Recent log output (session sample):\n\n```\n")
+		for _, line := range sessionSample {
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+		b.WriteString("```\n\nYou can call tools to fetch more of the buffer.")
+		msgs = append(msgs, chat.Message{Role: "system", Content: b.String()})
+	}
+
 	msgs = append(msgs, history...)
 
-	var b strings.Builder
-	b.WriteString("Recent log output:\n\n```\n")
-	for _, line := range logLines {
-		b.WriteString(line)
-		b.WriteByte('\n')
+	if question != "" {
+		msgs = append(msgs, chat.Message{Role: "user", Content: question})
 	}
-	b.WriteString("```\n\n")
-	b.WriteString("Question: ")
-	b.WriteString(question)
-
-	msgs = append(msgs, chat.Message{Role: "user", Content: b.String()})
 	return msgs
 }

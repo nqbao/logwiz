@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -78,8 +80,55 @@ func renderMessage(msg chat.Message, width int) string {
 	return roleLabel + "\n" + body
 }
 
-// trimToHeight keeps the last h lines of s, which is what we want for
-// a chat log (show the most recent messages).
+// renderMessageWithActivity renders an assistant message, prepending a dim
+// activity summary line when the turn used tools.
+func renderMessageWithActivity(msg chat.Message, width, turnIdx int, turns []turnActivity) string {
+	roleLabel := styleRoleAssistant.Render("logwiz")
+	var extra string
+	if turnIdx >= 0 && turnIdx < len(turns) {
+		ta := turns[turnIdx]
+		if ta.ToolCount > 0 {
+			elapsed := ta.FinishedAt.Sub(ta.Started).Round(100 * time.Millisecond)
+			summary := fmt.Sprintf("✓ ran %d tool%s in %.1fs",
+				ta.ToolCount, pluralS(ta.ToolCount), elapsed.Seconds())
+			if ta.Errored {
+				extra = styleActivityError.Render(summary) + "\n"
+			} else {
+				extra = styleActivity.Render(summary) + "\n"
+			}
+		}
+	}
+	body := lipgloss.NewStyle().Width(width).Render(msg.Content)
+	return roleLabel + "\n" + extra + body
+}
+
+// renderActivityLine renders the live spinner line shown while the agent is
+// executing.
+func renderActivityLine(ta turnActivity, tick, width int) string {
+	frame := string(spinnerFrames[tick%len(spinnerFrames)])
+	elapsed := time.Since(ta.Started).Round(100 * time.Millisecond)
+	var label string
+	if ta.LastLabel != "" {
+		label = ta.LastLabel
+	} else {
+		label = "thinking"
+	}
+	var tools string
+	if ta.ToolCount > 0 {
+		tools = fmt.Sprintf(" (%d tool%s)", ta.ToolCount, pluralS(ta.ToolCount))
+	}
+	line := fmt.Sprintf("%s %s...%s (%.1fs)", frame, label, tools, elapsed.Seconds())
+	return styleActivity.Width(width).Render(line)
+}
+
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// trimToHeight keeps the last h lines of s.
 func trimToHeight(s string, h int) string {
 	if s == "" {
 		return s
@@ -116,4 +165,3 @@ func (m Model) renderHelpOverlay(underneath string) string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "))
 }
-
