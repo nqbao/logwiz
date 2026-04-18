@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -134,87 +133,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// onChatStep processes one assistant response in the agent loop.
-func (m Model) onChatStep(asst chat.Message) (tea.Model, tea.Cmd) {
-	m.chatMsgs = append(m.chatMsgs, asst)
-
-	// No tool calls: the assistant gave a final answer.
-	if len(asst.ToolCalls) == 0 {
-		if m.activeTurn >= 0 {
-			m.turns[m.activeTurn].Done = true
-			m.turns[m.activeTurn].FinishedAt = time.Now()
-			m.turnIdxByMsg[len(m.chatMsgs)-1] = m.activeTurn
-			m.activeTurn = -1
-		}
-		m.chatLoading = false
-		m.refreshConvoContent()
-		return m, nil
-	}
-
-	// Tool calls present: execute them and continue the loop.
-	if m.activeTurn >= 0 {
-		ta := &m.turns[m.activeTurn]
-		for _, call := range asst.ToolCalls {
-			ta.LastTool = call.Name
-			ta.LastLabel = labelFor(call.Name)
-			var result string
-			if m.toolsReg != nil {
-				result = m.toolsReg.Run(call.Name, []byte(call.Arguments), m.buf)
-			} else {
-				result = "error: tools not configured"
-			}
-			m.chatMsgs = append(m.chatMsgs, chat.Message{
-				Role:       "tool",
-				ToolCallID: call.ID,
-				Name:       call.Name,
-				Content:    result,
-			})
-			ta.ToolCount++
-		}
-
-		m.toolBudget--
-		if m.toolBudget <= 0 {
-			// Inject a budget-exhaustion notice into the last tool message.
-			if len(m.chatMsgs) > 0 {
-				last := &m.chatMsgs[len(m.chatMsgs)-1]
-				if last.Role == "tool" {
-					last.Content += "\n\n[Tool budget exhausted — answer with information gathered so far.]"
-				}
-			}
-		}
-	}
-
-	m.refreshConvoContent()
-	return m, m.runChatStep()
-}
-
-// runChatStep fires an async chat request using the current chatMsgs.
-func (m Model) runChatStep() tea.Cmd {
-	msgs := buildChatMessages(
-		m.cfg.EffectiveSystemPrompt(),
-		m.sessionSample,
-		m.chatMsgs,
-		"", // question already appended; history covers it
-	)
-
-	var specs []chat.ToolSpec
-	if m.toolsReg != nil && m.toolBudget > 0 {
-		specs = m.toolsReg.Specs()
-	}
-
-	client := m.chatClient
-	ctx := m.ctx
-	return func() tea.Msg {
-		reply, err := client.Complete(ctx, msgs, specs)
-		if err != nil {
-			if ctx.Err() == context.Canceled {
-				return nil
-			}
-			return ChatErrMsg{Err: err}
-		}
-		return ChatStepMsg{Assistant: reply}
-	}
-}
 
 // spinnerCmd schedules one spinner tick after 100 ms.
 func spinnerCmd() tea.Cmd {
@@ -447,55 +365,6 @@ func (m *Model) refreshConvoContent() {
 	m.convo.GotoBottom()
 }
 
-// submitChat takes the current input, validates it, and kicks off the agent loop.
-func (m Model) submitChat() (tea.Model, tea.Cmd) {
-	q := strings.TrimSpace(m.input.Value())
-	if q == "" {
-		return m, nil
-	}
-	if m.chatLoading {
-		return m, nil
-	}
-
-	if q == "/clear" {
-		m.input.Reset()
-		m = clearChat(m)
-		m.refreshConvoContent()
-		return m, nil
-	}
-
-	if m.chatClient == nil {
-		m.chatErr = "chat is not configured (set OPENAI_API_KEY or --api-key)"
-		return m, nil
-	}
-
-	// Capture session sample on the very first submit.
-	if len(m.chatMsgs) == 0 && m.cfg.ContextLines > 0 {
-		recent := m.buf.LastN(m.cfg.ContextLines)
-		m.sessionSample = make([]string, len(recent))
-		for i, lm := range recent {
-			m.sessionSample[i] = lm.Raw
-		}
-	}
-
-	m.chatMsgs = append(m.chatMsgs, chat.Message{Role: "user", Content: q})
-	m.chatErr = ""
-	m.chatLoading = true
-	m.input.Reset()
-	m.hintIdx = (m.hintIdx + 1) % len(inputHints)
-	m.input.Placeholder = inputHints[m.hintIdx]
-
-	// Register a new turn.
-	m.turns = append(m.turns, turnActivity{
-		Started:   time.Now(),
-		LastLabel: "thinking",
-	})
-	m.activeTurn = len(m.turns) - 1
-	m.toolBudget = MaxToolTurns
-
-	m.refreshConvoContent()
-	return m, tea.Batch(m.runChatStep(), spinnerCmd())
-}
 
 // statusLine composes the bottom bar text.
 func (m Model) statusLine(lay layout) string {
