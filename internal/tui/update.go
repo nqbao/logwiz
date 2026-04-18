@@ -46,6 +46,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.searchRe != nil {
 			m.updateSearch(len(msg.Lines), evictions)
 		}
+		if m.filterRe != nil {
+			m.updateFilter(len(msg.Lines), evictions)
+		}
 		return m, nil
 
 	case source.EOFMsg:
@@ -333,6 +336,10 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.help = false
 			return m, nil
 		}
+		if m.filterRe != nil {
+			m.clearFilter()
+			return m, nil
+		}
 		if m.searchRe != nil && !m.sidebarOpen {
 			m.clearSearch()
 			return m, nil
@@ -475,6 +482,14 @@ func (m Model) statusLine(lay layout) string {
 	switch {
 	case m.cmdActive:
 		right = styleHelp.Render(" enter:run  esc:cancel ")
+	case m.filterRe != nil:
+		visible := len(m.filterIndices)
+		total := m.buf.Len()
+		modeStr := "+"
+		if m.filterMode == filterExclude {
+			modeStr = "-"
+		}
+		right = styleHelp.Render(fmt.Sprintf(" filter(%s) %d/%d  esc:clear ", modeStr, visible, total))
 	case m.searchRe != nil:
 		total := len(m.searchMatches)
 		cur := 0

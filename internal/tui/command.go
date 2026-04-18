@@ -12,12 +12,14 @@ import (
 type cmdHandler func(m Model, args string) (Model, tea.Cmd, error)
 
 var cmdRegistry = map[string]cmdHandler{
-	"chat":   cmdChat,
-	"search": cmdSearch,
-	"clear":  cmdClear,
-	"help":   cmdHelp,
-	"model":  cmdModel,
-	"quit":   cmdQuit,
+	"chat":    cmdChat,
+	"search":  cmdSearch,
+	"filter":  cmdFilter,
+	"filter!": cmdFilterExclude,
+	"clear":   cmdClear,
+	"help":    cmdHelp,
+	"model":   cmdModel,
+	"quit":    cmdQuit,
 }
 
 // infoErr is returned by handlers that want to keep the palette open and
@@ -108,6 +110,32 @@ func cmdSearch(m Model, args string) (Model, tea.Cmd, error) {
 		return m, nil, err
 	}
 	runSearch(&m, re)
+	return m, nil, nil
+}
+
+func cmdFilter(m Model, args string) (Model, tea.Cmd, error) {
+	if args == "" {
+		m.clearFilter()
+		return m, nil, nil
+	}
+	re, err := regexp.Compile(args)
+	if err != nil {
+		return m, nil, err
+	}
+	runFilter(&m, re, filterInclude)
+	return m, nil, nil
+}
+
+func cmdFilterExclude(m Model, args string) (Model, tea.Cmd, error) {
+	if args == "" {
+		m.clearFilter()
+		return m, nil, nil
+	}
+	re, err := regexp.Compile(args)
+	if err != nil {
+		return m, nil, err
+	}
+	runFilter(&m, re, filterExclude)
 	return m, nil, nil
 }
 

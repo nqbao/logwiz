@@ -2,19 +2,30 @@ package tui
 
 import "regexp"
 
-// runSearch scans the full buffer for re, stores matching chronological
-// indices, and jumps the viewport to the first hit.
+// runSearch scans for re, stores matching chronological indices, and jumps the
+// viewport to the first hit. When a filter is active, only the visible (filtered)
+// lines are scanned so search stays within the filtered set.
 func runSearch(m *Model, re *regexp.Regexp) {
-	matches, _, _ := m.buf.SearchRegex(re, 0, 10000)
-	indices := make([]int, len(matches))
-	for i, il := range matches {
-		indices[i] = il.Index
-	}
 	m.searchRe = re
-	m.searchMatches = indices
+	if m.filterIndices != nil {
+		var indices []int
+		for _, bufIdx := range m.filterIndices {
+			if re.MatchString(m.buf.Line(bufIdx).Raw) {
+				indices = append(indices, bufIdx)
+			}
+		}
+		m.searchMatches = indices
+	} else {
+		matches, _, _ := m.buf.SearchRegex(re, 0, 10000)
+		indices := make([]int, len(matches))
+		for i, il := range matches {
+			indices[i] = il.Index
+		}
+		m.searchMatches = indices
+	}
 	m.searchCursor = 0
-	if len(indices) > 0 {
-		m.logs.JumpTo(indices[0])
+	if len(m.searchMatches) > 0 {
+		m.logs.JumpTo(m.searchMatches[0])
 	}
 }
 

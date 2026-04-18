@@ -88,6 +88,11 @@ type Model struct {
 	searchMatches []int
 	searchCursor  int
 
+	// Filter state (orthogonal to search: filter hides, search highlights).
+	filterRe      *regexp.Regexp
+	filterMode    filterMode
+	filterIndices []int
+
 	chatClient *chat.Client
 	toolsReg   *tools.Registry
 
