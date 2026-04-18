@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/nqbao/logwiz/internal/chat"
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
@@ -17,16 +17,16 @@ func TestChatStepWithToolCallsExecutesTool(t *testing.T) {
 	m := newTestModel(t)
 
 	// Simulate a submitted question to set up activeTurn + chatMsgs.
-	m.chatMsgs = []chat.Message{{Role: "user", Content: "show me logs"}}
+	m.chatMsgs = []agent.Message{{Role: "user", Content: "show me logs"}}
 	m.turns = []turnActivity{{LastLabel: "thinking"}}
 	m.activeTurn = 0
 	m.toolBudget = MaxToolTurns
 	m.chatLoading = true
 	m.chatAgent = &Agent{} // sentinel so Update routes to onChatToolCalls
 
-	asst := chat.Message{
+	asst := agent.Message{
 		Role: "assistant",
-		ToolCalls: []chat.ToolCall{
+		ToolCalls: []agent.ToolCall{
 			{ID: "call_1", Name: "tail", Arguments: `{"n":5}`},
 		},
 	}
@@ -75,7 +75,7 @@ func TestChatStepWithToolCallsExecutesTool(t *testing.T) {
 // with a final answer finalizes the active turn.
 func TestChatStepFinalAnswerFinalizesTurn(t *testing.T) {
 	m := newTestModel(t)
-	m.chatMsgs = []chat.Message{{Role: "user", Content: "q"}}
+	m.chatMsgs = []agent.Message{{Role: "user", Content: "q"}}
 	m.turns = []turnActivity{{LastLabel: "thinking", ToolCount: 2}}
 	m.activeTurn = 0
 	m.toolBudget = MaxToolTurns - 1
@@ -113,7 +113,7 @@ func TestChatStepFinalAnswerFinalizesTurn(t *testing.T) {
 // last tool message gets a budget-exhaustion note appended.
 func TestToolBudgetExhaustion(t *testing.T) {
 	m := newTestModel(t)
-	m.chatMsgs = []chat.Message{{Role: "user", Content: "q"}}
+	m.chatMsgs = []agent.Message{{Role: "user", Content: "q"}}
 	m.turns = []turnActivity{{LastLabel: "thinking"}}
 	m.activeTurn = 0
 	m.toolBudget = 1 // will reach 0 after this call
@@ -121,9 +121,9 @@ func TestToolBudgetExhaustion(t *testing.T) {
 	m.turnIdxByMsg = make(map[int]int)
 	m.chatAgent = &Agent{}
 
-	asst := chat.Message{
+	asst := agent.Message{
 		Role: "assistant",
-		ToolCalls: []chat.ToolCall{
+		ToolCalls: []agent.ToolCall{
 			{ID: "c1", Name: "tail", Arguments: `{"n":3}`},
 		},
 	}

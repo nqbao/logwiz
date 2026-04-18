@@ -1,6 +1,4 @@
-// Package chat implements a minimal OpenAI-compatible chat-completions
-// client backed by the official openai-go SDK.
-package chat
+package agent
 
 import (
 	"context"
@@ -94,9 +92,7 @@ func (c *Client) CompleteWithTools(ctx context.Context, msgs []Message, tools []
 }
 
 // Complete sends msgs to the chat-completions endpoint and returns the
-// assistant's reply as a Message (with ToolCalls populated when the model
-// requests tool use). Pass nil or an empty slice for tools when not using
-// function calling.
+// assistant's reply. Pass nil or empty tools when not using function calling.
 func (c *Client) Complete(ctx context.Context, msgs []Message, tools []ToolSpec) (Message, error) {
 	if c.apiKey == "" {
 		return Message{}, errors.New("chat: API key is not configured")

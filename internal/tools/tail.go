@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 )
 
 type tailTool struct{}
 
-func (tailTool) Spec() chat.ToolSpec {
+func (tailTool) Spec() agent.ToolSpec {
 	params := json.RawMessage(`{
 		"type": "object",
 		"properties": {
@@ -19,7 +19,7 @@ func (tailTool) Spec() chat.ToolSpec {
 		},
 		"required": ["n"]
 	}`)
-	return chat.ToolSpec{
+	return agent.ToolSpec{
 		Name:        "tail",
 		Description: "Return the last n lines from the log buffer. Same format as read: total= header then line INDEX: CONTENT.",
 		Parameters:  params,

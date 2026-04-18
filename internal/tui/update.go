@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/nqbao/logwiz/internal/chat"
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/source"
 )
 
@@ -59,7 +59,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ChatReplyMsg:
 		m.chatLoading = false
 		m.chatAgent = nil
-		m.chatMsgs = append(m.chatMsgs, chat.Message{Role: "assistant", Content: msg.Content})
+		m.chatMsgs = append(m.chatMsgs, agent.Message{Role: "assistant", Content: msg.Content})
 		m.refreshConvoContent()
 		return m, nil
 

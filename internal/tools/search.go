@@ -6,13 +6,13 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 )
 
 type searchTool struct{}
 
-func (searchTool) Spec() chat.ToolSpec {
+func (searchTool) Spec() agent.ToolSpec {
 	params := json.RawMessage(`{
 		"type": "object",
 		"properties": {
@@ -23,7 +23,7 @@ func (searchTool) Spec() chat.ToolSpec {
 		},
 		"required": ["pattern"]
 	}`)
-	return chat.ToolSpec{
+	return agent.ToolSpec{
 		Name:        "search_regex",
 		Description: "Search log lines matching a regex. Returns matched lines with indices, total match count, and next_since_line for pagination.",
 		Parameters:  params,

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 )
 
 // MaxToolLines is the maximum number of lines any single tool call may return.
@@ -14,7 +14,7 @@ const MaxToolLines = 500
 
 // Tool is implemented by each buffer-query tool.
 type Tool interface {
-	Spec() chat.ToolSpec
+	Spec() agent.ToolSpec
 	Execute(args json.RawMessage, buf *buffer.Buffer) (string, error)
 }
 
@@ -33,10 +33,10 @@ func NewDefault() *Registry {
 }
 
 // Specs returns the tool specifications for all registered tools.
-func (r *Registry) Specs() []chat.ToolSpec {
+func (r *Registry) Specs() []agent.ToolSpec {
 	// Return in a stable order.
 	names := []string{"read", "tail", "search_regex", "count_regex"}
-	out := make([]chat.ToolSpec, 0, len(names))
+	out := make([]agent.ToolSpec, 0, len(names))
 	for _, name := range names {
 		if t, ok := r.tools[name]; ok {
 			out = append(out, t.Spec())

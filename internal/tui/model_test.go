@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
@@ -128,7 +128,7 @@ func TestChatErrClearsLoadingAndRecordsMessage(t *testing.T) {
 
 func TestClearEmptiesChat(t *testing.T) {
 	m := newTestModel(t)
-	m.chatMsgs = []chat.Message{{Role: "user", Content: "x"}}
+	m.chatMsgs = []agent.Message{{Role: "user", Content: "x"}}
 	m.chatErr = "some err"
 	// 'c' works only in logs focus; sidebar closed by default.
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})

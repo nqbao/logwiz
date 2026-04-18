@@ -16,8 +16,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/highlight"
 	"github.com/nqbao/logwiz/internal/tools"
@@ -67,7 +67,7 @@ type Model struct {
 	sidebarOpen bool
 	convo       viewport.Model // chat conversation viewport
 	input       textarea.Model
-	chatMsgs    []chat.Message // excludes system prompt
+	chatMsgs    []agent.Message // excludes system prompt
 	chatLoading bool
 	chatErr     string
 
@@ -95,7 +95,7 @@ type Model struct {
 	filterIndices []int
 	filterEnabled bool
 
-	chatClient *chat.Client
+	chatClient *agent.Client
 	toolsReg   *tools.Registry
 
 	// Agent loop state (shared by chat and command agents).
@@ -130,7 +130,7 @@ var inputHints = []string{
 }
 
 // New builds a ready-to-run Model.
-func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Client, reg *tools.Registry) Model {
+func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.Client, reg *tools.Registry) Model {
 	ta := textarea.New()
 	ta.Placeholder = inputHints[0]
 	ta.Prompt = ""

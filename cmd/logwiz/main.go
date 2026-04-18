@@ -16,8 +16,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
@@ -76,9 +76,9 @@ func run() error {
 
 	buf := buffer.New(cfg.MaxLines)
 
-	var client *chat.Client
+	var client *agent.Client
 	if cfg.APIKey != "" {
-		client = chat.New(cfg.BaseURL, cfg.APIKey, cfg.Model)
+		client = agent.New(cfg.BaseURL, cfg.APIKey, cfg.Model)
 	}
 
 	registry := tools.NewDefault()

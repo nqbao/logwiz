@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/nqbao/logwiz/internal/chat"
+	"github.com/nqbao/logwiz/internal/agent"
 )
 
 // View renders the full UI.
@@ -97,7 +97,7 @@ func (m Model) renderSidebar(lay layout) string {
 	return styleSidebarBox.Width(innerW).Render(inner)
 }
 
-func renderMessage(msg chat.Message, width int) string {
+func renderMessage(msg agent.Message, width int) string {
 	var roleLabel string
 	switch msg.Role {
 	case "user":
@@ -114,7 +114,7 @@ func renderMessage(msg chat.Message, width int) string {
 
 // renderMessageWithActivity renders an assistant message, prepending a dim
 // activity summary line when the turn used tools.
-func renderMessageWithActivity(msg chat.Message, width, turnIdx int, turns []turnActivity) string {
+func renderMessageWithActivity(msg agent.Message, width, turnIdx int, turns []turnActivity) string {
 	roleLabel := styleRoleAssistant.Render("logwiz")
 	var extra string
 	if turnIdx >= 0 && turnIdx < len(turns) {
