@@ -110,6 +110,10 @@ type Model struct {
 	// sessionSample is the one-shot log snapshot captured on first submit.
 	sessionSample []string
 
+	// AI command state.
+	aiContext string // cached log sample for AI command routing; cleared on clearChat
+	aiLoading bool   // true while an AI command LLM call is in flight
+
 	// ctx controls in-flight chat requests; cancelled on quit.
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -134,7 +138,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 
 	ci := textinput.New()
 	ci.Prompt = ""
-	ci.Placeholder = ":command  or  /command"
+	ci.Placeholder = ":command  /command  or describe what you want"
 	ci.CharLimit = 200
 
 	ctx, cancel := context.WithCancel(context.Background())
