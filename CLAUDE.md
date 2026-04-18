@@ -41,6 +41,8 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
   - `styles.go` — all lipgloss styles
   - `keys.go` — key name constants
   - `prompt.go` — pure function `buildChatMessages()` that constructs the API message list (system prompt + history + fenced log context + question)
+  - `command.go` — command palette dispatcher (`dispatchCommand`) and handlers (`:chat`, `:search`, `:clear`, `:help`, `:model`, `:quit`)
+  - `search.go` — regex search helpers: `runSearch`, `updateSearch`, `nextMatch`, `prevMatch`, `clearSearch`
 
 ## TUI focus model
 
@@ -51,3 +53,12 @@ The model tracks a `focusArea` (either `focusLogs` or `focusChat`). All key rout
 - Lines are sanitized in `source/source.go:pump` using `lastCRSegment` — this mimics terminal `\r` overwrite behaviour (keeps only the last segment after splitting on `\r`). This handles spinner/progress output from tools like vite and uvicorn.
 - Tools writing to a pipe disable color output automatically (`isatty == false`). Use `FORCE_COLOR=1` upstream to get colors.
 - Mouse scrolling is enabled via `tea.WithMouseCellMotion()`.
+
+## Streaming / live-tail design considerations
+
+logwiz is frequently used in streaming mode (stdin pipe from a live process). Any feature that maintains derived state from the buffer — such as search match indices, statistics, or highlights — **must handle the `NewLinesMsg` path** in `Update()`, not just the initial computation. Key points:
+
+- **Ring-buffer evictions:** when the buffer is full, every `buf.Append` evicts the oldest line and returns `(evictedID, true)`. The `NewLinesMsg` handler counts evictions per batch. Derived index lists (e.g. `searchMatches`) must shift their stored indices down by the eviction count and drop entries that go negative.
+- **Incremental updates:** re-scanning the full buffer on every incoming batch is O(N) per batch — avoid it. Prefer scanning only the newly appended tail (`buf.Len()-newLines` → `buf.Len()`) and adjusting existing state for evictions.
+- **Viewport auto-scroll:** `LogViewport.autoScroll` follows the tail by default. Operations that jump to a specific line (e.g. `JumpTo`) disable `autoScroll`; reaching the bottom re-enables it. Incremental updates that sync `Selected` should not call `JumpTo` (which moves the viewport) — set `logs.Selected` directly to avoid disrupting the user's scroll position.
+- **The wrap-height cache** (`LogViewport.wrapCache`) is the canonical example of this pattern: `OnNewLines` calls `updateWrapCache` which evicts front entries and appends heights for new lines in O(newLines).

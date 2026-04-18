@@ -49,35 +49,38 @@ func TestEOFMsgSetsFlag(t *testing.T) {
 	}
 }
 
-func TestSlashOpensSidebarAndFocusesInput(t *testing.T) {
+func TestSlashOpensCmdPalette(t *testing.T) {
 	m := newTestModel(t)
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	mm := m2.(Model)
-	if !mm.sidebarOpen {
-		t.Fatal("sidebar not open after '/'")
+	if !mm.cmdActive {
+		t.Fatal("command palette not active after '/'")
 	}
-	if mm.focus != focusChat {
-		t.Fatalf("focus = %v, want focusChat", mm.focus)
+	if mm.sidebarOpen {
+		t.Fatal("sidebar should not open directly from '/'")
+	}
+	if mm.focus != focusLogs {
+		t.Fatalf("focus = %v, want focusLogs (palette does not change focus)", mm.focus)
 	}
 }
 
 func TestEscClosesSidebarFromLogsFocus(t *testing.T) {
 	m := newTestModel(t)
-	// Open sidebar.
-	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	// Directly open sidebar with chat focus (as :chat command would do).
+	m.sidebarOpen = true
+	m.focus = focusChat
+	// Esc while chat-focused blurs input, stays on sidebar.
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	mm := m2.(Model)
-	// Blur (Esc while input focused).
-	m3, _ := mm.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	mm = m3.(Model)
 	if mm.focus != focusLogs {
 		t.Fatalf("focus = %v, want focusLogs", mm.focus)
 	}
 	if !mm.sidebarOpen {
-		t.Fatal("first Esc should blur, not close")
+		t.Fatal("first Esc should blur, not close sidebar")
 	}
 	// Second Esc (logs focus) should close the sidebar.
-	m4, _ := mm.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	mm = m4.(Model)
+	m3, _ := mm.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	mm = m3.(Model)
 	if mm.sidebarOpen {
 		t.Fatal("second Esc should close sidebar")
 	}
@@ -139,13 +142,13 @@ func TestClearEmptiesChat(t *testing.T) {
 
 func TestSubmitWithoutClientSetsError(t *testing.T) {
 	m := newTestModel(t)
-	// Open sidebar and focus input.
-	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-	mm := m2.(Model)
-	mm.input.SetValue("why?")
+	// Directly open sidebar with chat focus (as :chat command would do).
+	m.sidebarOpen = true
+	m.focus = focusChat
+	m.input.SetValue("why?")
 	// Enter with no client configured should produce an error, not a cmd.
-	m3, cmd := mm.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	mm = m3.(Model)
+	m2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mm := m2.(Model)
 	if cmd != nil {
 		t.Fatalf("expected nil cmd, got %v", cmd)
 	}

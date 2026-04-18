@@ -16,7 +16,7 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	lay := computeLayout(m.width, m.height, m.sidebarOpen, m.cfg.SidebarWidth)
+	lay := computeLayout(m.width, m.height, m.cmdRows(), m.sidebarOpen, m.cfg.SidebarWidth)
 
 	logsView := m.logs.View(styleSelectedRow)
 
@@ -29,11 +29,37 @@ func (m Model) View() string {
 
 	status := m.statusLine(lay)
 
-	full := lipgloss.JoinVertical(lipgloss.Left, body, status)
+	var full string
+	if m.cmdActive {
+		palette := m.renderCommandPalette(m.width)
+		full = lipgloss.JoinVertical(lipgloss.Left, body, palette, status)
+	} else {
+		full = lipgloss.JoinVertical(lipgloss.Left, body, status)
+	}
+
 	if m.help {
 		return m.renderHelpOverlay(full)
 	}
 	return full
+}
+
+// renderCommandPalette renders the command input box docked above the status bar.
+func (m Model) renderCommandPalette(width int) string {
+	innerW := width - 2 // subtract left+right border
+	if innerW < 1 {
+		innerW = 1
+	}
+	content := m.cmdInput.View()
+	if m.cmdErr != "" {
+		content += "\n" + styleErr.Render(m.cmdErr)
+	} else if m.cmdInfo != "" {
+		content += "\n" + styleDim.Render(m.cmdInfo)
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("62")).
+		Width(innerW).
+		Render(content)
 }
 
 func (m Model) renderSidebar(lay layout) string {
@@ -149,18 +175,22 @@ func trimToHeight(s string, h int) string {
 func (m Model) renderHelpOverlay(underneath string) string {
 	help := strings.Join([]string{
 		"logwiz keys:",
-		"  /         open chat sidebar",
-		"  esc       close sidebar / blur input",
-		"  tab       switch focus",
-		"  enter     send chat message (in input)",
-		"  ctrl+j    newline in chat input",
-		"  c         clear chat history",
-		"  w         toggle line wrap",
-		"  j / ↓     scroll logs down",
-		"  k / ↑     scroll logs up",
-		"  pgup/pgdn page logs",
-		"  ?         toggle this help",
-		"  q         quit (ctrl+c always quits)",
+		"  /             open command palette",
+		"  :chat [q]     open chat sidebar (optionally pre-filled)",
+		"  :search re    regex-search the buffer",
+		"  :model [name] show or change the active model",
+		"  n / N         next / previous search match",
+		"  esc           close sidebar / cancel palette / clear search",
+		"  tab           switch focus",
+		"  enter         send chat message (in input)",
+		"  ctrl+j        newline in chat input",
+		"  c             clear chat history",
+		"  w             toggle line wrap",
+		"  j / ↓         scroll logs down",
+		"  k / ↑         scroll logs up",
+		"  pgup/pgdn     page logs",
+		"  ?             toggle this help",
+		"  q             quit (ctrl+c always quits)",
 	}, "\n")
 	box := lipgloss.NewStyle().
 		Padding(1, 2).

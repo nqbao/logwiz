@@ -1,19 +1,22 @@
 package tui
 
 // layout describes the rectangular split between the logs pane and
-// the (optional) chat sidebar. Heights exclude the status bar.
+// the (optional) chat sidebar. Heights exclude the status bar and any
+// command palette rows.
 type layout struct {
 	logsWidth    int
 	sidebarWidth int
 	paneHeight   int // height of logs / sidebar body
 }
 
-// compute returns a layout for the given window size and sidebar state.
+// computeLayout returns a layout for the given window size and UI state.
+// cmdRows is the number of rows consumed by the command palette (0 when
+// inactive, 3 for border+input+border, +1 when an error line is shown).
 // A minimum width is enforced so very narrow terminals stay readable;
 // extreme edge cases just render whatever fits.
-func computeLayout(width, height int, sidebarOpen bool, sidebarPref int) layout {
-	// Status bar occupies 1 row.
-	paneH := height - 1
+func computeLayout(width, height, cmdRows int, sidebarOpen bool, sidebarPref int) layout {
+	// Status bar occupies 1 row; command palette occupies cmdRows rows.
+	paneH := height - 1 - cmdRows
 	if paneH < 1 {
 		paneH = 1
 	}

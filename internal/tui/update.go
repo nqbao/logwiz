@@ -26,7 +26,6 @@ type ChatErrMsg struct{ Err error }
 // spinnerTickMsg drives the spinner animation while chatLoading is true.
 type spinnerTickMsg struct{}
 
-
 var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
 // Update handles all tea messages.
@@ -36,12 +35,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onResize(msg.Width, msg.Height), nil
 
 	case source.NewLinesMsg:
+		evictions := 0
 		for _, lm := range msg.Lines {
 			if evictedID, evicted := m.buf.Append(lm); evicted {
 				m.highlighter.Evict(evictedID)
+				evictions++
 			}
 		}
 		m.logs.OnNewLines(len(msg.Lines))
+		if m.searchRe != nil {
+			m.updateSearch(len(msg.Lines), evictions)
+		}
 		return m, nil
 
 	case source.EOFMsg:
@@ -87,7 +91,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-case tea.KeyMsg:
+	case tea.KeyMsg:
 		return m.onKey(msg)
 
 	case tea.MouseMsg:
@@ -207,13 +211,28 @@ func spinnerCmd() tea.Cmd {
 	})
 }
 
+// cmdRows returns the number of terminal rows consumed by the command palette.
+func (m Model) cmdRows() int {
+	if !m.cmdActive {
+		return 0
+	}
+	if m.cmdErr != "" || m.cmdInfo != "" {
+		return 4 // border_top + input + info/error + border_bottom
+	}
+	return 3 // border_top + input + border_bottom
+}
 
 func (m Model) onResize(w, h int) Model {
 	m.width = w
 	m.height = h
-	lay := computeLayout(w, h, m.sidebarOpen, m.cfg.SidebarWidth)
+	lay := computeLayout(w, h, m.cmdRows(), m.sidebarOpen, m.cfg.SidebarWidth)
 
 	m.logs.SetSize(lay.logsWidth, lay.paneHeight)
+
+	// Keep the command input the same width as the terminal interior.
+	if w > 2 {
+		m.cmdInput.Width = w - 2
+	}
 
 	// Sidebar outer border: -2. Input box inner border: -2.
 	innerW := lay.sidebarWidth - 2
@@ -245,6 +264,25 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == keyCtrlC {
 		m.Cancel()
 		return m, tea.Quit
+	}
+
+	// Command palette is active: route all input to it.
+	if m.cmdActive {
+		switch msg.String() {
+		case keyEscape:
+			m.cmdActive = false
+			m.cmdErr = ""
+			m.cmdInfo = ""
+			m.cmdInput.Blur()
+			m = m.onResize(m.width, m.height)
+			return m, nil
+		case keyEnter:
+			return m.dispatchCommand(m.cmdInput.Value())
+		default:
+			var cmd tea.Cmd
+			m.cmdInput, cmd = m.cmdInput.Update(msg)
+			return m, cmd
+		}
 	}
 
 	// When the chat input has focus, let it swallow characters first.
@@ -285,14 +323,18 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.Cancel()
 		return m, tea.Quit
 	case keyOpen:
-		m.sidebarOpen = true
-		m.focus = focusChat
-		cmd := m.input.Focus()
+		m.cmdActive = true
+		m.cmdInput.SetValue("")
+		m.cmdErr = ""
 		m = m.onResize(m.width, m.height)
-		return m, cmd
+		return m, m.cmdInput.Focus()
 	case keyEscape:
 		if m.help {
 			m.help = false
+			return m, nil
+		}
+		if m.searchRe != nil && !m.sidebarOpen {
+			m.clearSearch()
 			return m, nil
 		}
 		if m.sidebarOpen {
@@ -311,15 +353,16 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.help = !m.help
 		return m, nil
 	case keyClear:
-		m.chatMsgs = nil
-		m.chatErr = ""
-		m.turns = nil
-		m.turnIdxByMsg = make(map[int]int)
-		m.activeTurn = -1
-		m.sessionSample = nil
+		m = clearChat(m)
 		return m, nil
 	case keyWrap:
 		m.logs.ToggleWrap()
+		return m, nil
+	case keyNextMatch:
+		m.nextMatch()
+		return m, nil
+	case keyPrevMatch:
+		m.prevMatch()
 		return m, nil
 	}
 
@@ -376,12 +419,7 @@ func (m Model) submitChat() (tea.Model, tea.Cmd) {
 
 	if q == "/clear" {
 		m.input.Reset()
-		m.chatMsgs = nil
-		m.chatErr = ""
-		m.turns = nil
-		m.turnIdxByMsg = make(map[int]int)
-		m.activeTurn = -1
-		m.sessionSample = nil
+		m = clearChat(m)
 		m.refreshConvoContent()
 		return m, nil
 	}
@@ -434,7 +472,17 @@ func (m Model) statusLine(lay layout) string {
 	left := styleStatusBar.Render(fmt.Sprintf(" logwiz [%s]  %d lines ", mode, lines)) + " " + badge
 
 	var right string
-	if m.sidebarOpen {
+	switch {
+	case m.cmdActive:
+		right = styleHelp.Render(" enter:run  esc:cancel ")
+	case m.searchRe != nil:
+		total := len(m.searchMatches)
+		cur := 0
+		if total > 0 {
+			cur = m.searchCursor + 1
+		}
+		right = styleHelp.Render(fmt.Sprintf(" n/N:next/prev  esc:clear  match %d/%d ", cur, total))
+	case m.sidebarOpen:
 		if m.chatLoading {
 			right = styleStatusItem.Render("  thinking... ")
 		} else if m.chatErr != "" {
@@ -442,8 +490,8 @@ func (m Model) statusLine(lay layout) string {
 		} else {
 			right = styleHelp.Render(" tab:focus  esc:close  enter:send ")
 		}
-	} else {
-		right = styleHelp.Render(" /:chat  ?:help  q:quit ")
+	default:
+		right = styleHelp.Render(" /:cmd  ?:help  q:quit ")
 	}
 
 	pad := lay.logsWidth + lay.sidebarWidth + 1 - visualWidth(left) - visualWidth(right)

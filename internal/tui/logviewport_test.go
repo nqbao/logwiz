@@ -581,6 +581,87 @@ func TestWrap_OnNewLinesEviction(t *testing.T) {
 	}
 }
 
+// --- JumpTo ---
+
+func TestJumpTo_NoWrap_BringsLineOnScreen(t *testing.T) {
+	// 20 lines, height=5 → maxYOffset=15. Jump to line 15.
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = "line"
+	}
+	v := newTestViewport(80, 5, lines...)
+	v.autoScroll = false
+	v.GotoTop()
+
+	v.JumpTo(15)
+	if v.Selected != 15 {
+		t.Errorf("Selected = %d, want 15", v.Selected)
+	}
+	// Line 15 should be visible: YOffset <= 15 < YOffset+Height.
+	if v.YOffset > 15 || v.YOffset+v.Height <= 15 {
+		t.Errorf("line 15 not in viewport: YOffset=%d Height=%d", v.YOffset, v.Height)
+	}
+	if v.autoScroll {
+		t.Error("JumpTo should disable autoScroll")
+	}
+}
+
+func TestJumpTo_NoWrap_NearTop(t *testing.T) {
+	// Jumping to line 1 with height=5 should keep YOffset at 0 (clamped).
+	lines := make([]string, 10)
+	for i := range lines {
+		lines[i] = "x"
+	}
+	v := newTestViewport(80, 5, lines...)
+	v.autoScroll = false
+	v.GotoBottom()
+
+	v.JumpTo(1)
+	if v.Selected != 1 {
+		t.Errorf("Selected = %d, want 1", v.Selected)
+	}
+	if v.YOffset < 0 {
+		t.Errorf("YOffset = %d, want >= 0", v.YOffset)
+	}
+	// Line 1 must be visible.
+	if v.YOffset > 1 || v.YOffset+v.Height <= 1 {
+		t.Errorf("line 1 not in viewport: YOffset=%d Height=%d", v.YOffset, v.Height)
+	}
+}
+
+func TestJumpTo_Wrap_BringsLineOnScreen(t *testing.T) {
+	// width=5, height=4. Lines: 5×"a" (1 row each). Jump to line 4.
+	lines := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
+	v := newWrapViewport(5, 4, lines...)
+	v.autoScroll = false
+	v.GotoTop()
+
+	v.JumpTo(6)
+	if v.Selected != 6 {
+		t.Errorf("Selected = %d, want 6", v.Selected)
+	}
+	if v.autoScroll {
+		t.Error("JumpTo should disable autoScroll")
+	}
+	// In wrap mode, the screen row for line 6 must be in [YOffset, YOffset+Height).
+	screenRow := 0
+	for i := 0; i < 6 && i < len(v.wrapCache); i++ {
+		screenRow += v.wrapCache[i]
+	}
+	if screenRow < v.YOffset || screenRow >= v.YOffset+v.Height {
+		t.Errorf("line 6 (screen row %d) not visible: YOffset=%d Height=%d",
+			screenRow, v.YOffset, v.Height)
+	}
+}
+
+func TestJumpTo_EmptyBuffer_NoOp(t *testing.T) {
+	v := newTestViewport(80, 5)
+	v.JumpTo(0) // should not panic
+	if v.Selected != -1 {
+		t.Errorf("Selected = %d on empty buffer, want -1", v.Selected)
+	}
+}
+
 func TestWrap_RecomputeOnWidthChange(t *testing.T) {
 	v := newWrapViewport(5, 10, "abcdefghij") // 2 rows at width=5
 	if v.totalRows != 2 {

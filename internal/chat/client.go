@@ -34,6 +34,12 @@ func New(baseURL, apiKey, model string) *Client {
 	}
 }
 
+// Model returns the model name currently in use.
+func (c *Client) Model() string { return c.model }
+
+// SetModel updates the model used for subsequent requests.
+func (c *Client) SetModel(model string) { c.model = model }
+
 // Complete sends msgs to the chat-completions endpoint and returns the
 // assistant's reply as a Message (with ToolCalls populated when the model
 // requests tool use). Pass nil or an empty slice for tools when not using
