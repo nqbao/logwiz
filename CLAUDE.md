@@ -41,7 +41,7 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
   - `styles.go` — all lipgloss styles
   - `keys.go` — key name constants
   - `prompt.go` — pure function `buildChatMessages()` that constructs the API message list (system prompt + history + fenced log context + question)
-  - `command.go` — command palette dispatcher (`dispatchCommand`) and handlers (`:chat`, `:search`, `:filter`, `:filter!`, `:clear`, `:help`, `:model`, `:quit`)
+  - `command.go` — command palette dispatcher (`dispatchCommand`) and handlers (`:chat`, `:search`, `:grep`, `:clear`, `:help`, `:model`, `:quit`)
   - `search.go` — regex search helpers: `runSearch`, `updateSearch`, `nextMatch`, `prevMatch`, `clearSearch`
   - `filter.go` — view-layer filter: `runFilter`, `updateFilter`, `clearFilter`, `intersectSearch`
 

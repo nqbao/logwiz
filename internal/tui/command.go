@@ -12,14 +12,13 @@ import (
 type cmdHandler func(m Model, args string) (Model, tea.Cmd, error)
 
 var cmdRegistry = map[string]cmdHandler{
-	"chat":    cmdChat,
-	"search":  cmdSearch,
-	"filter":  cmdFilter,
-	"filter!": cmdFilterExclude,
-	"clear":   cmdClear,
-	"help":    cmdHelp,
-	"model":   cmdModel,
-	"quit":    cmdQuit,
+	"chat":   cmdChat,
+	"search": cmdSearch,
+	"grep":   cmdGrep,
+	"clear":  cmdClear,
+	"help":   cmdHelp,
+	"model":  cmdModel,
+	"quit":   cmdQuit,
 }
 
 // infoErr is returned by handlers that want to keep the palette open and
@@ -113,7 +112,16 @@ func cmdSearch(m Model, args string) (Model, tea.Cmd, error) {
 	return m, nil, nil
 }
 
-func cmdFilter(m Model, args string) (Model, tea.Cmd, error) {
+// cmdGrep implements :grep [-v] [pattern].
+//   :grep pattern    — show only lines matching pattern (include)
+//   :grep -v pattern — hide lines matching pattern (exclude)
+//   :grep            — clear active filter
+func cmdGrep(m Model, args string) (Model, tea.Cmd, error) {
+	mode := filterInclude
+	if strings.HasPrefix(args, "-v") {
+		mode = filterExclude
+		args = strings.TrimSpace(args[2:])
+	}
 	if args == "" {
 		m.clearFilter()
 		return m, nil, nil
@@ -122,20 +130,7 @@ func cmdFilter(m Model, args string) (Model, tea.Cmd, error) {
 	if err != nil {
 		return m, nil, err
 	}
-	runFilter(&m, re, filterInclude)
-	return m, nil, nil
-}
-
-func cmdFilterExclude(m Model, args string) (Model, tea.Cmd, error) {
-	if args == "" {
-		m.clearFilter()
-		return m, nil, nil
-	}
-	re, err := regexp.Compile(args)
-	if err != nil {
-		return m, nil, err
-	}
-	runFilter(&m, re, filterExclude)
+	runFilter(&m, re, mode)
 	return m, nil, nil
 }
 
