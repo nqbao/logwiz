@@ -11,16 +11,8 @@ import (
 	"github.com/nqbao/logwiz/internal/source"
 )
 
-// ChatReplyMsg is kept for backward compatibility with existing tests.
-// New code uses ChatStepMsg internally.
+// ChatReplyMsg is kept for backward compatibility.
 type ChatReplyMsg struct{ Content string }
-
-// ChatStepMsg carries one assistant response (may have tool calls) back
-// to the update loop.
-type ChatStepMsg struct{ Assistant chat.Message }
-
-// ChatErrMsg carries a chat request failure.
-type ChatErrMsg struct{ Err error }
 
 // spinnerTickMsg drives the spinner animation while chatLoading is true.
 type spinnerTickMsg struct{}
@@ -63,27 +55,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.eof = true
 		return m, nil
 
-	// Legacy message kept for test compatibility.
+	// Legacy message kept for backward compatibility.
 	case ChatReplyMsg:
 		m.chatLoading = false
+		m.chatAgent = nil
 		m.chatMsgs = append(m.chatMsgs, chat.Message{Role: "assistant", Content: msg.Content})
 		m.refreshConvoContent()
 		return m, nil
 
-	case ChatStepMsg:
-		return m.onChatStep(msg.Assistant)
-
-	case ChatErrMsg:
-		m.chatLoading = false
-		m.chatErr = msg.Err.Error()
-		if m.activeTurn >= 0 {
-			m.turns[m.activeTurn].Done = true
-			m.turns[m.activeTurn].Errored = true
-			m.turns[m.activeTurn].FinishedAt = time.Now()
-			m.activeTurn = -1
+	case AgentStepMsg:
+		if msg.Agent == m.chatAgent {
+			return m.onChatToolCalls(msg)
 		}
-		m.refreshConvoContent()
-		return m, nil
+		if msg.Agent == m.cmdAgent {
+			return executeCmdTool(m, msg)
+		}
+		return m, nil // stale agent, ignore
+
+	case AgentDoneMsg:
+		if msg.Agent == m.chatAgent {
+			return m.onChatDone(msg)
+		}
+		return m, nil // stale agent, ignore
+
+	case AgentErrMsg:
+		if msg.Agent == m.chatAgent {
+			m.chatAgent = nil
+			m.chatLoading = false
+			m.chatErr = msg.Err.Error()
+			if m.activeTurn >= 0 {
+				m.turns[m.activeTurn].Done = true
+				m.turns[m.activeTurn].Errored = true
+				m.turns[m.activeTurn].FinishedAt = time.Now()
+				m.activeTurn = -1
+			}
+			m.refreshConvoContent()
+			return m, nil
+		}
+		if msg.Agent == m.cmdAgent {
+			m.cmdAgent = nil
+			m.cmdErr = msg.Err.Error()
+			m.cmdInfo = ""
+			return m, nil
+		}
+		return m, nil // stale agent, ignore
 
 	case spinnerTickMsg:
 		if m.chatLoading {
@@ -91,15 +106,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.refreshConvoContent()
 			return m, spinnerCmd()
 		}
-		return m, nil
-
-	case AgentCmdMsg:
-		return dispatchAgentCmdToolCall(m, msg)
-
-	case AgentCmdErrMsg:
-		m.agentCmdLoading = false
-		m.cmdErr = msg.Err.Error()
-		m.cmdInfo = ""
 		return m, nil
 
 	case tea.KeyMsg:
@@ -203,17 +209,17 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cmdActive = false
 			m.cmdErr = ""
 			m.cmdInfo = ""
-			m.agentCmdLoading = false
+			m.cmdAgent = nil
 			m.cmdInput.Blur()
 			m = m.onResize(m.width, m.height)
 			return m, nil
 		case keyEnter:
-			if m.agentCmdLoading {
+			if m.cmdAgent != nil {
 				return m, nil
 			}
 			return m.dispatchCommand(m.cmdInput.Value())
 		default:
-			if m.agentCmdLoading {
+			if m.cmdAgent != nil {
 				return m, nil
 			}
 			var cmd tea.Cmd

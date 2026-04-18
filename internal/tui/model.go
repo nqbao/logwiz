@@ -98,21 +98,23 @@ type Model struct {
 	chatClient *chat.Client
 	toolsReg   *tools.Registry
 
-	// Agent loop state.
+	// Agent loop state (shared by chat and command agents).
 	turns        []turnActivity
 	turnIdxByMsg map[int]int // chatMsgs index -> turns index (final assistant only)
 	activeTurn   int         // index into turns; -1 when idle
-	toolBudget   int         // remaining tool round-trips in current question
+	toolBudget   int         // remaining tool round-trips in current chat turn
 	spinnerTick  int
+
+	chatAgent *Agent // non-nil while the chat agent loop is running
+	cmdAgent  *Agent // non-nil while a palette agent command is in flight
 
 	hintIdx int // cycles through inputHints
 
 	// sessionSample is the one-shot log snapshot captured on first submit.
 	sessionSample []string
 
-	// Agent command state.
-	agentCmdContext string // cached log sample for agent command routing; cleared on clearChat
-	agentCmdLoading bool   // true while an agent command LLM call is in flight
+	// agentCmdContext is a cached log sample for agent command routing; cleared on clearChat.
+	agentCmdContext string
 
 	// ctx controls in-flight chat requests; cancelled on quit.
 	ctx    context.Context

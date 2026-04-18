@@ -115,7 +115,8 @@ func TestChatReplyAppendsAssistantMessage(t *testing.T) {
 func TestChatErrClearsLoadingAndRecordsMessage(t *testing.T) {
 	m := newTestModel(t)
 	m.chatLoading = true
-	m2, _ := m.Update(ChatErrMsg{Err: errExample("boom")})
+	m.chatAgent = &Agent{}
+	m2, _ := m.Update(AgentErrMsg{Agent: m.chatAgent, Err: errExample("boom")})
 	mm := m2.(Model)
 	if mm.chatLoading {
 		t.Fatal("chatLoading still true")

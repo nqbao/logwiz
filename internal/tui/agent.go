@@ -13,14 +13,113 @@ import (
 	"github.com/nqbao/logwiz/internal/chat"
 )
 
-// AgentCmdMsg carries the LLM's chosen tool back to the update loop.
-type AgentCmdMsg struct {
-	Name string
-	Args json.RawMessage
+// Agent manages one LLM call chain — either a multi-turn sidebar chat or a
+// single-shot palette command. It owns the message history for its chain.
+//
+// The caller drives the loop:
+//  1. Call Step() to fire an async LLM request.
+//  2. If AgentStepMsg arrives, execute the tool calls, then call
+//     FeedResults(asst, results) and Step() again.
+//  3. If AgentDoneMsg arrives, the agent is done.
+type Agent struct {
+	client     *chat.Client
+	ctx        context.Context
+	msgs       []chat.Message  // accumulated LLM message history
+	tools      []chat.ToolSpec // nil disables tool use for the next Step
+	toolChoice string          // "required" forces a tool call (cmd agents)
 }
 
-// AgentCmdErrMsg carries an agent command failure.
-type AgentCmdErrMsg struct{ Err error }
+// AgentStepMsg is delivered when the LLM requests tool execution.
+// The caller executes Calls, then calls agent.FeedResults and agent.Step.
+type AgentStepMsg struct {
+	Agent *Agent
+	Asst  chat.Message // assistant message carrying the tool calls
+	Calls []chat.ToolCall
+}
+
+// AgentDoneMsg is delivered when the LLM produces a final text response.
+type AgentDoneMsg struct {
+	Agent   *Agent
+	Content string
+}
+
+// AgentErrMsg is delivered when the LLM call fails.
+type AgentErrMsg struct {
+	Agent *Agent
+	Err   error
+}
+
+// Step fires one async LLM call against the current message history.
+func (a *Agent) Step() tea.Cmd {
+	client := a.client
+	ctx := a.ctx
+	msgs := append([]chat.Message(nil), a.msgs...) // snapshot — no races
+	tools := a.tools
+	toolChoice := a.toolChoice
+	agent := a
+	return func() tea.Msg {
+		var (
+			reply chat.Message
+			err   error
+		)
+		if toolChoice == "required" {
+			tc, e := client.CompleteWithTools(ctx, msgs, tools)
+			if e != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return AgentErrMsg{Agent: agent, Err: e}
+			}
+			reply = chat.Message{Role: "assistant", ToolCalls: []chat.ToolCall{tc}}
+		} else {
+			reply, err = client.Complete(ctx, msgs, tools)
+			if err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				return AgentErrMsg{Agent: agent, Err: err}
+			}
+		}
+		if len(reply.ToolCalls) > 0 {
+			return AgentStepMsg{Agent: agent, Asst: reply, Calls: reply.ToolCalls}
+		}
+		return AgentDoneMsg{Agent: agent, Content: reply.Content}
+	}
+}
+
+// FeedResults appends the assistant tool-call message and caller-supplied
+// tool results to the agent's history, readying it for the next Step.
+func (a *Agent) FeedResults(asst chat.Message, results []chat.Message) {
+	a.msgs = append(a.msgs, asst)
+	a.msgs = append(a.msgs, results...)
+}
+
+// newChatAgent creates a long-lived agent for the sidebar chat pipeline.
+func newChatAgent(m Model, initialMsgs []chat.Message) *Agent {
+	var specs []chat.ToolSpec
+	if m.toolsReg != nil {
+		specs = m.toolsReg.Specs()
+	}
+	return &Agent{
+		client: m.chatClient,
+		ctx:    m.ctx,
+		msgs:   initialMsgs,
+		tools:  specs,
+	}
+}
+
+// newCmdAgent creates a short-lived agent for palette agent commands.
+func newCmdAgent(m Model, msgs []chat.Message) *Agent {
+	return &Agent{
+		client:     m.chatClient,
+		ctx:        m.ctx,
+		msgs:       msgs,
+		tools:      agentCmdToolDefs(),
+		toolChoice: "required",
+	}
+}
+
+// ── Agent command: tool definitions, prompt, dispatcher ─────────────────────
 
 // agentCmdToolDefs returns the static tool schema for agent command routing.
 func agentCmdToolDefs() []chat.ToolSpec {
@@ -113,8 +212,8 @@ func agentCmdToolDefs() []chat.ToolSpec {
 	}
 }
 
-// buildAgentCmdContext returns a sampled-lines block used in the agent system prompt.
-// The caller is responsible for caching the result on m.agentCmdContext.
+// buildAgentCmdContext returns a sampled-lines block for the agent system prompt.
+// The caller caches the result on m.agentCmdContext.
 func buildAgentCmdContext(m Model) string {
 	n := m.buf.Len()
 	if n == 0 {
@@ -156,38 +255,35 @@ func buildAgentCmdPrompt(question, logContext string) []chat.Message {
 	}
 }
 
-// dispatchAgentCmd fires an async LLM call and returns AgentCmdMsg or AgentCmdErrMsg.
-func dispatchAgentCmd(m Model, raw string) tea.Cmd {
-	ctx := m.ctx
-	client := m.chatClient
-	tools := agentCmdToolDefs()
+// startAgentCmd creates a short-lived cmd agent and fires its first Step.
+func startAgentCmd(m Model, raw string) (Model, tea.Cmd) {
 	msgs := buildAgentCmdPrompt(raw, m.agentCmdContext)
-	return func() tea.Msg {
-		tc, err := client.CompleteWithTools(ctx, msgs, tools)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			return AgentCmdErrMsg{Err: err}
-		}
-		return AgentCmdMsg{Name: tc.Name, Args: json.RawMessage(tc.Arguments)}
-	}
+	m.cmdAgent = newCmdAgent(m, msgs)
+	return m, m.cmdAgent.Step()
 }
 
-// dispatchAgentCmdToolCall routes the LLM's chosen tool to the appropriate handler.
-func dispatchAgentCmdToolCall(m Model, msg AgentCmdMsg) (Model, tea.Cmd) {
-	switch msg.Name {
+// executeCmdTool routes the agent command's single tool call to the appropriate
+// TUI handler. Called from Update when AgentStepMsg arrives for a cmdAgent.
+func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
+	m.cmdAgent = nil
+	if len(msg.Calls) == 0 {
+		return agentCmdErr(m, "agent returned no tool call")
+	}
+	call := msg.Calls[0]
+	args := json.RawMessage(call.Arguments)
+
+	switch call.Name {
 	case "grep":
-		var args struct {
+		var a struct {
 			Pattern string `json:"pattern"`
 			Mode    string `json:"mode"`
 			Flags   string `json:"flags"`
 		}
-		if err := json.Unmarshal(msg.Args, &args); err != nil {
+		if err := json.Unmarshal(args, &a); err != nil {
 			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
-		reStr := args.Pattern
-		if args.Flags == "i" {
+		reStr := a.Pattern
+		if a.Flags == "i" {
 			reStr = "(?i)" + reStr
 		}
 		re, err := regexp.Compile(reStr)
@@ -195,7 +291,7 @@ func dispatchAgentCmdToolCall(m Model, msg AgentCmdMsg) (Model, tea.Cmd) {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		mode := filterInclude
-		if args.Mode == "exclude" {
+		if a.Mode == "exclude" {
 			mode = filterExclude
 		}
 		addFilter(&m, re, mode)
@@ -206,13 +302,13 @@ func dispatchAgentCmdToolCall(m Model, msg AgentCmdMsg) (Model, tea.Cmd) {
 		return agentClosePalette(m), nil
 
 	case "search":
-		var args struct {
+		var a struct {
 			Pattern string `json:"pattern"`
 		}
-		if err := json.Unmarshal(msg.Args, &args); err != nil {
+		if err := json.Unmarshal(args, &a); err != nil {
 			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
-		re, err := regexp.Compile(args.Pattern)
+		re, err := regexp.Compile(a.Pattern)
 		if err != nil {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
@@ -220,32 +316,32 @@ func dispatchAgentCmdToolCall(m Model, msg AgentCmdMsg) (Model, tea.Cmd) {
 		return agentClosePalette(m), nil
 
 	case "jump":
-		var args struct {
+		var a struct {
 			Pattern  string `json:"pattern"`
 			Position string `json:"position"`
 		}
-		if err := json.Unmarshal(msg.Args, &args); err != nil {
+		if err := json.Unmarshal(args, &a); err != nil {
 			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
-		re, err := regexp.Compile(args.Pattern)
+		re, err := regexp.Compile(a.Pattern)
 		if err != nil {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		runSearch(&m, re)
-		if len(m.searchMatches) > 0 && args.Position == "last" {
+		if len(m.searchMatches) > 0 && a.Position == "last" {
 			m.searchCursor = len(m.searchMatches) - 1
 			m.logs.JumpTo(m.searchMatches[m.searchCursor])
 		}
 		return agentClosePalette(m), nil
 
 	case "set_model":
-		var args struct {
+		var a struct {
 			Model string `json:"model"`
 		}
-		if err := json.Unmarshal(msg.Args, &args); err != nil {
+		if err := json.Unmarshal(args, &a); err != nil {
 			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
-		newM, cmd, err := cmdConfig(m, "model "+args.Model)
+		newM, cmd, err := cmdConfig(m, "model "+a.Model)
 		if err != nil {
 			return agentCmdErr(m, err.Error())
 		}
@@ -256,20 +352,19 @@ func dispatchAgentCmdToolCall(m Model, msg AgentCmdMsg) (Model, tea.Cmd) {
 		return agentClosePalette(m), nil
 
 	case "answer":
-		var args struct {
+		var a struct {
 			Question string `json:"question"`
 		}
-		if err := json.Unmarshal(msg.Args, &args); err != nil {
+		if err := json.Unmarshal(args, &a); err != nil {
 			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
 		m.cmdActive = false
 		m.cmdErr = ""
 		m.cmdInfo = ""
-		m.agentCmdLoading = false
 		m.cmdInput.Blur()
 		m.sidebarOpen = true
 		m.focus = focusChat
-		m.input.SetValue(args.Question)
+		m.input.SetValue(a.Question)
 		m = m.onResize(m.width, m.height)
 		model, cmd := m.submitChat()
 		return model.(Model), cmd
@@ -279,40 +374,39 @@ func dispatchAgentCmdToolCall(m Model, msg AgentCmdMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "reject":
-		var args struct {
+		var a struct {
 			Reason string `json:"reason"`
 		}
-		if err := json.Unmarshal(msg.Args, &args); err != nil {
+		if err := json.Unmarshal(args, &a); err != nil {
 			return agentCmdErr(m, "not a recognized command")
 		}
-		return agentCmdErr(m, args.Reason)
+		return agentCmdErr(m, a.Reason)
 
 	default:
-		return agentCmdErr(m, fmt.Sprintf("unknown agent tool: %s", msg.Name))
+		return agentCmdErr(m, fmt.Sprintf("unknown agent tool: %s", call.Name))
 	}
 }
 
-// agentCmdErr sets a command error and resets agent loading state without
-// closing the palette so the user can see the message.
+// agentCmdErr shows an error in the palette without closing it.
 func agentCmdErr(m Model, msg string) (Model, tea.Cmd) {
 	m.cmdErr = msg
 	m.cmdInfo = ""
-	m.agentCmdLoading = false
 	return m, nil
 }
 
-// agentClosePalette closes the command palette after a successful agent tool dispatch.
+// agentClosePalette closes the palette after a successful agent command.
 func agentClosePalette(m Model) Model {
 	m.cmdActive = false
 	m.cmdErr = ""
 	m.cmdInfo = ""
-	m.agentCmdLoading = false
 	m.cmdInput.Blur()
 	m = m.onResize(m.width, m.height)
 	return m
 }
 
-// submitChat takes the current input, validates it, and kicks off the chat agent loop.
+// ── Chat agent: submit, tool loop ────────────────────────────────���───────────
+
+// submitChat starts a new chat agent turn from the sidebar input.
 func (m Model) submitChat() (tea.Model, tea.Cmd) {
 	q := strings.TrimSpace(m.input.Value())
 	if q == "" {
@@ -357,85 +451,67 @@ func (m Model) submitChat() (tea.Model, tea.Cmd) {
 	m.activeTurn = len(m.turns) - 1
 	m.toolBudget = MaxToolTurns
 
+	initialMsgs := buildChatMessages(m.cfg.EffectiveSystemPrompt(), m.sessionSample, m.chatMsgs, "")
+	m.chatAgent = newChatAgent(m, initialMsgs)
+
 	m.refreshConvoContent()
-	return m, tea.Batch(m.runChatStep(), spinnerCmd())
+	return m, tea.Batch(m.chatAgent.Step(), spinnerCmd())
 }
 
-// runChatStep fires an async chat request using the current chatMsgs.
-func (m Model) runChatStep() tea.Cmd {
-	msgs := buildChatMessages(
-		m.cfg.EffectiveSystemPrompt(),
-		m.sessionSample,
-		m.chatMsgs,
-		"",
-	)
+// onChatToolCalls is called by Update when the chat agent requests tool execution.
+// It runs the tools via toolsReg, feeds results back to the agent, and steps again.
+func (m Model) onChatToolCalls(msg AgentStepMsg) (tea.Model, tea.Cmd) {
+	m.chatMsgs = append(m.chatMsgs, msg.Asst)
 
-	var specs []chat.ToolSpec
-	if m.toolsReg != nil && m.toolBudget > 0 {
-		specs = m.toolsReg.Specs()
-	}
-
-	client := m.chatClient
-	ctx := m.ctx
-	return func() tea.Msg {
-		reply, err := client.Complete(ctx, msgs, specs)
-		if err != nil {
-			if ctx.Err() == context.Canceled {
-				return nil
-			}
-			return ChatErrMsg{Err: err}
-		}
-		return ChatStepMsg{Assistant: reply}
-	}
-}
-
-// onChatStep processes one assistant response in the chat agent loop.
-func (m Model) onChatStep(asst chat.Message) (tea.Model, tea.Cmd) {
-	m.chatMsgs = append(m.chatMsgs, asst)
-
-	if len(asst.ToolCalls) == 0 {
-		if m.activeTurn >= 0 {
-			m.turns[m.activeTurn].Done = true
-			m.turns[m.activeTurn].FinishedAt = time.Now()
-			m.turnIdxByMsg[len(m.chatMsgs)-1] = m.activeTurn
-			m.activeTurn = -1
-		}
-		m.chatLoading = false
+	if m.activeTurn < 0 {
 		m.refreshConvoContent()
-		return m, nil
+		return m, msg.Agent.Step()
 	}
 
-	if m.activeTurn >= 0 {
-		ta := &m.turns[m.activeTurn]
-		for _, call := range asst.ToolCalls {
-			ta.LastTool = call.Name
-			ta.LastLabel = labelFor(call.Name)
-			var result string
-			if m.toolsReg != nil {
-				result = m.toolsReg.Run(call.Name, []byte(call.Arguments), m.buf)
-			} else {
-				result = "error: tools not configured"
-			}
-			m.chatMsgs = append(m.chatMsgs, chat.Message{
-				Role:       "tool",
-				ToolCallID: call.ID,
-				Name:       call.Name,
-				Content:    result,
-			})
-			ta.ToolCount++
+	ta := &m.turns[m.activeTurn]
+	var results []chat.Message
+	for _, call := range msg.Calls {
+		ta.LastTool = call.Name
+		ta.LastLabel = labelFor(call.Name)
+		var result string
+		if m.toolsReg != nil {
+			result = m.toolsReg.Run(call.Name, []byte(call.Arguments), m.buf)
+		} else {
+			result = "error: tools not configured"
 		}
-
-		m.toolBudget--
-		if m.toolBudget <= 0 {
-			if len(m.chatMsgs) > 0 {
-				last := &m.chatMsgs[len(m.chatMsgs)-1]
-				if last.Role == "tool" {
-					last.Content += "\n\n[Tool budget exhausted — answer with information gathered so far.]"
-				}
-			}
-		}
+		results = append(results, chat.Message{
+			Role:       "tool",
+			ToolCallID: call.ID,
+			Name:       call.Name,
+			Content:    result,
+		})
+		ta.ToolCount++
 	}
+
+	m.toolBudget--
+	if m.toolBudget <= 0 && len(results) > 0 {
+		results[len(results)-1].Content += "\n\n[Tool budget exhausted — answer with information gathered so far.]"
+		msg.Agent.tools = nil // force text response on next step
+	}
+
+	m.chatMsgs = append(m.chatMsgs, results...)
+	msg.Agent.FeedResults(msg.Asst, results)
 
 	m.refreshConvoContent()
-	return m, m.runChatStep()
+	return m, msg.Agent.Step()
+}
+
+// onChatDone is called by Update when the chat agent produces a final answer.
+func (m Model) onChatDone(msg AgentDoneMsg) (tea.Model, tea.Cmd) {
+	m.chatAgent = nil
+	m.chatMsgs = append(m.chatMsgs, chat.Message{Role: "assistant", Content: msg.Content})
+	if m.activeTurn >= 0 {
+		m.turns[m.activeTurn].Done = true
+		m.turns[m.activeTurn].FinishedAt = time.Now()
+		m.turnIdxByMsg[len(m.chatMsgs)-1] = m.activeTurn
+		m.activeTurn = -1
+	}
+	m.chatLoading = false
+	m.refreshConvoContent()
+	return m, nil
 }
