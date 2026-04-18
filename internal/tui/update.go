@@ -331,6 +331,12 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cmdErr = ""
 		m = m.onResize(m.width, m.height)
 		return m, m.cmdInput.Focus()
+	case keyColon:
+		m.cmdActive = true
+		m.cmdInput.SetValue(":")
+		m.cmdErr = ""
+		m = m.onResize(m.width, m.height)
+		return m, m.cmdInput.Focus()
 	case keyFilterToggle:
 		if len(m.filterRules) == 0 {
 			return m, nil

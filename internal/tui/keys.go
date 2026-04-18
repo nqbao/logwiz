@@ -7,6 +7,7 @@ const (
 	keyQuit     = "q"
 	keyCtrlC    = "ctrl+c"
 	keyOpen     = "/"
+	keyColon    = ":"
 	keyEscape   = "esc"
 	keyTab      = "tab"
 	keyEnter    = "enter"
