@@ -249,7 +249,7 @@ func TestCountEmptyBuffer(t *testing.T) {
 }
 
 func TestRegistrySpecs(t *testing.T) {
-	r := NewDefault()
+	r := NewDefault(nil)
 	specs := r.Specs()
 	if len(specs) != 4 {
 		t.Fatalf("specs len = %d, want 4", len(specs))
@@ -266,7 +266,7 @@ func TestRegistrySpecs(t *testing.T) {
 }
 
 func TestRegistryRunUnknown(t *testing.T) {
-	r := NewDefault()
+	r := NewDefault(nil)
 	result := r.Run("nonexistent", nil, buffer.New(1))
 	if !strings.Contains(result, "error") {
 		t.Errorf("expected error for unknown tool: %q", result)
@@ -274,7 +274,7 @@ func TestRegistryRunUnknown(t *testing.T) {
 }
 
 func TestRegistryRunRead(t *testing.T) {
-	r := NewDefault()
+	r := NewDefault(nil)
 	buf := makeBuffer("hello", "world")
 	result := r.Run("read", json.RawMessage(`{"start":0,"n":2}`), buf)
 	if !strings.Contains(result, "hello") {

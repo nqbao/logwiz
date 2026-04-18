@@ -31,7 +31,7 @@ func buildAgentCmdContext(m Model) string {
 	}
 	var lines []string
 	for i := 0; i < n && len(lines) < sampleSize; i += step {
-		lines = append(lines, m.buf.Line(i).Raw)
+		lines = append(lines, m.redactor.Redact(m.buf.Line(i).Raw))
 	}
 	var b strings.Builder
 	b.WriteString("Log sample (for format awareness):\n```\n")
@@ -219,7 +219,7 @@ func (m Model) submitChat() (tea.Model, tea.Cmd) {
 		recent := m.buf.LastN(m.cfg.ContextLines)
 		m.sessionSample = make([]string, len(recent))
 		for i, lm := range recent {
-			m.sessionSample[i] = lm.Raw
+			m.sessionSample[i] = m.redactor.Redact(lm.Raw)
 		}
 	}
 

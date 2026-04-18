@@ -20,6 +20,7 @@ import (
 	"github.com/nqbao/logwiz/internal/buffer"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/highlight"
+	"github.com/nqbao/logwiz/internal/redact"
 	"github.com/nqbao/logwiz/internal/tools"
 )
 
@@ -97,6 +98,7 @@ type Model struct {
 
 	chatClient *agent.Client
 	toolsReg   *tools.Registry
+	redactor   *redact.Redactor
 
 	// Agent loop state (shared by chat and command agents).
 	turns        []turnActivity
@@ -130,7 +132,7 @@ var inputHints = []string{
 }
 
 // New builds a ready-to-run Model.
-func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.Client, reg *tools.Registry) Model {
+func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.Client, reg *tools.Registry, r *redact.Redactor) Model {
 	ta := textarea.New()
 	ta.Placeholder = inputHints[0]
 	ta.Prompt = ""
@@ -163,6 +165,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 		focus:        focusLogs,
 		chatClient:   client,
 		toolsReg:     reg,
+		redactor:     r,
 		turnIdxByMsg: make(map[int]int),
 		activeTurn:   -1,
 		ctx:          ctx,

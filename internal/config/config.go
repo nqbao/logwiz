@@ -57,6 +57,11 @@ type Config struct {
 
 	// Format selects the line parser: "json" or "passthrough".
 	Format string
+
+	// RedactPatterns is a list of Go regex patterns. Any match in a log
+	// line is replaced with [REDACTED] before the line is sent to the LLM.
+	// The display layer is never affected.
+	RedactPatterns []string
 }
 
 // ConfigurableKeys lists the keys accepted by ApplyKey and SaveKey.
@@ -67,13 +72,20 @@ var ConfigurableKeys = []string{
 // fileConfig holds the subset of Config that can be set in
 // ~/.logwiz/config.json.
 type fileConfig struct {
-	OpenAIAPIKey  string `json:"openai_api_key,omitempty"`
-	OpenAIBaseURL string `json:"openai_base_url,omitempty"`
-	OpenAIModel   string `json:"openai_model,omitempty"`
-	SidebarWidth  int    `json:"sidebar_width,omitempty"`
-	ContextLines  *int   `json:"context_lines,omitempty"`
-	SystemPrompt  string `json:"system_prompt,omitempty"`
+	OpenAIAPIKey   string   `json:"openai_api_key,omitempty"`
+	OpenAIBaseURL  string   `json:"openai_base_url,omitempty"`
+	OpenAIModel    string   `json:"openai_model,omitempty"`
+	SidebarWidth   int      `json:"sidebar_width,omitempty"`
+	ContextLines   *int     `json:"context_lines,omitempty"`
+	SystemPrompt   string   `json:"system_prompt,omitempty"`
+	RedactPatterns []string `json:"redact_patterns,omitempty"`
 }
+
+// stringSliceFlag implements flag.Value for a repeatable --redact flag.
+type stringSliceFlag []string
+
+func (f *stringSliceFlag) String() string        { return strings.Join(*f, ",") }
+func (f *stringSliceFlag) Set(v string) error    { *f = append(*f, v); return nil }
 
 // loadFileConfig reads ~/.logwiz/config.json. Missing file is not an
 // error; any other problem is returned.
@@ -143,7 +155,12 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		defaultSystemPrompt = fc.SystemPrompt
 	}
 
-	var cfg Config
+	var (
+		cfg           Config
+		redactFlag    stringSliceFlag = append(stringSliceFlag(nil), fc.RedactPatterns...)
+	)
+	fs.Var(&redactFlag, "redact",
+		"Go regex; matching spans are replaced with [REDACTED] before sending to LLM (repeatable)")
 	fs.StringVar(&cfg.APIKey, "api-key", defaultAPIKey,
 		"API key for the OpenAI-compatible endpoint (env OPENAI_API_KEY, ~/.logwiz/config.json)")
 	fs.StringVar(&cfg.BaseURL, "base-url", defaultBaseURL,
@@ -188,6 +205,7 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		return Config{}, fmt.Errorf("expected at most one positional argument (file), got %d", len(rest))
 	}
 
+	cfg.RedactPatterns = []string(redactFlag)
 	cfg.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
 
 	if cfg.MaxLines < 1 {

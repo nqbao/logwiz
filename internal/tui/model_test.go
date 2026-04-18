@@ -23,7 +23,7 @@ func newTestModel(t *testing.T) Model {
 		SystemPrompt: "sys",
 		Model:        "m",
 	}
-	m := New(cfg, SourceStdin, buffer.New(cfg.MaxLines), nil, tools.NewDefault())
+	m := New(cfg, SourceStdin, buffer.New(cfg.MaxLines), nil, tools.NewDefault(nil), nil)
 	// Simulate an initial resize so layout-dependent code works.
 	mi, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	return mi.(Model)

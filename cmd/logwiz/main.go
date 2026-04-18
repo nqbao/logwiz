@@ -19,6 +19,7 @@ import (
 	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
 	"github.com/nqbao/logwiz/internal/config"
+	"github.com/nqbao/logwiz/internal/redact"
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
 	"github.com/nqbao/logwiz/internal/tools"
@@ -76,13 +77,18 @@ func run() error {
 
 	buf := buffer.New(cfg.MaxLines)
 
+	redactor, err := redact.New(cfg.RedactPatterns)
+	if err != nil {
+		return err
+	}
+
 	var client *agent.Client
 	if cfg.APIKey != "" {
 		client = agent.New(cfg.BaseURL, cfg.APIKey, cfg.Model)
 	}
 
-	registry := tools.NewDefault()
-	model := tui.New(cfg, kind, buf, client, registry)
+	registry := tools.NewDefault(redactor)
+	model := tui.New(cfg, kind, buf, client, registry, redactor)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
