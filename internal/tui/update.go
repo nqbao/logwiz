@@ -94,11 +94,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case AIToolCallMsg:
-		return dispatchAIToolCall(m, msg)
+	case AgentCmdMsg:
+		return dispatchAgentCmdToolCall(m, msg)
 
-	case AIErrMsg:
-		m.aiLoading = false
+	case AgentCmdErrMsg:
+		m.agentCmdLoading = false
 		m.cmdErr = msg.Err.Error()
 		m.cmdInfo = ""
 		return m, nil
@@ -285,17 +285,17 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cmdActive = false
 			m.cmdErr = ""
 			m.cmdInfo = ""
-			m.aiLoading = false
+			m.agentCmdLoading = false
 			m.cmdInput.Blur()
 			m = m.onResize(m.width, m.height)
 			return m, nil
 		case keyEnter:
-			if m.aiLoading {
+			if m.agentCmdLoading {
 				return m, nil
 			}
 			return m.dispatchCommand(m.cmdInput.Value())
 		default:
-			if m.aiLoading {
+			if m.agentCmdLoading {
 				return m, nil
 			}
 			var cmd tea.Cmd

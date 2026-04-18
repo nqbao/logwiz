@@ -11,17 +11,17 @@ import (
 	"github.com/nqbao/logwiz/internal/chat"
 )
 
-// AIToolCallMsg carries the LLM's chosen tool back to the update loop.
-type AIToolCallMsg struct {
+// AgentCmdMsg carries the LLM's chosen tool back to the update loop.
+type AgentCmdMsg struct {
 	Name string
 	Args json.RawMessage
 }
 
-// AIErrMsg carries an AI command failure.
-type AIErrMsg struct{ Err error }
+// AgentCmdErrMsg carries an agent command failure.
+type AgentCmdErrMsg struct{ Err error }
 
-// aiToolDefs returns the static tool schema for AI command routing.
-func aiToolDefs() []chat.ToolSpec {
+// agentCmdToolDefs returns the static tool schema for agent command routing.
+func agentCmdToolDefs() []chat.ToolSpec {
 	must := func(s string) json.RawMessage { return json.RawMessage(s) }
 	return []chat.ToolSpec{
 		{
@@ -111,9 +111,9 @@ func aiToolDefs() []chat.ToolSpec {
 	}
 }
 
-// buildAIContext returns a sampled-lines block used in the AI system prompt.
-// The caller is responsible for caching the result on m.aiContext.
-func buildAIContext(m Model) string {
+// buildAgentCmdContext returns a sampled-lines block used in the agent system prompt.
+// The caller is responsible for caching the result on m.agentCmdContext.
+func buildAgentCmdContext(m Model) string {
 	n := m.buf.Len()
 	if n == 0 {
 		return ""
@@ -137,8 +137,8 @@ func buildAIContext(m Model) string {
 	return b.String()
 }
 
-// buildAIPrompt constructs the message list for an AI command routing call.
-func buildAIPrompt(question, logContext string) []chat.Message {
+// buildAgentCmdPrompt constructs the message list for an agent command routing call.
+func buildAgentCmdPrompt(question, logContext string) []chat.Message {
 	sys := "You are a log-viewer assistant. Translate the user's natural-language command into exactly one tool call.\n\n" +
 		"Rules:\n" +
 		"- Always call exactly one tool.\n" +
@@ -154,26 +154,26 @@ func buildAIPrompt(question, logContext string) []chat.Message {
 	}
 }
 
-// dispatchAICommand fires an async LLM call and returns AIToolCallMsg or AIErrMsg.
-func dispatchAICommand(m Model, raw string) tea.Cmd {
+// dispatchAgentCmd fires an async LLM call and returns AgentCmdMsg or AgentCmdErrMsg.
+func dispatchAgentCmd(m Model, raw string) tea.Cmd {
 	ctx := m.ctx
 	client := m.chatClient
-	tools := aiToolDefs()
-	msgs := buildAIPrompt(raw, m.aiContext)
+	tools := agentCmdToolDefs()
+	msgs := buildAgentCmdPrompt(raw, m.agentCmdContext)
 	return func() tea.Msg {
 		tc, err := client.CompleteWithTools(ctx, msgs, tools)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}
-			return AIErrMsg{Err: err}
+			return AgentCmdErrMsg{Err: err}
 		}
-		return AIToolCallMsg{Name: tc.Name, Args: json.RawMessage(tc.Arguments)}
+		return AgentCmdMsg{Name: tc.Name, Args: json.RawMessage(tc.Arguments)}
 	}
 }
 
-// dispatchAIToolCall routes the LLM's chosen tool to the appropriate handler.
-func dispatchAIToolCall(m Model, msg AIToolCallMsg) (Model, tea.Cmd) {
+// dispatchAgentCmdToolCall routes the LLM's chosen tool to the appropriate handler.
+func dispatchAgentCmdToolCall(m Model, msg AgentCmdMsg) (Model, tea.Cmd) {
 	switch msg.Name {
 	case "grep":
 		var args struct {
@@ -182,7 +182,7 @@ func dispatchAIToolCall(m Model, msg AIToolCallMsg) (Model, tea.Cmd) {
 			Flags   string `json:"flags"`
 		}
 		if err := json.Unmarshal(msg.Args, &args); err != nil {
-			return aiCmdErr(m, "AI command error: "+err.Error())
+			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
 		reStr := args.Pattern
 		if args.Flags == "i" {
@@ -190,32 +190,32 @@ func dispatchAIToolCall(m Model, msg AIToolCallMsg) (Model, tea.Cmd) {
 		}
 		re, err := regexp.Compile(reStr)
 		if err != nil {
-			return aiCmdErr(m, "invalid regex: "+err.Error())
+			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		mode := filterInclude
 		if args.Mode == "exclude" {
 			mode = filterExclude
 		}
 		addFilter(&m, re, mode)
-		return aiClosePalette(m), nil
+		return agentClosePalette(m), nil
 
 	case "clear_grep":
 		m.clearFilter()
-		return aiClosePalette(m), nil
+		return agentClosePalette(m), nil
 
 	case "search":
 		var args struct {
 			Pattern string `json:"pattern"`
 		}
 		if err := json.Unmarshal(msg.Args, &args); err != nil {
-			return aiCmdErr(m, "AI command error: "+err.Error())
+			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
 		re, err := regexp.Compile(args.Pattern)
 		if err != nil {
-			return aiCmdErr(m, "invalid regex: "+err.Error())
+			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		runSearch(&m, re)
-		return aiClosePalette(m), nil
+		return agentClosePalette(m), nil
 
 	case "jump":
 		var args struct {
@@ -223,47 +223,47 @@ func dispatchAIToolCall(m Model, msg AIToolCallMsg) (Model, tea.Cmd) {
 			Position string `json:"position"`
 		}
 		if err := json.Unmarshal(msg.Args, &args); err != nil {
-			return aiCmdErr(m, "AI command error: "+err.Error())
+			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
 		re, err := regexp.Compile(args.Pattern)
 		if err != nil {
-			return aiCmdErr(m, "invalid regex: "+err.Error())
+			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		runSearch(&m, re)
 		if len(m.searchMatches) > 0 && args.Position == "last" {
 			m.searchCursor = len(m.searchMatches) - 1
 			m.logs.JumpTo(m.searchMatches[m.searchCursor])
 		}
-		return aiClosePalette(m), nil
+		return agentClosePalette(m), nil
 
 	case "set_model":
 		var args struct {
 			Model string `json:"model"`
 		}
 		if err := json.Unmarshal(msg.Args, &args); err != nil {
-			return aiCmdErr(m, "AI command error: "+err.Error())
+			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
 		newM, cmd, err := cmdConfig(m, "model "+args.Model)
 		if err != nil {
-			return aiCmdErr(m, err.Error())
+			return agentCmdErr(m, err.Error())
 		}
-		return aiClosePalette(newM), cmd
+		return agentClosePalette(newM), cmd
 
 	case "clear_chat":
 		m = clearChat(m)
-		return aiClosePalette(m), nil
+		return agentClosePalette(m), nil
 
 	case "answer":
 		var args struct {
 			Question string `json:"question"`
 		}
 		if err := json.Unmarshal(msg.Args, &args); err != nil {
-			return aiCmdErr(m, "AI command error: "+err.Error())
+			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
 		m.cmdActive = false
 		m.cmdErr = ""
 		m.cmdInfo = ""
-		m.aiLoading = false
+		m.agentCmdLoading = false
 		m.cmdInput.Blur()
 		m.sidebarOpen = true
 		m.focus = focusChat
@@ -281,30 +281,30 @@ func dispatchAIToolCall(m Model, msg AIToolCallMsg) (Model, tea.Cmd) {
 			Reason string `json:"reason"`
 		}
 		if err := json.Unmarshal(msg.Args, &args); err != nil {
-			return aiCmdErr(m, "not a recognized command")
+			return agentCmdErr(m, "not a recognized command")
 		}
-		return aiCmdErr(m, args.Reason)
+		return agentCmdErr(m, args.Reason)
 
 	default:
-		return aiCmdErr(m, fmt.Sprintf("unknown AI tool: %s", msg.Name))
+		return agentCmdErr(m, fmt.Sprintf("unknown agent tool: %s", msg.Name))
 	}
 }
 
-// aiCmdErr sets a command error and resets AI loading state without closing
-// the palette so the user can see the message.
-func aiCmdErr(m Model, msg string) (Model, tea.Cmd) {
+// agentCmdErr sets a command error and resets agent loading state without
+// closing the palette so the user can see the message.
+func agentCmdErr(m Model, msg string) (Model, tea.Cmd) {
 	m.cmdErr = msg
 	m.cmdInfo = ""
-	m.aiLoading = false
+	m.agentCmdLoading = false
 	return m, nil
 }
 
-// aiClosePalette closes the command palette after a successful AI tool dispatch.
-func aiClosePalette(m Model) Model {
+// agentClosePalette closes the command palette after a successful agent tool dispatch.
+func agentClosePalette(m Model) Model {
 	m.cmdActive = false
 	m.cmdErr = ""
 	m.cmdInfo = ""
-	m.aiLoading = false
+	m.agentCmdLoading = false
 	m.cmdInput.Blur()
 	m = m.onResize(m.width, m.height)
 	return m

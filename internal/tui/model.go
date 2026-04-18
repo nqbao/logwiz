@@ -110,9 +110,9 @@ type Model struct {
 	// sessionSample is the one-shot log snapshot captured on first submit.
 	sessionSample []string
 
-	// AI command state.
-	aiContext string // cached log sample for AI command routing; cleared on clearChat
-	aiLoading bool   // true while an AI command LLM call is in flight
+	// Agent command state.
+	agentCmdContext string // cached log sample for agent command routing; cleared on clearChat
+	agentCmdLoading bool   // true while an agent command LLM call is in flight
 
 	// ctx controls in-flight chat requests; cancelled on quit.
 	ctx    context.Context
