@@ -182,7 +182,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"    -v  exclude  -i  case-insensitive  -F  literal string",
 		"  f             pause / resume active filter",
 		"  F             clear all filter rules",
-		"  :model [name] show or change the active model",
+		"  :config <key> [val]   show or set a config value (model, api-key, base-url, sidebar-width, context-lines, system-prompt)",
 		"  n / N         next / previous search match",
 		"  esc           close sidebar / cancel palette / clear filter / clear search",
 		"  tab           switch focus",
