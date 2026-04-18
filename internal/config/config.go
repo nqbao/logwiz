@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -58,12 +59,20 @@ type Config struct {
 	Format string
 }
 
+// ConfigurableKeys lists the keys accepted by ApplyKey and SaveKey.
+var ConfigurableKeys = []string{
+	"model", "api-key", "base-url", "sidebar-width", "context-lines", "system-prompt",
+}
+
 // fileConfig holds the subset of Config that can be set in
 // ~/.logwiz/config.json.
 type fileConfig struct {
-	OpenAIAPIKey  string `json:"openai_api_key"`
-	OpenAIBaseURL string `json:"openai_base_url"`
-	OpenAIModel   string `json:"openai_model"`
+	OpenAIAPIKey  string `json:"openai_api_key,omitempty"`
+	OpenAIBaseURL string `json:"openai_base_url,omitempty"`
+	OpenAIModel   string `json:"openai_model,omitempty"`
+	SidebarWidth  int    `json:"sidebar_width,omitempty"`
+	ContextLines  *int   `json:"context_lines,omitempty"`
+	SystemPrompt  string `json:"system_prompt,omitempty"`
 }
 
 // loadFileConfig reads ~/.logwiz/config.json. Missing file is not an
@@ -121,6 +130,19 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	defaultBaseURL := envOr(EnvBaseURL, fileOr(fc.OpenAIBaseURL, DefaultBaseURL))
 	defaultModel := envOr(EnvModel, fileOr(fc.OpenAIModel, DefaultModel))
 
+	defaultSidebarWidth := DefaultSidebarWidth
+	if fc.SidebarWidth >= 10 {
+		defaultSidebarWidth = fc.SidebarWidth
+	}
+	defaultContextLines := DefaultContextLines
+	if fc.ContextLines != nil {
+		defaultContextLines = *fc.ContextLines
+	}
+	defaultSystemPrompt := DefaultSystemPrompt
+	if fc.SystemPrompt != "" {
+		defaultSystemPrompt = fc.SystemPrompt
+	}
+
 	var cfg Config
 	fs.StringVar(&cfg.APIKey, "api-key", defaultAPIKey,
 		"API key for the OpenAI-compatible endpoint (env OPENAI_API_KEY, ~/.logwiz/config.json)")
@@ -130,11 +152,11 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		"Model name (env OPENAI_MODEL, ~/.logwiz/config.json)")
 	fs.IntVar(&cfg.MaxLines, "max-lines", DefaultMaxLines,
 		"Rolling buffer size in lines")
-	fs.IntVar(&cfg.ContextLines, "context-lines", DefaultContextLines,
+	fs.IntVar(&cfg.ContextLines, "context-lines", defaultContextLines,
 		"Recent lines sampled once at chat session start; 0 disables")
-	fs.IntVar(&cfg.SidebarWidth, "sidebar-width", DefaultSidebarWidth,
+	fs.IntVar(&cfg.SidebarWidth, "sidebar-width", defaultSidebarWidth,
 		"Chat sidebar width in columns")
-	fs.StringVar(&cfg.SystemPrompt, "system-prompt", DefaultSystemPrompt,
+	fs.StringVar(&cfg.SystemPrompt, "system-prompt", defaultSystemPrompt,
 		"System prompt sent with each chat request")
 	fs.StringVar(&cfg.InstructionsFile, "instructions-file", "",
 		"Path to a file with extra instructions appended to the system prompt")
@@ -196,6 +218,83 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 // os.Args[1:], os.LookupEnv, and os.Stderr.
 func ParseOSArgs() (Config, error) {
 	return Parse(os.Args[1:], os.LookupEnv, os.Stderr)
+}
+
+// saveFileConfig writes fc to ~/.logwiz/config.json, creating the
+// directory if needed.
+func saveFileConfig(fc fileConfig) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(home, ".logwiz")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("creating ~/.logwiz: %w", err)
+	}
+	data, err := json.MarshalIndent(fc, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "config.json"), append(data, '\n'), 0600)
+}
+
+// ApplyKey validates and applies a key=value pair to cfg in place.
+// It returns an error for unknown keys or invalid values.
+func ApplyKey(cfg *Config, key, value string) error {
+	switch key {
+	case "model":
+		cfg.Model = value
+	case "api-key":
+		cfg.APIKey = value
+	case "base-url":
+		cfg.BaseURL = strings.TrimRight(value, "/")
+	case "sidebar-width":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 10 {
+			return fmt.Errorf("sidebar-width must be an integer >= 10")
+		}
+		cfg.SidebarWidth = n
+	case "context-lines":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 {
+			return fmt.Errorf("context-lines must be an integer >= 0")
+		}
+		cfg.ContextLines = n
+	case "system-prompt":
+		cfg.SystemPrompt = value
+	default:
+		return fmt.Errorf("unknown config key %q (valid: %s)", key, strings.Join(ConfigurableKeys, ", "))
+	}
+	return nil
+}
+
+// SaveKey persists a single key=value to ~/.logwiz/config.json,
+// merging with any existing values already in the file.
+// Caller should have already validated the value via ApplyKey.
+func SaveKey(key, value string) error {
+	fc, err := loadFileConfig()
+	if err != nil {
+		return err
+	}
+	switch key {
+	case "model":
+		fc.OpenAIModel = value
+	case "api-key":
+		fc.OpenAIAPIKey = value
+	case "base-url":
+		fc.OpenAIBaseURL = strings.TrimRight(value, "/")
+	case "sidebar-width":
+		n, _ := strconv.Atoi(value)
+		fc.SidebarWidth = n
+	case "context-lines":
+		n, _ := strconv.Atoi(value)
+		fc.ContextLines = &n
+	case "system-prompt":
+		fc.SystemPrompt = value
+	default:
+		return fmt.Errorf("unknown key %q", key)
+	}
+	return saveFileConfig(fc)
 }
 
 // EffectiveSystemPrompt returns the system prompt with any

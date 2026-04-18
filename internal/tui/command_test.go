@@ -139,15 +139,15 @@ func TestDispatchCommand_NoPrefixKeepsPaletteOpen(t *testing.T) {
 	}
 }
 
-// TestDispatchCommand_ModelNoArgs shows current model as dim info, keeps palette open.
-func TestDispatchCommand_ModelNoArgs(t *testing.T) {
+// TestDispatchCommand_ConfigGetModel shows current model as dim info, keeps palette open.
+func TestDispatchCommand_ConfigGetModel(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 	m.cfg.Model = "gpt-4o"
 
-	m2, _ := m.dispatchCommand(":model")
+	m2, _ := m.dispatchCommand(":config model")
 	if !m2.cmdActive {
-		t.Error("cmdActive should remain true when :model shows info")
+		t.Error("cmdActive should remain true when :config shows info")
 	}
 	if m2.cmdErr != "" {
 		t.Errorf("cmdErr = %q, want empty (info should not be an error)", m2.cmdErr)
@@ -160,15 +160,15 @@ func TestDispatchCommand_ModelNoArgs(t *testing.T) {
 	}
 }
 
-// TestDispatchCommand_ModelWithArg changes the model and closes the palette.
-func TestDispatchCommand_ModelWithArg(t *testing.T) {
+// TestDispatchCommand_ConfigSetModel changes the model and closes the palette.
+func TestDispatchCommand_ConfigSetModel(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 	m.cfg.Model = "gpt-4o-mini"
 
-	m2, _ := m.dispatchCommand(":model claude-sonnet-4-6")
+	m2, _ := m.dispatchCommand(":config model claude-sonnet-4-6")
 	if m2.cmdActive {
-		t.Error("cmdActive should be false after :model <name>")
+		t.Error("cmdActive should be false after :config model <name>")
 	}
 	if m2.cfg.Model != "claude-sonnet-4-6" {
 		t.Errorf("cfg.Model = %q, want claude-sonnet-4-6", m2.cfg.Model)

@@ -4,9 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/nqbao/logwiz/internal/config"
 )
 
 type cmdHandler func(m Model, args string) (Model, tea.Cmd, error)
@@ -17,7 +20,7 @@ var cmdRegistry = map[string]cmdHandler{
 	"grep":   cmdGrep,
 	"clear":  cmdClear,
 	"help":   cmdHelp,
-	"model":  cmdModel,
+	"config": cmdConfig,
 	"quit":   cmdQuit,
 }
 
@@ -185,15 +188,54 @@ func parseGrepFlags(args string) (mode filterMode, caseInsensitive, fixedString 
 	return
 }
 
-func cmdModel(m Model, args string) (Model, tea.Cmd, error) {
-	if args == "" {
-		return m, nil, infoErr{"current model: " + m.cfg.Model}
+func cmdConfig(m Model, args string) (Model, tea.Cmd, error) {
+	key, value, hasValue := strings.Cut(args, " ")
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+
+	if key == "" {
+		return m, nil, fmt.Errorf("usage: config <key> [value]  keys: %s", strings.Join(config.ConfigurableKeys, ", "))
 	}
-	m.cfg.Model = args
-	if m.chatClient != nil {
-		m.chatClient.SetModel(args)
+
+	if !hasValue {
+		display, ok := configGetDisplay(m.cfg, key)
+		if !ok {
+			return m, nil, fmt.Errorf("unknown config key %q (valid: %s)", key, strings.Join(config.ConfigurableKeys, ", "))
+		}
+		return m, nil, infoErr{key + ": " + display}
+	}
+
+	if err := config.ApplyKey(&m.cfg, key, value); err != nil {
+		return m, nil, err
+	}
+	if key == "model" && m.chatClient != nil {
+		m.chatClient.SetModel(value)
+	}
+	if err := config.SaveKey(key, value); err != nil {
+		return m, nil, fmt.Errorf("applied in memory but could not persist: %w", err)
 	}
 	return m, nil, nil
+}
+
+func configGetDisplay(cfg config.Config, key string) (string, bool) {
+	switch key {
+	case "model":
+		return cfg.Model, true
+	case "api-key":
+		if len(cfg.APIKey) > 4 {
+			return "***" + cfg.APIKey[len(cfg.APIKey)-4:], true
+		}
+		return cfg.APIKey, true
+	case "base-url":
+		return cfg.BaseURL, true
+	case "sidebar-width":
+		return strconv.Itoa(cfg.SidebarWidth), true
+	case "context-lines":
+		return strconv.Itoa(cfg.ContextLines), true
+	case "system-prompt":
+		return cfg.SystemPrompt, true
+	}
+	return "", false
 }
 
 func cmdClear(m Model, _ string) (Model, tea.Cmd, error) {
