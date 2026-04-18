@@ -46,6 +46,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.searchRe != nil {
 			m.updateSearch(len(msg.Lines), evictions)
 		}
+		if len(m.filterRules) > 0 {
+			m.updateFilter(len(msg.Lines), evictions)
+		}
 		return m, nil
 
 	case source.EOFMsg:
@@ -328,6 +331,27 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cmdErr = ""
 		m = m.onResize(m.width, m.height)
 		return m, m.cmdInput.Focus()
+	case keyColon:
+		m.cmdActive = true
+		m.cmdInput.SetValue(":")
+		m.cmdErr = ""
+		m = m.onResize(m.width, m.height)
+		return m, m.cmdInput.Focus()
+	case keyFilterToggle:
+		if len(m.filterRules) == 0 {
+			return m, nil
+		}
+		if m.filterEnabled {
+			m.pauseFilter()
+		} else {
+			m.resumeFilter()
+		}
+		return m, nil
+	case keyFilterClear:
+		if len(m.filterRules) > 0 {
+			m.clearFilter()
+		}
+		return m, nil
 	case keyEscape:
 		if m.help {
 			m.help = false
@@ -475,6 +499,13 @@ func (m Model) statusLine(lay layout) string {
 	switch {
 	case m.cmdActive:
 		right = styleHelp.Render(" enter:run  esc:cancel ")
+	case len(m.filterRules) > 0 && m.filterEnabled:
+		visible := len(m.filterIndices)
+		total := m.buf.Len()
+		n := len(m.filterRules)
+		right = styleHelp.Render(fmt.Sprintf(" %d filter(s) %d/%d  f:pause  F:clear ", n, visible, total))
+	case len(m.filterRules) > 0 && !m.filterEnabled:
+		right = styleHelp.Render(fmt.Sprintf(" %d filter(s) paused  f:resume  F:clear ", len(m.filterRules)))
 	case m.searchRe != nil:
 		total := len(m.searchMatches)
 		cur := 0

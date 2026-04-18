@@ -88,6 +88,13 @@ type Model struct {
 	searchMatches []int
 	searchCursor  int
 
+	// Filter state (orthogonal to search: filter hides, search highlights).
+	// Each :grep / :grep -v appends a rule; all rules are ANDed together.
+	// filterEnabled can be toggled with 'f' without losing the rules.
+	filterRules   []filterRule
+	filterIndices []int
+	filterEnabled bool
+
 	chatClient *chat.Client
 	toolsReg   *tools.Registry
 

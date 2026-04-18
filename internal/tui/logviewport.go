@@ -19,6 +19,9 @@ import (
 // counts logical lines. When Wrap is true YOffset counts screen rows; long
 // lines are soft-wrapped and a prefix-sum cache of per-line heights is kept
 // in sync incrementally via OnNewLines.
+//
+// When filterIndices is non-nil only the listed buffer positions are shown.
+// All scroll math and the wrapCache operate over the filtered set.
 type LogViewport struct {
 	Width  int
 	Height int
@@ -26,13 +29,18 @@ type LogViewport struct {
 
 	YOffset    int  // first visible unit (screen row when Wrap, logical line otherwise)
 	xOffset    int  // horizontal scroll columns (Wrap=false only)
-	Selected   int  // selected logical line index; -1 = none
+	Selected   int  // selected logical line (buffer index); -1 = none
 	autoScroll bool // follow the tail when new lines arrive
 
 	buf *buffer.Buffer
 	h   *highlight.Highlighter // may be nil; display() falls back to Raw
 
+	// filterIndices, when non-nil, lists the buffer positions visible after
+	// filtering. All iteration uses effectiveLen / effectiveBufIdx.
+	filterIndices []int
+
 	// Wrap=true: per-line wrap-height cache keyed to wrapCacheWidth.
+	// When filterIndices != nil the cache is indexed over the filtered set.
 	wrapCache      []int
 	wrapCacheWidth int
 	totalRows      int // sum of wrapCache
@@ -43,6 +51,53 @@ type LogViewport struct {
 
 func newLogViewport(buf *buffer.Buffer) LogViewport {
 	return LogViewport{buf: buf, Selected: -1, autoScroll: true}
+}
+
+// SetFilter replaces the active filter index list. Pass nil to show all lines.
+// Recomputes the wrap cache when Wrap is true; repositions to the tail when
+// autoScroll is on.
+func (v *LogViewport) SetFilter(indices []int) {
+	v.filterIndices = indices
+	if v.Wrap {
+		v.recomputeWrapCache()
+	}
+	if v.autoScroll {
+		v.GotoBottom()
+	}
+}
+
+// effectiveLen returns the number of visible lines (filtered or total).
+func (v *LogViewport) effectiveLen() int {
+	if v.filterIndices != nil {
+		return len(v.filterIndices)
+	}
+	return v.buf.Len()
+}
+
+// effectiveBufIdx maps a visible position to the underlying buffer index.
+func (v *LogViewport) effectiveBufIdx(pos int) int {
+	if v.filterIndices != nil {
+		return v.filterIndices[pos]
+	}
+	return pos
+}
+
+// filterPosOf returns the visible position of bufIdx via binary search, or -1
+// when bufIdx is not in the current filter.
+func (v *LogViewport) filterPosOf(bufIdx int) int {
+	lo, hi := 0, len(v.filterIndices)
+	for lo < hi {
+		mid := (lo + hi) / 2
+		switch {
+		case v.filterIndices[mid] == bufIdx:
+			return mid
+		case v.filterIndices[mid] < bufIdx:
+			lo = mid + 1
+		default:
+			hi = mid
+		}
+	}
+	return -1
 }
 
 // clamp returns v clamped to [lo, hi].
@@ -80,10 +135,11 @@ func (v *LogViewport) lineWrapHeight(line string) int {
 	return (w + v.Width - 1) / v.Width
 }
 
-// recomputeWrapCache rebuilds the full cache in O(N).
-// Called on resize (width change) or when the cache is found stale.
+// recomputeWrapCache rebuilds the full cache in O(N) over the effective set.
+// When filterIndices != nil the cache is indexed over the filtered set.
+// Called on resize (width change), filter change, or when the cache is stale.
 func (v *LogViewport) recomputeWrapCache() {
-	n := v.buf.Len()
+	n := v.effectiveLen()
 	if cap(v.wrapCache) >= n {
 		v.wrapCache = v.wrapCache[:n]
 	} else {
@@ -91,7 +147,7 @@ func (v *LogViewport) recomputeWrapCache() {
 	}
 	v.totalRows = 0
 	for i := 0; i < n; i++ {
-		h := v.lineWrapHeight(v.display(v.buf.Line(i)))
+		h := v.lineWrapHeight(v.display(v.buf.Line(v.effectiveBufIdx(i))))
 		v.wrapCache[i] = h
 		v.totalRows += h
 	}
@@ -148,7 +204,7 @@ func (v *LogViewport) ensureWrapCache() {
 	if v.Width <= 0 {
 		return
 	}
-	if v.wrapCacheWidth == v.Width && len(v.wrapCache) == v.buf.Len() {
+	if v.wrapCacheWidth == v.Width && len(v.wrapCache) == v.effectiveLen() {
 		return
 	}
 	v.recomputeWrapCache()
@@ -178,7 +234,7 @@ func (v *LogViewport) totalScreenRows() int {
 	if v.Wrap {
 		return v.totalRows
 	}
-	return v.buf.Len()
+	return v.effectiveLen()
 }
 
 func (v *LogViewport) maxYOffset() int {
@@ -270,26 +326,28 @@ func (v *LogViewport) ScrollPercent() float64 {
 	return float64(v.YOffset) / float64(m)
 }
 
-// SelectAt maps a screen-relative Y coordinate to a logical row index.
+// SelectAt maps a screen-relative Y coordinate to a buffer index.
 func (v *LogViewport) SelectAt(screenY int) {
-	n := v.buf.Len()
+	n := v.effectiveLen()
 	if n == 0 {
 		v.Selected = -1
 		return
 	}
 	if !v.Wrap {
-		v.Selected = clamp(v.YOffset+screenY, 0, n-1)
+		pos := clamp(v.YOffset+screenY, 0, n-1)
+		v.Selected = v.effectiveBufIdx(pos)
 		return
 	}
 	v.ensureWrapCache()
 	line, _ := v.screenRowToLine(v.YOffset + screenY)
-	v.Selected = clamp(line, 0, n-1)
+	v.Selected = v.effectiveBufIdx(clamp(line, 0, n-1))
 }
 
 // OnNewLines must be called after n lines have been appended to the buffer.
 // It keeps the wrap-height cache in sync and applies auto-scroll.
+// When a filter is active the wrap cache is managed by SetFilter instead.
 func (v *LogViewport) OnNewLines(n int) {
-	if v.Wrap {
+	if v.Wrap && v.filterIndices == nil {
 		v.updateWrapCache(n)
 	}
 	if v.autoScroll {
@@ -297,27 +355,37 @@ func (v *LogViewport) OnNewLines(n int) {
 	}
 }
 
-// JumpTo scrolls the viewport so that logicalLine is visible roughly 1/3 from
-// the top, selects it, and disables auto-scroll.
-func (v *LogViewport) JumpTo(logicalLine int) {
-	n := v.buf.Len()
+// JumpTo scrolls the viewport so that bufIdx is visible roughly 1/3 from the
+// top, selects it, and disables auto-scroll. When a filter is active and
+// bufIdx is not in the filtered set, the call is a no-op.
+func (v *LogViewport) JumpTo(bufIdx int) {
+	n := v.effectiveLen()
 	if n == 0 {
 		return
 	}
-	logicalLine = clamp(logicalLine, 0, n-1)
-	v.Selected = logicalLine
+
+	// Resolve bufIdx to a visible position.
+	pos := bufIdx
+	if v.filterIndices != nil {
+		pos = v.filterPosOf(bufIdx)
+		if pos < 0 {
+			return // not visible in current filter
+		}
+	}
+	pos = clamp(pos, 0, n-1)
+	v.Selected = bufIdx
 	v.autoScroll = false
 
 	if !v.Wrap {
-		target := logicalLine - v.Height/3
+		target := pos - v.Height/3
 		v.YOffset = clamp(target, 0, v.maxYOffset())
 		return
 	}
 
-	// Wrap mode: find the screen row that corresponds to logicalLine.
+	// Wrap mode: find the screen row that corresponds to pos.
 	v.ensureWrapCache()
 	screenRow := 0
-	for i := 0; i < logicalLine && i < len(v.wrapCache); i++ {
+	for i := 0; i < pos && i < len(v.wrapCache); i++ {
 		screenRow += v.wrapCache[i]
 	}
 	target := screenRow - v.Height/3
@@ -334,7 +402,7 @@ func (v *LogViewport) Update(msg tea.Msg) {
 			v.ScrollDown(1)
 		case keyScrollUp, keyArrowUp:
 			v.ScrollUp(1)
-		case keyPageDown, keyPageDownSpace, keyPageDownF:
+		case keyPageDown, keyPageDownSpace:
 			v.PageDown()
 		case keyPageUp, keyPageUpB:
 			v.PageUp()
@@ -386,7 +454,14 @@ func (v *LogViewport) View(selectedStyle lipgloss.Style) string {
 }
 
 func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
-	n := v.buf.Len()
+	n := v.effectiveLen()
+
+	if n == 0 && v.filterIndices != nil {
+		return lipgloss.NewStyle().
+			Width(v.Width).Height(v.Height).MaxHeight(v.Height).MaxWidth(v.Width).
+			Render(styleDim.Render("0 lines match filter"))
+	}
+
 	top := clamp(v.YOffset, 0, max(0, n-1))
 	bot := clamp(top+v.Height, top, n)
 
@@ -394,7 +469,8 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 	v.longestLineWidth = 0
 
 	for i := top; i < bot; i++ {
-		line := v.display(v.buf.Line(i))
+		bufIdx := v.effectiveBufIdx(i)
+		line := v.display(v.buf.Line(bufIdx))
 
 		if w := ansi.StringWidth(line); w > v.longestLineWidth {
 			v.longestLineWidth = w
@@ -402,7 +478,7 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 		if v.xOffset > 0 || ansi.StringWidth(line) > v.Width {
 			line = ansi.Cut(line, v.xOffset, v.xOffset+v.Width)
 		}
-		if i == v.Selected {
+		if bufIdx == v.Selected {
 			line = selectedStyle.Width(v.Width).Render(ansi.Strip(line))
 		}
 
@@ -420,11 +496,15 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 	v.ensureWrapCache()
 
-	n := v.buf.Len()
+	n := v.effectiveLen()
 	if n == 0 || v.Width <= 0 {
+		var placeholder string
+		if v.filterIndices != nil {
+			placeholder = styleDim.Render("0 lines match filter")
+		}
 		return lipgloss.NewStyle().
 			Width(v.Width).Height(v.Height).MaxHeight(v.Height).
-			Render("")
+			Render(placeholder)
 	}
 
 	yOff := clamp(v.YOffset, 0, v.maxYOffset())
@@ -435,7 +515,8 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 	first := true
 
 	for i := startLine; i < n && rowsWritten < v.Height; i++ {
-		line := v.display(v.buf.Line(i))
+		bufIdx := v.effectiveBufIdx(i)
+		line := v.display(v.buf.Line(bufIdx))
 		h := 1
 		if i < len(v.wrapCache) {
 			h = v.wrapCache[i]
@@ -448,7 +529,7 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 
 		for wr := wStart; wr < h && rowsWritten < v.Height; wr++ {
 			segment := ansi.Cut(line, wr*v.Width, (wr+1)*v.Width)
-			if i == v.Selected {
+			if bufIdx == v.Selected {
 				segment = selectedStyle.Width(v.Width).Render(ansi.Strip(segment))
 			}
 			if !first {

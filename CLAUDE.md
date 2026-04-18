@@ -41,8 +41,9 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
   - `styles.go` — all lipgloss styles
   - `keys.go` — key name constants
   - `prompt.go` — pure function `buildChatMessages()` that constructs the API message list (system prompt + history + fenced log context + question)
-  - `command.go` — command palette dispatcher (`dispatchCommand`) and handlers (`:chat`, `:search`, `:clear`, `:help`, `:model`, `:quit`)
+  - `command.go` — command palette dispatcher (`dispatchCommand`) and handlers (`:chat`, `:search`, `:grep`, `:clear`, `:help`, `:model`, `:quit`)
   - `search.go` — regex search helpers: `runSearch`, `updateSearch`, `nextMatch`, `prevMatch`, `clearSearch`
+  - `filter.go` — view-layer filter: `runFilter`, `updateFilter`, `clearFilter`, `intersectSearch`
 
 ## TUI focus model
 
@@ -62,3 +63,7 @@ logwiz is frequently used in streaming mode (stdin pipe from a live process). An
 - **Incremental updates:** re-scanning the full buffer on every incoming batch is O(N) per batch — avoid it. Prefer scanning only the newly appended tail (`buf.Len()-newLines` → `buf.Len()`) and adjusting existing state for evictions.
 - **Viewport auto-scroll:** `LogViewport.autoScroll` follows the tail by default. Operations that jump to a specific line (e.g. `JumpTo`) disable `autoScroll`; reaching the bottom re-enables it. Incremental updates that sync `Selected` should not call `JumpTo` (which moves the viewport) — set `logs.Selected` directly to avoid disrupting the user's scroll position.
 - **The wrap-height cache** (`LogViewport.wrapCache`) is the canonical example of this pattern: `OnNewLines` calls `updateWrapCache` which evicts front entries and appends heights for new lines in O(newLines).
+
+## Help overlay
+
+The help overlay in `view.go:renderHelpOverlay` is the canonical user-facing reference for all commands and keybindings. **Keep it in sync** whenever you add, remove, or change a command, keybinding, or usage tip. The overlay is opened with `?`.
