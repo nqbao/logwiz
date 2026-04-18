@@ -175,6 +175,107 @@ func TestDispatchCommand_ModelWithArg(t *testing.T) {
 	}
 }
 
+// --- :grep flag parsing ---
+
+func TestParseGrepFlags_NoFlags(t *testing.T) {
+	mode, ci, fs, pat, err := parseGrepFlags("error")
+	if err != nil || mode != filterInclude || ci || fs || pat != "error" {
+		t.Errorf("got mode=%v ci=%v fs=%v pat=%q err=%v", mode, ci, fs, pat, err)
+	}
+}
+
+func TestParseGrepFlags_v(t *testing.T) {
+	mode, _, _, pat, err := parseGrepFlags("-v debug")
+	if err != nil || mode != filterExclude || pat != "debug" {
+		t.Errorf("got mode=%v pat=%q err=%v", mode, pat, err)
+	}
+}
+
+func TestParseGrepFlags_i(t *testing.T) {
+	_, ci, _, pat, err := parseGrepFlags("-i Error")
+	if err != nil || !ci || pat != "Error" {
+		t.Errorf("got ci=%v pat=%q err=%v", ci, pat, err)
+	}
+}
+
+func TestParseGrepFlags_F(t *testing.T) {
+	_, _, fs, pat, err := parseGrepFlags("-F [http]")
+	if err != nil || !fs || pat != "[http]" {
+		t.Errorf("got fs=%v pat=%q err=%v", fs, pat, err)
+	}
+}
+
+func TestParseGrepFlags_Combined_iv(t *testing.T) {
+	mode, ci, _, pat, err := parseGrepFlags("-iv warn")
+	if err != nil || mode != filterExclude || !ci || pat != "warn" {
+		t.Errorf("got mode=%v ci=%v pat=%q err=%v", mode, ci, pat, err)
+	}
+}
+
+func TestParseGrepFlags_Separate_i_v(t *testing.T) {
+	mode, ci, _, pat, err := parseGrepFlags("-i -v warn")
+	if err != nil || mode != filterExclude || !ci || pat != "warn" {
+		t.Errorf("got mode=%v ci=%v pat=%q err=%v", mode, ci, pat, err)
+	}
+}
+
+func TestParseGrepFlags_DoubleDash(t *testing.T) {
+	_, _, _, pat, err := parseGrepFlags("-- -v notaflag")
+	if err != nil || pat != "-v notaflag" {
+		t.Errorf("got pat=%q err=%v", pat, err)
+	}
+}
+
+func TestParseGrepFlags_UnknownFlag(t *testing.T) {
+	_, _, _, _, err := parseGrepFlags("-z pattern")
+	if err == nil {
+		t.Error("expected error for unknown flag -z")
+	}
+	if !strings.Contains(err.Error(), "-z") {
+		t.Errorf("error should mention the unknown flag, got: %v", err)
+	}
+}
+
+func TestGrepCommand_FixedString_EscapesRegexChars(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.buf.Append(logmsg.LogMessage{Raw: "price: $10.00"})
+	m.buf.Append(logmsg.LogMessage{Raw: "price: $20.00"})
+	m.buf.Append(logmsg.LogMessage{Raw: "no match here"})
+
+	// Without -F, "$10.00" as regex would match differently; with -F it's literal.
+	m2, _ := m.dispatchCommand(":grep -F $10.00")
+	if len(m2.filterIndices) != 1 {
+		t.Errorf("filterIndices = %v, want 1 entry for literal match", m2.filterIndices)
+	}
+}
+
+func TestGrepCommand_CaseInsensitive(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.buf.Append(logmsg.LogMessage{Raw: "ERROR: something"})
+	m.buf.Append(logmsg.LogMessage{Raw: "error: other"})
+	m.buf.Append(logmsg.LogMessage{Raw: "info: skip"})
+
+	m2, _ := m.dispatchCommand(":grep -i error")
+	if len(m2.filterIndices) != 2 {
+		t.Errorf("filterIndices = %v, want 2 entries (case-insensitive)", m2.filterIndices)
+	}
+}
+
+func TestGrepCommand_UnknownFlagKeepsPaletteOpen(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+
+	m2, _ := m.dispatchCommand(":grep -z pattern")
+	if !m2.cmdActive {
+		t.Error("cmdActive should remain true after unknown flag")
+	}
+	if m2.cmdErr == "" {
+		t.Error("cmdErr should be set for unknown flag")
+	}
+}
+
 // TestDispatchCommand_Search sets searchRe and positions viewport.
 func TestDispatchCommand_Search(t *testing.T) {
 	m := newTestModel(t)
