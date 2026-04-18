@@ -178,7 +178,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  /             open command palette",
 		"  :chat [q]     open chat sidebar (optionally pre-filled)",
 		"  :search re    regex-search the buffer",
-		"  :filter re    show only lines matching regex",
+		"  :filter re    show only lines matching regex  (tip: (?i)re = case-insensitive)",
 		"  :filter! re   hide lines matching regex",
 		"  :filter       clear active filter",
 		"  :model [name] show or change the active model",
