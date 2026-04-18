@@ -18,16 +18,18 @@ const (
 	keyNextMatch = "n"
 	keyPrevMatch = "N"
 
+	keyFilterToggle = "f" // pause/resume active filter
+	keyFilterClear  = "F" // wipe all filter rules
+
 	// Log viewport scroll keys (mirrors viewport.DefaultKeyMap).
-	keyScrollDown      = "j"
-	keyScrollUp        = "k"
-	keyArrowDown       = "down"
-	keyArrowUp         = "up"
-	keyPageDown        = "pgdown"
-	keyPageDownSpace   = " "
-	keyPageDownF       = "f"
-	keyPageUp          = "pgup"
-	keyPageUpB         = "b"
+	keyScrollDown       = "j"
+	keyScrollUp         = "k"
+	keyArrowDown        = "down"
+	keyArrowUp          = "up"
+	keyPageDown         = "pgdown"
+	keyPageDownSpace    = " "
+	keyPageUp           = "pgup"
+	keyPageUpB          = "b"
 	keyHalfPageDown    = "d"
 	keyHalfPageDownCtrl = "ctrl+d"
 	keyHalfPageUp      = "u"

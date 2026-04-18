@@ -402,7 +402,7 @@ func (v *LogViewport) Update(msg tea.Msg) {
 			v.ScrollDown(1)
 		case keyScrollUp, keyArrowUp:
 			v.ScrollUp(1)
-		case keyPageDown, keyPageDownSpace, keyPageDownF:
+		case keyPageDown, keyPageDownSpace:
 			v.PageDown()
 		case keyPageUp, keyPageUpB:
 			v.PageUp()

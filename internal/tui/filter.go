@@ -31,11 +31,12 @@ func passesFilters(rules []filterRule, raw string) bool {
 	return true
 }
 
-// addFilter appends a rule to the stack and recomputes filterIndices.
-// O(N) full scan; acceptable since buffer is ring-bounded and this only
-// runs on an explicit user command.
+// addFilter appends a rule to the stack, enables the filter, and recomputes
+// filterIndices. O(N) full scan; acceptable since the buffer is ring-bounded
+// and this only runs on an explicit user command.
 func addFilter(m *Model, re *regexp.Regexp, mode filterMode) {
 	m.filterRules = append(m.filterRules, filterRule{re: re, mode: mode})
+	m.filterEnabled = true
 	applyFilters(m)
 }
 
@@ -60,6 +61,8 @@ func applyFilters(m *Model) {
 // updateFilter keeps filterIndices consistent after a batch of new lines is
 // appended to the ring buffer. Must be called after buf.Append has run for
 // the whole batch. Mirrors the updateSearch pattern.
+// filterIndices is always kept current even when the filter is paused, so
+// resuming instantly shows the correct filtered set.
 func (m *Model) updateFilter(newLines, evictions int) {
 	if len(m.filterRules) == 0 {
 		return
@@ -89,22 +92,44 @@ func (m *Model) updateFilter(newLines, evictions int) {
 		}
 	}
 
-	m.logs.SetFilter(m.filterIndices)
-
-	// Keep search aligned with the updated filter.
-	if m.searchRe != nil {
-		m.intersectSearch()
+	// Only push to the viewport and intersect search when filter is active.
+	if m.filterEnabled {
+		m.logs.SetFilter(m.filterIndices)
+		if m.searchRe != nil {
+			m.intersectSearch()
+		}
 	}
 }
 
-// clearFilter resets all filter state and restores the full buffer view.
+// clearFilter wipes all rules and restores the full buffer view.
 // If a search is active its matches are expanded back to the full buffer.
 func (m *Model) clearFilter() {
 	m.filterRules = nil
 	m.filterIndices = nil
+	m.filterEnabled = false
 	m.logs.SetFilter(nil)
 	if m.searchRe != nil {
 		runSearch(m, m.searchRe)
+	}
+}
+
+// pauseFilter temporarily hides the filter from the viewport without
+// discarding the rules. filterIndices continues to be maintained by
+// updateFilter so resuming is instant.
+func (m *Model) pauseFilter() {
+	m.filterEnabled = false
+	m.logs.SetFilter(nil)
+	if m.searchRe != nil {
+		runSearch(m, m.searchRe)
+	}
+}
+
+// resumeFilter re-applies the stored filterIndices to the viewport.
+func (m *Model) resumeFilter() {
+	m.filterEnabled = true
+	m.logs.SetFilter(m.filterIndices)
+	if m.searchRe != nil {
+		m.intersectSearch()
 	}
 }
 
