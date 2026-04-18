@@ -89,8 +89,8 @@ type Model struct {
 	searchCursor  int
 
 	// Filter state (orthogonal to search: filter hides, search highlights).
-	filterRe      *regexp.Regexp
-	filterMode    filterMode
+	// Each :grep / :grep -v appends a rule; all rules are ANDed together.
+	filterRules   []filterRule
 	filterIndices []int
 
 	chatClient *chat.Client

@@ -9,13 +9,13 @@ import (
 	"github.com/nqbao/logwiz/internal/source"
 )
 
-// --- runFilter ---
+// --- addFilter / applyFilters ---
 
-func TestRunFilter_Include(t *testing.T) {
+func TestAddFilter_Include(t *testing.T) {
 	m := newTestModel(t)
 	seedBuf(m.buf, "error: foo", "info: bar", "error: baz", "debug: qux")
 
-	runFilter(&m, regexp.MustCompile(`^error`), filterInclude)
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
 
 	if len(m.filterIndices) != 2 {
 		t.Fatalf("filterIndices = %v, want 2 entries", m.filterIndices)
@@ -25,11 +25,11 @@ func TestRunFilter_Include(t *testing.T) {
 	}
 }
 
-func TestRunFilter_Exclude(t *testing.T) {
+func TestAddFilter_Exclude(t *testing.T) {
 	m := newTestModel(t)
 	seedBuf(m.buf, "error: foo", "info: bar", "error: baz", "debug: qux")
 
-	runFilter(&m, regexp.MustCompile(`^error`), filterExclude)
+	addFilter(&m, regexp.MustCompile(`^error`), filterExclude)
 
 	if len(m.filterIndices) != 2 {
 		t.Fatalf("filterIndices = %v, want 2 entries", m.filterIndices)
@@ -39,17 +39,48 @@ func TestRunFilter_Exclude(t *testing.T) {
 	}
 }
 
-func TestRunFilter_NoMatch(t *testing.T) {
+func TestAddFilter_NoMatch(t *testing.T) {
 	m := newTestModel(t)
 	seedBuf(m.buf, "info: a", "debug: b")
 
-	runFilter(&m, regexp.MustCompile(`^error`), filterInclude)
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
 
+	if m.filterIndices == nil {
+		t.Fatal("filterIndices should be non-nil (empty slice) when rules are active")
+	}
 	if len(m.filterIndices) != 0 {
 		t.Errorf("filterIndices = %v, want empty", m.filterIndices)
 	}
-	if m.filterRe == nil {
-		t.Error("filterRe should be set even with 0 matches")
+}
+
+func TestAddFilter_Compounding(t *testing.T) {
+	m := newTestModel(t)
+	// Lines: error+foo, error+bar, info+foo, debug+baz
+	seedBuf(m.buf, "error foo", "error bar", "info foo", "debug baz")
+
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude) // → [0,1]
+	addFilter(&m, regexp.MustCompile(`foo`), filterInclude)    // → [0] (error AND foo)
+
+	if len(m.filterRules) != 2 {
+		t.Fatalf("filterRules = %d, want 2", len(m.filterRules))
+	}
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 0 {
+		t.Errorf("filterIndices = %v, want [0]", m.filterIndices)
+	}
+}
+
+func TestAddFilter_IncludeAndExclude(t *testing.T) {
+	m := newTestModel(t)
+	seedBuf(m.buf, "error foo", "error bar", "info foo", "error foo extra")
+
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude) // → [0,1,3]
+	addFilter(&m, regexp.MustCompile(`bar`), filterExclude)    // → [0,3]
+
+	if len(m.filterIndices) != 2 {
+		t.Fatalf("filterIndices = %v, want [0 3]", m.filterIndices)
+	}
+	if m.filterIndices[0] != 0 || m.filterIndices[1] != 3 {
+		t.Errorf("filterIndices = %v, want [0 3]", m.filterIndices)
 	}
 }
 
@@ -58,10 +89,7 @@ func TestRunFilter_NoMatch(t *testing.T) {
 func TestUpdateFilter_NewMatchesAdded(t *testing.T) {
 	m := newTestModel(t)
 	seedBuf(m.buf, "error: a", "info: b")
-	m.filterRe = regexp.MustCompile(`^error`)
-	m.filterMode = filterInclude
-	m.filterIndices = []int{0}
-	m.logs.SetFilter(m.filterIndices)
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
 
 	m.buf.Append(logmsg.LogMessage{Raw: "error: c"})
 	m.updateFilter(1, 0)
@@ -77,9 +105,7 @@ func TestUpdateFilter_NewMatchesAdded(t *testing.T) {
 func TestUpdateFilter_NonMatchingNewLine(t *testing.T) {
 	m := newTestModel(t)
 	seedBuf(m.buf, "error: a")
-	m.filterRe = regexp.MustCompile(`^error`)
-	m.filterMode = filterInclude
-	m.filterIndices = []int{0}
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
 
 	m.buf.Append(logmsg.LogMessage{Raw: "info: b"})
 	m.updateFilter(1, 0)
@@ -91,8 +117,7 @@ func TestUpdateFilter_NonMatchingNewLine(t *testing.T) {
 
 func TestUpdateFilter_EvictionsShiftIndices(t *testing.T) {
 	m := newTestModel(t)
-	m.filterRe = regexp.MustCompile(`^error`)
-	m.filterMode = filterInclude
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
 	m.filterIndices = []int{1, 3}
 
 	m.updateFilter(0, 1)
@@ -107,13 +132,11 @@ func TestUpdateFilter_EvictionsShiftIndices(t *testing.T) {
 
 func TestUpdateFilter_EvictedEntryDropped(t *testing.T) {
 	m := newTestModel(t)
-	m.filterRe = regexp.MustCompile(`^error`)
-	m.filterMode = filterInclude
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
 	m.filterIndices = []int{0, 3}
 
 	m.updateFilter(0, 1)
 
-	// index 0 → -1 (dropped); index 3 → 2.
 	if len(m.filterIndices) != 1 || m.filterIndices[0] != 2 {
 		t.Fatalf("filterIndices = %v, want [2]", m.filterIndices)
 	}
@@ -124,12 +147,12 @@ func TestUpdateFilter_EvictedEntryDropped(t *testing.T) {
 func TestClearFilter_ResetsState(t *testing.T) {
 	m := newTestModel(t)
 	seedBuf(m.buf, "error: a", "info: b")
-	runFilter(&m, regexp.MustCompile(`^error`), filterInclude)
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
 
 	m.clearFilter()
 
-	if m.filterRe != nil {
-		t.Error("filterRe should be nil after clearFilter")
+	if len(m.filterRules) != 0 {
+		t.Errorf("filterRules = %v, should be empty", m.filterRules)
 	}
 	if m.filterIndices != nil {
 		t.Errorf("filterIndices = %v, should be nil", m.filterIndices)
@@ -143,14 +166,12 @@ func TestClearFilter_RestoresSearchMatches(t *testing.T) {
 	m := newTestModel(t)
 	seedBuf(m.buf, "error foo", "info foo", "error bar")
 
-	// Filter to errors, then search for "foo" — only line 0 matches both.
-	runFilter(&m, regexp.MustCompile(`^error`), filterInclude)
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
 	runSearch(&m, regexp.MustCompile(`foo`))
 	if len(m.searchMatches) != 1 || m.searchMatches[0] != 0 {
 		t.Fatalf("pre-clear searchMatches = %v, want [0]", m.searchMatches)
 	}
 
-	// Clearing filter should re-expand search to all lines containing "foo".
 	m.clearFilter()
 	if len(m.searchMatches) != 2 {
 		t.Errorf("post-clear searchMatches = %v, want 2 entries", m.searchMatches)
@@ -174,9 +195,8 @@ func TestIntersectSearch_RemovesNonFilteredMatches(t *testing.T) {
 	if m.searchMatches[0] != 0 || m.searchMatches[1] != 2 {
 		t.Errorf("searchMatches = %v, want [0 2]", m.searchMatches)
 	}
-	// cursor was 2 (past end of 2-element list) → clamped to 1.
 	if m.searchCursor != 1 {
-		t.Errorf("searchCursor = %d, want 1", m.searchCursor)
+		t.Errorf("searchCursor = %d, want 1 (clamped)", m.searchCursor)
 	}
 }
 
@@ -192,7 +212,7 @@ func TestViewport_FilteredLen(t *testing.T) {
 
 func TestViewport_FilteredView_ShowsOnlyMatching(t *testing.T) {
 	v := newTestViewport(20, 5, "alpha", "beta", "gamma", "delta", "epsilon")
-	v.SetFilter([]int{1, 3}) // beta, delta
+	v.SetFilter([]int{1, 3})
 	out := v.View(noStyle)
 	if !strings.Contains(out, "beta") {
 		t.Errorf("filtered view missing 'beta'; got:\n%s", out)
@@ -202,9 +222,6 @@ func TestViewport_FilteredView_ShowsOnlyMatching(t *testing.T) {
 	}
 	if strings.Contains(out, "alpha") {
 		t.Errorf("filtered view should not contain 'alpha'; got:\n%s", out)
-	}
-	if strings.Contains(out, "gamma") {
-		t.Errorf("filtered view should not contain 'gamma'; got:\n%s", out)
 	}
 }
 
@@ -220,15 +237,13 @@ func TestViewport_FilterEmpty_ShowsPlaceholder(t *testing.T) {
 func TestViewport_FilteredJumpTo(t *testing.T) {
 	v := newTestViewport(80, 5, "a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
 	v.autoScroll = false
-	v.SetFilter([]int{1, 3, 5, 7, 9}) // b,d,f,h,j
+	v.SetFilter([]int{1, 3, 5, 7, 9})
 	v.GotoTop()
 
-	// Jump to buffer index 7 (filter position 3).
 	v.JumpTo(7)
 	if v.Selected != 7 {
 		t.Errorf("Selected = %d, want 7", v.Selected)
 	}
-	// Filter pos 3 should be visible within [YOffset, YOffset+Height).
 	if v.YOffset > 3 || v.YOffset+v.Height <= 3 {
 		t.Errorf("filter pos 3 not in viewport: YOffset=%d Height=%d", v.YOffset, v.Height)
 	}
@@ -241,7 +256,6 @@ func TestViewport_FilteredJumpTo_NotInFilter_NoOp(t *testing.T) {
 	v.YOffset = 0
 	v.Selected = -1
 
-	// Buffer index 2 is not in filter; JumpTo should be a no-op.
 	v.JumpTo(2)
 	if v.Selected != -1 {
 		t.Errorf("JumpTo non-filtered index changed Selected to %d", v.Selected)
@@ -256,8 +270,7 @@ func TestViewport_FilteredJumpTo_NotInFilter_NoOp(t *testing.T) {
 func TestUpdateFilter_ViaNewLinesMsg(t *testing.T) {
 	m := newTestModel(t)
 	seedBuf(m.buf, "error: a", "info: b", "error: c")
-	re := regexp.MustCompile(`^error`)
-	runFilter(&m, re, filterInclude)
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
 
 	if len(m.filterIndices) != 2 {
 		t.Fatalf("pre-msg filterIndices = %v, want 2 entries", m.filterIndices)

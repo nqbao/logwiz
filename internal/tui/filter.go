@@ -1,6 +1,8 @@
 package tui
 
-import "regexp"
+import (
+	"regexp"
+)
 
 type filterMode int
 
@@ -9,20 +11,45 @@ const (
 	filterExclude
 )
 
-// runFilter scans the full buffer, populates filterIndices, and passes the
-// result to the log viewport. O(N) initial scan is acceptable since the buffer
-// is ring-bounded.
-func runFilter(m *Model, re *regexp.Regexp, mode filterMode) {
-	var indices []int
+// filterRule is one include/exclude predicate in the active filter stack.
+type filterRule struct {
+	re   *regexp.Regexp
+	mode filterMode
+}
+
+// passesFilters returns true when raw satisfies every rule (AND logic).
+func passesFilters(rules []filterRule, raw string) bool {
+	for _, r := range rules {
+		matched := r.re.MatchString(raw)
+		if r.mode == filterInclude && !matched {
+			return false
+		}
+		if r.mode == filterExclude && matched {
+			return false
+		}
+	}
+	return true
+}
+
+// addFilter appends a rule to the stack and recomputes filterIndices.
+// O(N) full scan; acceptable since buffer is ring-bounded and this only
+// runs on an explicit user command.
+func addFilter(m *Model, re *regexp.Regexp, mode filterMode) {
+	m.filterRules = append(m.filterRules, filterRule{re: re, mode: mode})
+	applyFilters(m)
+}
+
+// applyFilters recomputes filterIndices from the current rule stack. The
+// result is always a non-nil slice so the viewport can distinguish "filter
+// active with zero matches" from "no filter".
+func applyFilters(m *Model) {
+	indices := make([]int, 0)
 	n := m.buf.Len()
 	for i := 0; i < n; i++ {
-		matched := re.MatchString(m.buf.Line(i).Raw)
-		if matched == (mode == filterInclude) {
+		if passesFilters(m.filterRules, m.buf.Line(i).Raw) {
 			indices = append(indices, i)
 		}
 	}
-	m.filterRe = re
-	m.filterMode = mode
 	m.filterIndices = indices
 	m.logs.SetFilter(indices)
 	if m.searchRe != nil {
@@ -31,10 +58,10 @@ func runFilter(m *Model, re *regexp.Regexp, mode filterMode) {
 }
 
 // updateFilter keeps filterIndices consistent after a batch of new lines is
-// appended to the ring buffer. Must be called after buf.Append has run for the
-// whole batch. Mirrors the updateSearch pattern.
+// appended to the ring buffer. Must be called after buf.Append has run for
+// the whole batch. Mirrors the updateSearch pattern.
 func (m *Model) updateFilter(newLines, evictions int) {
-	if m.filterRe == nil {
+	if len(m.filterRules) == 0 {
 		return
 	}
 
@@ -57,8 +84,7 @@ func (m *Model) updateFilter(newLines, evictions int) {
 		start = 0
 	}
 	for i := start; i < bufLen; i++ {
-		matched := m.filterRe.MatchString(m.buf.Line(i).Raw)
-		if matched == (m.filterMode == filterInclude) {
+		if passesFilters(m.filterRules, m.buf.Line(i).Raw) {
 			m.filterIndices = append(m.filterIndices, i)
 		}
 	}
@@ -74,7 +100,7 @@ func (m *Model) updateFilter(newLines, evictions int) {
 // clearFilter resets all filter state and restores the full buffer view.
 // If a search is active its matches are expanded back to the full buffer.
 func (m *Model) clearFilter() {
-	m.filterRe = nil
+	m.filterRules = nil
 	m.filterIndices = nil
 	m.logs.SetFilter(nil)
 	if m.searchRe != nil {

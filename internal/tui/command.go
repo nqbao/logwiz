@@ -113,9 +113,11 @@ func cmdSearch(m Model, args string) (Model, tea.Cmd, error) {
 }
 
 // cmdGrep implements :grep [-v] [pattern].
-//   :grep pattern    — show only lines matching pattern (include)
-//   :grep -v pattern — hide lines matching pattern (exclude)
-//   :grep            — clear active filter
+//   :grep pattern    — add include rule (show only matching)
+//   :grep -v pattern — add exclude rule (hide matching)
+//   :grep            — report active rule count (esc clears all)
+//
+// Rules are ANDed: each :grep call narrows the visible set further.
 func cmdGrep(m Model, args string) (Model, tea.Cmd, error) {
 	mode := filterInclude
 	if strings.HasPrefix(args, "-v") {
@@ -123,14 +125,17 @@ func cmdGrep(m Model, args string) (Model, tea.Cmd, error) {
 		args = strings.TrimSpace(args[2:])
 	}
 	if args == "" {
-		m.clearFilter()
-		return m, nil, nil
+		n := len(m.filterRules)
+		if n == 0 {
+			return m, nil, infoErr{"no active filter"}
+		}
+		return m, nil, infoErr{fmt.Sprintf("%d active filter(s) — esc to clear all", n)}
 	}
 	re, err := regexp.Compile(args)
 	if err != nil {
 		return m, nil, err
 	}
-	runFilter(&m, re, mode)
+	addFilter(&m, re, mode)
 	return m, nil, nil
 }
 
