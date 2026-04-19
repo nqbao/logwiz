@@ -117,7 +117,10 @@ func BuildCmdPrompt(question, logContext string) []Message {
 	sys := "You are a log-viewer assistant. Translate the user's natural-language command into exactly one tool call.\n\n" +
 		"Rules:\n" +
 		"- Always call exactly one tool.\n" +
-		"- Use grep/search/jump to operate on log lines; produce valid Go regex.\n" +
+		"- Use grep to filter lines (show only matching or hide matching); produces valid Go regex.\n" +
+		"- Use count when the user asks how many lines match a pattern (e.g. 'how many errors', 'count warnings').\n" +
+		"- Use jump when the user wants to navigate to the first or last occurrence of a pattern.\n" +
+		"- Use clear_grep to remove active filters.\n" +
 		"- Call reject when the input is random text, gibberish, or completely unrelated to log viewing.\n"
 	if logContext != "" {
 		sys += "\n" + logContext
