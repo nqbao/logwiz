@@ -87,12 +87,12 @@ func TestDispatchCommand_Clear(t *testing.T) {
 	m.cmdActive = true
 	m.chatErr = "some error"
 
-	m2, _ := m.dispatchCommand(":clear")
+	m2, _ := m.dispatchCommand(":clear chat")
 	if m2.cmdActive {
-		t.Error("cmdActive should be false after :clear")
+		t.Error("cmdActive should be false after :clear chat")
 	}
 	if m2.chatErr != "" {
-		t.Errorf("chatErr = %q after :clear, want empty", m2.chatErr)
+		t.Errorf("chatErr = %q after :clear chat, want empty", m2.chatErr)
 	}
 }
 

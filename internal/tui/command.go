@@ -259,7 +259,7 @@ func configGetDisplay(cfg config.Config, key string) (string, bool) {
 
 func cmdClear(m Model, args string) (Model, tea.Cmd, error) {
 	switch strings.TrimSpace(args) {
-	case "", "chat":
+	case "chat":
 		return clearChat(m), nil, nil
 	case "grep", "filter":
 		m.clearFilter()
@@ -267,13 +267,8 @@ func cmdClear(m Model, args string) (Model, tea.Cmd, error) {
 	case "hl", "highlight":
 		clearHL(&m)
 		return m, nil, infoErr{"highlights cleared"}
-	case "all":
-		m = clearChat(m)
-		m.clearFilter()
-		clearHL(&m)
-		return m, nil, infoErr{"chat, grep, and highlights cleared"}
 	default:
-		return m, nil, fmt.Errorf("usage: clear [chat|grep|hl|all]")
+		return m, nil, fmt.Errorf("usage: clear chat|grep|hl")
 	}
 }
 
