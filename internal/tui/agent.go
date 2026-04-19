@@ -83,11 +83,17 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			mode = filterExclude
 		}
 		addFilter(&m, re, mode)
-		return agentClosePalette(m), nil
+		verb := "filter"
+		if a.Mode == "exclude" {
+			verb = "exclude"
+		}
+		n := len(m.filterIndices)
+		info := fmt.Sprintf("%s %q · %d line%s", verb, a.Pattern, n, pluralS(n))
+		return agentKeepPalette(m, info), nil
 
 	case "clear_grep":
 		m.clearFilter()
-		return agentClosePalette(m), nil
+		return agentKeepPalette(m, "filters cleared"), nil
 
 	case "search":
 		var a struct {
@@ -101,7 +107,9 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		runSearch(&m, re)
-		return agentClosePalette(m), nil
+		n := len(m.searchMatches)
+		info := fmt.Sprintf("search %q · %d match%s", a.Pattern, n, pluralS(n))
+		return agentKeepPalette(m, info), nil
 
 	case "jump":
 		var a struct {
@@ -120,7 +128,9 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			m.searchCursor = len(m.searchMatches) - 1
 			m.logs.JumpTo(m.searchMatches[m.searchCursor])
 		}
-		return agentClosePalette(m), nil
+		n := len(m.searchMatches)
+		info := fmt.Sprintf("jump %q · %d match%s", a.Pattern, n, pluralS(n))
+		return agentKeepPalette(m, info), nil
 
 	case "set_model":
 		var a struct {
@@ -133,11 +143,11 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		if err != nil {
 			return agentCmdErr(m, err.Error())
 		}
-		return agentClosePalette(newM), cmd
+		return agentKeepPalette(newM, "model: "+a.Model), cmd
 
 	case "clear_chat":
 		m = clearChat(m)
-		return agentClosePalette(m), nil
+		return agentKeepPalette(m, "chat cleared"), nil
 
 	case "answer":
 		var a struct {
@@ -183,13 +193,12 @@ func agentCmdErr(m Model, msg string) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// agentClosePalette closes the palette after a successful agent command.
-func agentClosePalette(m Model) Model {
-	m.cmdActive = false
+// agentKeepPalette keeps the palette open after a successful agent command,
+// clears the input, and shows an informational summary.
+func agentKeepPalette(m Model, info string) Model {
+	m.cmdInfo = info
 	m.cmdErr = ""
-	m.cmdInfo = ""
-	m.cmdInput.Blur()
-	m = m.onResize(m.width, m.height)
+	m.cmdInput.SetValue("")
 	return m
 }
 
