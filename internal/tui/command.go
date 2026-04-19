@@ -15,13 +15,16 @@ import (
 type cmdHandler func(m Model, args string) (Model, tea.Cmd, error)
 
 var cmdRegistry = map[string]cmdHandler{
-	"chat":   cmdChat,
-	"search": cmdSearch,
-	"grep":   cmdGrep,
-	"clear":  cmdClear,
-	"help":   cmdHelp,
-	"config": cmdConfig,
-	"quit":   cmdQuit,
+	"chat":      cmdChat,
+	"search":    cmdSearch,
+	"grep":      cmdGrep,
+	"highlight": cmdHighlight,
+	"hl":        cmdHighlight,
+	"nohl":      cmdNoHL,
+	"clear":     cmdClear,
+	"help":      cmdHelp,
+	"config":    cmdConfig,
+	"quit":      cmdQuit,
 }
 
 // infoErr is returned by handlers that want to keep the palette open and
@@ -266,6 +269,39 @@ func cmdHelp(m Model, _ string) (Model, tea.Cmd, error) {
 func cmdQuit(m Model, _ string) (Model, tea.Cmd, error) {
 	m.Cancel()
 	return m, tea.Quit, nil
+}
+
+// cmdHighlight implements :hl / :highlight [flags] [pattern].
+// Supports -i (case-insensitive) and -F (fixed string), same as :grep.
+// Rules are additive: each call adds a new colour band.
+// :hl with no pattern reports the current highlight state.
+func cmdHighlight(m Model, args string) (Model, tea.Cmd, error) {
+	_, caseInsensitive, fixedString, pattern, err := parseGrepFlags(args)
+	if err != nil {
+		return m, nil, err
+	}
+	if pattern == "" {
+		return m, nil, infoErr{hlInfoMsg(m)}
+	}
+	reStr := pattern
+	if fixedString {
+		reStr = regexp.QuoteMeta(pattern)
+	}
+	if caseInsensitive {
+		reStr = "(?i)" + reStr
+	}
+	re, err := regexp.Compile(reStr)
+	if err != nil {
+		return m, nil, err
+	}
+	addHL(&m, re)
+	return m, nil, nil
+}
+
+// cmdNoHL clears all highlight rules.
+func cmdNoHL(m Model, _ string) (Model, tea.Cmd, error) {
+	clearHL(&m)
+	return m, nil, nil
 }
 
 // clearChat resets conversation state. Used by both the keybinding and

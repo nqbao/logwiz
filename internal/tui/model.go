@@ -99,6 +99,12 @@ type Model struct {
 	filterIndices []int
 	filterEnabled bool
 
+	// Highlight state: colours matching lines without hiding non-matching ones.
+	// Orthogonal to both filter and search; H toggles enabled without losing rules.
+	hlRules   []hlRule
+	hlMatches [][]int
+	hlEnabled bool
+
 	chatClient *agent.Client
 	toolsReg   *tools.Registry
 	redactor   *redact.Redactor
