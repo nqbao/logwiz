@@ -16,9 +16,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
+	"github.com/nqbao/logwiz/internal/redact"
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
 	"github.com/nqbao/logwiz/internal/tools"
@@ -76,13 +77,18 @@ func run() error {
 
 	buf := buffer.New(cfg.MaxLines)
 
-	var client *chat.Client
-	if cfg.APIKey != "" {
-		client = chat.New(cfg.BaseURL, cfg.APIKey, cfg.Model)
+	redactor, err := redact.New(cfg.RedactPatterns)
+	if err != nil {
+		return err
 	}
 
-	registry := tools.NewDefault()
-	model := tui.New(cfg, kind, buf, client, registry)
+	var client *agent.Client
+	if cfg.APIKey != "" {
+		client = agent.New(cfg.BaseURL, cfg.APIKey, cfg.Model)
+	}
+
+	registry := tools.NewDefault(redactor)
+	model := tui.New(cfg, kind, buf, client, registry, redactor)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 

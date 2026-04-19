@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
+	"github.com/nqbao/logwiz/internal/redact"
 )
 
 // MaxToolLines is the maximum number of lines any single tool call may return.
@@ -14,29 +15,31 @@ const MaxToolLines = 500
 
 // Tool is implemented by each buffer-query tool.
 type Tool interface {
-	Spec() chat.ToolSpec
+	Spec() agent.ToolSpec
 	Execute(args json.RawMessage, buf *buffer.Buffer) (string, error)
 }
 
 // Registry holds the set of tools available to the agent.
 type Registry struct {
-	tools map[string]Tool
+	tools   map[string]Tool
+	redactor *redact.Redactor
 }
 
 // NewDefault returns a Registry with the standard tools.
-func NewDefault() *Registry {
-	r := &Registry{tools: make(map[string]Tool)}
+// r may be nil to disable redaction.
+func NewDefault(r *redact.Redactor) *Registry {
+	reg := &Registry{tools: make(map[string]Tool), redactor: r}
 	for _, t := range []Tool{readTool{}, tailTool{}, searchTool{}, countTool{}} {
-		r.tools[t.Spec().Name] = t
+		reg.tools[t.Spec().Name] = t
 	}
-	return r
+	return reg
 }
 
 // Specs returns the tool specifications for all registered tools.
-func (r *Registry) Specs() []chat.ToolSpec {
+func (r *Registry) Specs() []agent.ToolSpec {
 	// Return in a stable order.
 	names := []string{"read", "tail", "search_regex", "count_regex"}
-	out := make([]chat.ToolSpec, 0, len(names))
+	out := make([]agent.ToolSpec, 0, len(names))
 	for _, name := range names {
 		if t, ok := r.tools[name]; ok {
 			out = append(out, t.Spec())
@@ -46,7 +49,8 @@ func (r *Registry) Specs() []chat.ToolSpec {
 }
 
 // Run executes the named tool with the given arguments against buf.
-// Unknown tool names return an "error: ..." string so the agent can recover.
+// The result is redacted before being returned so no sensitive data
+// reaches the LLM. Unknown tool names return an "error: ..." string.
 func (r *Registry) Run(name string, args json.RawMessage, buf *buffer.Buffer) string {
 	t, ok := r.tools[name]
 	if !ok {
@@ -56,5 +60,5 @@ func (r *Registry) Run(name string, args json.RawMessage, buf *buffer.Buffer) st
 	if err != nil {
 		return "error: " + err.Error()
 	}
-	return result
+	return r.redactor.Redact(result)
 }

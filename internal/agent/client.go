@@ -1,6 +1,4 @@
-// Package chat implements a minimal OpenAI-compatible chat-completions
-// client backed by the official openai-go SDK.
-package chat
+package agent
 
 import (
 	"context"
@@ -40,10 +38,61 @@ func (c *Client) Model() string { return c.model }
 // SetModel updates the model used for subsequent requests.
 func (c *Client) SetModel(model string) { c.model = model }
 
+// CompleteWithTools sends msgs with tool_choice "required", forcing the model
+// to call exactly one of the provided tools. Returns the first tool call.
+func (c *Client) CompleteWithTools(ctx context.Context, msgs []Message, tools []ToolSpec) (ToolCall, error) {
+	if c.apiKey == "" {
+		return ToolCall{}, errors.New("chat: API key is not configured")
+	}
+	if c.model == "" {
+		return ToolCall{}, errors.New("chat: model is not configured")
+	}
+	if len(msgs) == 0 {
+		return ToolCall{}, errors.New("chat: no messages to send")
+	}
+	if len(tools) == 0 {
+		return ToolCall{}, errors.New("chat: no tools provided")
+	}
+
+	req := openai.ChatCompletionNewParams{
+		Model:    openai.ChatModel(c.model),
+		Messages: toSDKMessages(msgs),
+		Tools:    toSDKTools(tools),
+		ToolChoice: openai.ChatCompletionToolChoiceOptionUnionParam{
+			OfAuto: openai.String("required"),
+		},
+	}
+
+	completion, err := c.inner.Chat.Completions.New(ctx, req)
+	if err != nil {
+		var apiErr *openai.Error
+		if errors.As(err, &apiErr) {
+			if apiErr.Message != "" {
+				return ToolCall{}, fmt.Errorf("chat: %s (status %d)", apiErr.Message, apiErr.StatusCode)
+			}
+			return ToolCall{}, fmt.Errorf("chat: unexpected status %d", apiErr.StatusCode)
+		}
+		return ToolCall{}, fmt.Errorf("chat: %w", err)
+	}
+
+	if len(completion.Choices) == 0 {
+		return ToolCall{}, errors.New("chat: response contained no choices")
+	}
+
+	tcs := completion.Choices[0].Message.ToolCalls
+	if len(tcs) == 0 {
+		return ToolCall{}, errors.New("chat: model did not call a tool")
+	}
+
+	return ToolCall{
+		ID:        tcs[0].ID,
+		Name:      tcs[0].Function.Name,
+		Arguments: tcs[0].Function.Arguments,
+	}, nil
+}
+
 // Complete sends msgs to the chat-completions endpoint and returns the
-// assistant's reply as a Message (with ToolCalls populated when the model
-// requests tool use). Pass nil or an empty slice for tools when not using
-// function calling.
+// assistant's reply. Pass nil or empty tools when not using function calling.
 func (c *Client) Complete(ctx context.Context, msgs []Message, tools []ToolSpec) (Message, error) {
 	if c.apiKey == "" {
 		return Message{}, errors.New("chat: API key is not configured")

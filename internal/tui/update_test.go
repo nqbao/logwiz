@@ -6,31 +6,34 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/nqbao/logwiz/internal/chat"
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
-// TestChatStepWithToolCallsExecutesTool verifies that when ChatStepMsg
+// TestChatStepWithToolCallsExecutesTool verifies that when AgentStepMsg
 // arrives with tool calls, the model executes the tool, appends a tool
-// result message, increments ToolCount, and issues another runChatStep cmd.
+// result message, increments ToolCount, and issues another Step cmd.
 func TestChatStepWithToolCallsExecutesTool(t *testing.T) {
 	m := newTestModel(t)
 
 	// Simulate a submitted question to set up activeTurn + chatMsgs.
-	m.chatMsgs = []chat.Message{{Role: "user", Content: "show me logs"}}
+	m.chatMsgs = []agent.Message{{Role: "user", Content: "show me logs"}}
 	m.turns = []turnActivity{{LastLabel: "thinking"}}
 	m.activeTurn = 0
 	m.toolBudget = MaxToolTurns
 	m.chatLoading = true
+	m.chatAgent = &Agent{} // sentinel so Update routes to onChatToolCalls
 
-	// Inject a ChatStepMsg that has a tool call.
-	stepMsg := ChatStepMsg{
-		Assistant: chat.Message{
-			Role: "assistant",
-			ToolCalls: []chat.ToolCall{
-				{ID: "call_1", Name: "tail", Arguments: `{"n":5}`},
-			},
+	asst := agent.Message{
+		Role: "assistant",
+		ToolCalls: []agent.ToolCall{
+			{ID: "call_1", Name: "tail", Arguments: `{"n":5}`},
 		},
+	}
+	stepMsg := AgentStepMsg{
+		Agent: m.chatAgent,
+		Asst:  asst,
+		Calls: asst.ToolCalls,
 	}
 
 	m2, cmd := m.Update(stepMsg)
@@ -68,25 +71,24 @@ func TestChatStepWithToolCallsExecutesTool(t *testing.T) {
 	}
 }
 
-// TestChatStepFinalAnswerFinalizesTurn verifies that an assistant message
-// with no tool calls finalizes the active turn.
+// TestChatStepFinalAnswerFinalizesTurn verifies that an AgentDoneMsg
+// with a final answer finalizes the active turn.
 func TestChatStepFinalAnswerFinalizesTurn(t *testing.T) {
 	m := newTestModel(t)
-	m.chatMsgs = []chat.Message{{Role: "user", Content: "q"}}
+	m.chatMsgs = []agent.Message{{Role: "user", Content: "q"}}
 	m.turns = []turnActivity{{LastLabel: "thinking", ToolCount: 2}}
 	m.activeTurn = 0
 	m.toolBudget = MaxToolTurns - 1
 	m.chatLoading = true
 	m.turnIdxByMsg = make(map[int]int)
+	m.chatAgent = &Agent{}
 
-	stepMsg := ChatStepMsg{
-		Assistant: chat.Message{
-			Role:    "assistant",
-			Content: "Here is your answer.",
-		},
+	doneMsg := AgentDoneMsg{
+		Agent:   m.chatAgent,
+		Content: "Here is your answer.",
 	}
 
-	m2, cmd := m.Update(stepMsg)
+	m2, cmd := m.Update(doneMsg)
 	mm := m2.(Model)
 
 	if mm.chatLoading {
@@ -111,20 +113,24 @@ func TestChatStepFinalAnswerFinalizesTurn(t *testing.T) {
 // last tool message gets a budget-exhaustion note appended.
 func TestToolBudgetExhaustion(t *testing.T) {
 	m := newTestModel(t)
-	m.chatMsgs = []chat.Message{{Role: "user", Content: "q"}}
+	m.chatMsgs = []agent.Message{{Role: "user", Content: "q"}}
 	m.turns = []turnActivity{{LastLabel: "thinking"}}
 	m.activeTurn = 0
 	m.toolBudget = 1 // will reach 0 after this call
 	m.chatLoading = true
 	m.turnIdxByMsg = make(map[int]int)
+	m.chatAgent = &Agent{}
 
-	stepMsg := ChatStepMsg{
-		Assistant: chat.Message{
-			Role: "assistant",
-			ToolCalls: []chat.ToolCall{
-				{ID: "c1", Name: "tail", Arguments: `{"n":3}`},
-			},
+	asst := agent.Message{
+		Role: "assistant",
+		ToolCalls: []agent.ToolCall{
+			{ID: "c1", Name: "tail", Arguments: `{"n":3}`},
 		},
+	}
+	stepMsg := AgentStepMsg{
+		Agent: m.chatAgent,
+		Asst:  asst,
+		Calls: asst.ToolCalls,
 	}
 
 	m2, _ := m.Update(stepMsg)

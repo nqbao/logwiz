@@ -1,4 +1,6 @@
-package chat
+// Package agent provides the LLM client, message types, and agent lifecycle
+// for logwiz's chat sidebar and palette agent commands.
+package agent
 
 import "encoding/json"
 

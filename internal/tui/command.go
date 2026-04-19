@@ -48,9 +48,18 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 	}
 
 	if raw[0] != ':' && raw[0] != '/' {
-		m.cmdErr = "prefix commands with : or /"
-		m.cmdInfo = ""
-		return m, nil
+		// Agent command: route through LLM tool-caller.
+		if m.chatClient == nil {
+			m.cmdErr = "agent commands require API key (set OPENAI_API_KEY or --api-key)"
+			m.cmdInfo = ""
+			return m, nil
+		}
+		if m.agentCmdContext == "" {
+			m.agentCmdContext = buildAgentCmdContext(m)
+		}
+		m.cmdInfo = "thinking…"
+		m.cmdErr = ""
+		return startAgentCmd(m, raw)
 	}
 	raw = strings.TrimSpace(raw[1:])
 
@@ -261,5 +270,8 @@ func clearChat(m Model) Model {
 	m.turnIdxByMsg = make(map[int]int)
 	m.activeTurn = -1
 	m.sessionSample = nil
+	m.agentCmdContext = ""
+	m.chatAgent = nil
+	m.cmdAgent = nil
 	return m
 }

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 )
 
 type countTool struct{}
 
-func (countTool) Spec() chat.ToolSpec {
+func (countTool) Spec() agent.ToolSpec {
 	params := json.RawMessage(`{
 		"type": "object",
 		"properties": {
@@ -21,7 +21,7 @@ func (countTool) Spec() chat.ToolSpec {
 		},
 		"required": ["pattern"]
 	}`)
-	return chat.ToolSpec{
+	return agent.ToolSpec{
 		Name:        "count_regex",
 		Description: "Count log lines matching a regex without returning their content. Use this to cheaply assess scale before deciding whether to call search_regex.",
 		Parameters:  params,

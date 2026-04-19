@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nqbao/logwiz/internal/chat"
+	"github.com/nqbao/logwiz/internal/agent"
 )
 
 func TestBuildChatMessagesFirstTurnShape(t *testing.T) {
-	history := []chat.Message{} // first turn: no history
-	msgs := buildChatMessages("SYS", []string{"line1", "line2"}, history, "why is it failing?")
+	history := []agent.Message{} // first turn: no history
+	msgs := agent.BuildChatMessages("SYS", []string{"line1", "line2"}, history, "why is it failing?")
 
 	// system + sample-system + user = 3
 	if len(msgs) != 3 {
@@ -38,11 +38,11 @@ func TestBuildChatMessagesFirstTurnShape(t *testing.T) {
 
 func TestBuildChatMessagesFollowUpTurnShape(t *testing.T) {
 	// Second turn: history already has messages, no sample injection.
-	history := []chat.Message{
+	history := []agent.Message{
 		{Role: "user", Content: "earlier"},
 		{Role: "assistant", Content: "ack"},
 	}
-	msgs := buildChatMessages("SYS", []string{"line1", "line2"}, history, "follow up?")
+	msgs := agent.BuildChatMessages("SYS", []string{"line1", "line2"}, history, "follow up?")
 
 	// system + 2 history + user = 4 (NO sample message)
 	if len(msgs) != 4 {
@@ -61,7 +61,7 @@ func TestBuildChatMessagesFollowUpTurnShape(t *testing.T) {
 
 func TestBuildChatMessagesEmptySample(t *testing.T) {
 	// No sample: even on first turn, no sample message injected.
-	msgs := buildChatMessages("SYS", nil, nil, "q")
+	msgs := agent.BuildChatMessages("SYS", nil, nil, "q")
 	if len(msgs) != 2 {
 		t.Fatalf("len = %d, want 2", len(msgs))
 	}
@@ -73,12 +73,12 @@ func TestBuildChatMessagesEmptySample(t *testing.T) {
 func TestBuildChatMessagesContinuationAfterToolResult(t *testing.T) {
 	// After tool execution the last message in history is a tool result;
 	// pass empty question to avoid appending a duplicate user turn.
-	history := []chat.Message{
+	history := []agent.Message{
 		{Role: "user", Content: "q"},
-		{Role: "assistant", ToolCalls: []chat.ToolCall{{ID: "1", Name: "tail", Arguments: `{"n":10}`}}},
+		{Role: "assistant", ToolCalls: []agent.ToolCall{{ID: "1", Name: "tail", Arguments: `{"n":10}`}}},
 		{Role: "tool", ToolCallID: "1", Name: "tail", Content: "total=50\nline 49: last"},
 	}
-	msgs := buildChatMessages("SYS", []string{"sample"}, history, "")
+	msgs := agent.BuildChatMessages("SYS", []string{"sample"}, history, "")
 
 	// system + sample (first turn? no — history is non-empty) + 3 history = 4
 	// History is non-empty so no sample injection.

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 )
 
 type readTool struct{}
 
-func (readTool) Spec() chat.ToolSpec {
+func (readTool) Spec() agent.ToolSpec {
 	params := json.RawMessage(`{
 		"type": "object",
 		"properties": {
@@ -20,7 +20,7 @@ func (readTool) Spec() chat.ToolSpec {
 		},
 		"required": ["start", "n"]
 	}`)
-	return chat.ToolSpec{
+	return agent.ToolSpec{
 		Name:        "read",
 		Description: "Read n lines from the log buffer starting at absolute chronological index start. Returns lines with their index numbers and a total= header.",
 		Parameters:  params,

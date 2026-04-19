@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
@@ -23,7 +23,7 @@ func newTestModel(t *testing.T) Model {
 		SystemPrompt: "sys",
 		Model:        "m",
 	}
-	m := New(cfg, SourceStdin, buffer.New(cfg.MaxLines), nil, tools.NewDefault())
+	m := New(cfg, SourceStdin, buffer.New(cfg.MaxLines), nil, tools.NewDefault(nil), nil)
 	// Simulate an initial resize so layout-dependent code works.
 	mi, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	return mi.(Model)
@@ -115,7 +115,8 @@ func TestChatReplyAppendsAssistantMessage(t *testing.T) {
 func TestChatErrClearsLoadingAndRecordsMessage(t *testing.T) {
 	m := newTestModel(t)
 	m.chatLoading = true
-	m2, _ := m.Update(ChatErrMsg{Err: errExample("boom")})
+	m.chatAgent = &Agent{}
+	m2, _ := m.Update(AgentErrMsg{Agent: m.chatAgent, Err: errExample("boom")})
 	mm := m2.(Model)
 	if mm.chatLoading {
 		t.Fatal("chatLoading still true")
@@ -127,7 +128,7 @@ func TestChatErrClearsLoadingAndRecordsMessage(t *testing.T) {
 
 func TestClearEmptiesChat(t *testing.T) {
 	m := newTestModel(t)
-	m.chatMsgs = []chat.Message{{Role: "user", Content: "x"}}
+	m.chatMsgs = []agent.Message{{Role: "user", Content: "x"}}
 	m.chatErr = "some err"
 	// 'c' works only in logs focus; sidebar closed by default.
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})

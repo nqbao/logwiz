@@ -16,10 +16,11 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
-	"github.com/nqbao/logwiz/internal/chat"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/highlight"
+	"github.com/nqbao/logwiz/internal/redact"
 	"github.com/nqbao/logwiz/internal/tools"
 )
 
@@ -67,7 +68,7 @@ type Model struct {
 	sidebarOpen bool
 	convo       viewport.Model // chat conversation viewport
 	input       textarea.Model
-	chatMsgs    []chat.Message // excludes system prompt
+	chatMsgs    []agent.Message // excludes system prompt
 	chatLoading bool
 	chatErr     string
 
@@ -95,20 +96,27 @@ type Model struct {
 	filterIndices []int
 	filterEnabled bool
 
-	chatClient *chat.Client
+	chatClient *agent.Client
 	toolsReg   *tools.Registry
+	redactor   *redact.Redactor
 
-	// Agent loop state.
+	// Agent loop state (shared by chat and command agents).
 	turns        []turnActivity
 	turnIdxByMsg map[int]int // chatMsgs index -> turns index (final assistant only)
 	activeTurn   int         // index into turns; -1 when idle
-	toolBudget   int         // remaining tool round-trips in current question
+	toolBudget   int         // remaining tool round-trips in current chat turn
 	spinnerTick  int
+
+	chatAgent *Agent // non-nil while the chat agent loop is running
+	cmdAgent  *Agent // non-nil while a palette agent command is in flight
 
 	hintIdx int // cycles through inputHints
 
 	// sessionSample is the one-shot log snapshot captured on first submit.
 	sessionSample []string
+
+	// agentCmdContext is a cached log sample for agent command routing; cleared on clearChat.
+	agentCmdContext string
 
 	// ctx controls in-flight chat requests; cancelled on quit.
 	ctx    context.Context
@@ -124,7 +132,7 @@ var inputHints = []string{
 }
 
 // New builds a ready-to-run Model.
-func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Client, reg *tools.Registry) Model {
+func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.Client, reg *tools.Registry, r *redact.Redactor) Model {
 	ta := textarea.New()
 	ta.Placeholder = inputHints[0]
 	ta.Prompt = ""
@@ -134,7 +142,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 
 	ci := textinput.New()
 	ci.Prompt = ""
-	ci.Placeholder = ":command  or  /command"
+	ci.Placeholder = ":command  /command  or describe what you want"
 	ci.CharLimit = 200
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -157,6 +165,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *chat.Cl
 		focus:        focusLogs,
 		chatClient:   client,
 		toolsReg:     reg,
+		redactor:     r,
 		turnIdxByMsg: make(map[int]int),
 		activeTurn:   -1,
 		ctx:          ctx,
