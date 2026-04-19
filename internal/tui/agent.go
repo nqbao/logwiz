@@ -44,32 +44,66 @@ func buildAgentCmdContext(m Model) string {
 }
 
 // startAgentCmd creates a short-lived cmd agent and fires its first Step.
+// Context is rebuilt fresh each invocation.
 func startAgentCmd(m Model, raw string) (Model, tea.Cmd) {
-	msgs := agent.BuildCmdPrompt(raw, m.agentCmdContext)
+	ctx := buildAgentCmdContext(m)
+	msgs := agent.BuildCmdPrompt(raw, ctx)
 	m.cmdAgent = agent.NewCmdAgent(m.chatClient, m.ctx, msgs)
+	m.cmdToolBudget = MaxCmdToolTurns
 	return m, m.cmdAgent.Step()
 }
 
-// executeCmdTool routes the agent command's single tool call to the appropriate
-// TUI handler. Called from Update when AgentStepMsg arrives for a cmdAgent.
+// executeCmdTool routes the agent's tool call to the appropriate TUI handler.
+// Inspection calls (find, count) feed a result back and keep the loop alive.
+// pick_tool commits an action and closes the loop.
 func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
-	m.cmdAgent = nil
 	if len(msg.Calls) == 0 {
+		m.cmdAgent = nil
 		return agentCmdErr(m, "agent returned no tool call")
 	}
 	call := msg.Calls[0]
-	args := json.RawMessage(call.Arguments)
 
+	// Inspection tools: read-only, feed result back, keep looping.
 	switch call.Name {
+	case "find", "count":
+		result, info := runCmdInspection(m, call)
+		toolMsg := agent.Message{
+			Role:       "tool",
+			ToolCallID: call.ID,
+			Name:       call.Name,
+			Content:    result,
+		}
+		m.cmdToolBudget--
+		if m.cmdToolBudget <= 0 {
+			msg.Agent.Tools = []agent.ToolSpec{agent.CmdCommitToolDef()}
+		}
+		m.cmdInfo = info
+		m.cmdErr = ""
+		msg.Agent.FeedResults(msg.Asst, []agent.Message{toolMsg})
+		return m, msg.Agent.Step()
+	}
+
+	// Commit tool: dispatch action and close the loop.
+	m.cmdAgent = nil
+	if call.Name != "pick_tool" {
+		return agentCmdErr(m, fmt.Sprintf("unknown agent tool: %s", call.Name))
+	}
+
+	var a struct {
+		Action   string `json:"action"`
+		Pattern  string `json:"pattern"`
+		Mode     string `json:"mode"`
+		Flags    string `json:"flags"`
+		Position string `json:"position"`
+		Model    string `json:"model"`
+		Reason   string `json:"reason"`
+	}
+	if err := json.Unmarshal(json.RawMessage(call.Arguments), &a); err != nil {
+		return agentCmdErr(m, "agent command error: "+err.Error())
+	}
+
+	switch a.Action {
 	case "grep":
-		var a struct {
-			Pattern string `json:"pattern"`
-			Mode    string `json:"mode"`
-			Flags   string `json:"flags"`
-		}
-		if err := json.Unmarshal(args, &a); err != nil {
-			return agentCmdErr(m, "agent command error: "+err.Error())
-		}
 		reStr := a.Pattern
 		if a.Flags == "i" {
 			reStr = "(?i)" + reStr
@@ -93,40 +127,12 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		m.clearFilter()
 		return agentKeepPalette(m, "filters cleared"), nil
 
-	case "count":
-		var a struct {
-			Pattern string `json:"pattern"`
-			Flags   string `json:"flags"`
-		}
-		if err := json.Unmarshal(args, &a); err != nil {
-			return agentCmdErr(m, "agent command error: "+err.Error())
-		}
+	case "jump":
 		reStr := a.Pattern
 		if a.Flags == "i" {
 			reStr = "(?i)" + reStr
 		}
 		re, err := regexp.Compile(reStr)
-		if err != nil {
-			return agentCmdErr(m, "invalid regex: "+err.Error())
-		}
-		n := m.buf.Len()
-		count := 0
-		for i := 0; i < n; i++ {
-			if re.MatchString(m.buf.Line(i).Raw) {
-				count++
-			}
-		}
-		return agentKeepPalette(m, fmt.Sprintf("count %q · %d of %d line%s", a.Pattern, count, n, pluralS(n))), nil
-
-	case "jump":
-		var a struct {
-			Pattern  string `json:"pattern"`
-			Position string `json:"position"`
-		}
-		if err := json.Unmarshal(args, &a); err != nil {
-			return agentCmdErr(m, "agent command error: "+err.Error())
-		}
-		re, err := regexp.Compile(a.Pattern)
 		if err != nil {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
@@ -138,12 +144,6 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		return agentKeepPalette(m, fmt.Sprintf("jump: %q", a.Pattern)), nil
 
 	case "set_model":
-		var a struct {
-			Model string `json:"model"`
-		}
-		if err := json.Unmarshal(args, &a); err != nil {
-			return agentCmdErr(m, "agent command error: "+err.Error())
-		}
 		newM, cmd, err := cmdConfig(m, "model "+a.Model)
 		if err != nil {
 			return agentCmdErr(m, err.Error())
@@ -154,40 +154,82 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		m = clearChat(m)
 		return agentKeepPalette(m, "chat cleared"), nil
 
-	// TODO: "answer" was intended to bridge the command-palette agent and the
-	// chat agent — forwarding a question from the palette directly into the
-	// sidebar chat turn. Disabled for now until we decide the right UX for
-	// handing off context between the two agents.
-	//
-	// case "answer":
-	// 	var a struct {
-	// 		Question string `json:"question"`
-	// 	}
-	// 	if err := json.Unmarshal(args, &a); err != nil {
-	// 		return agentCmdErr(m, "agent command error: "+err.Error())
-	// 	}
-	// 	m.cmdActive = false
-	// 	m.cmdErr = ""
-	// 	m.cmdInfo = ""
-	// 	m.cmdInput.Blur()
-	// 	m.sidebarOpen = true
-	// 	m.focus = focusChat
-	// 	m.input.SetValue(a.Question)
-	// 	m = m.onResize(m.width, m.height)
-	// 	focusCmd := m.input.Focus()
-	// 	model, cmd := m.submitChat()
-	// 	return model.(Model), tea.Batch(focusCmd, cmd)
-
 	case "quit":
 		m.Cancel()
 		return m, tea.Quit
 
 	case "reject":
-		return agentCmdErr(m, "command not understood — use :chat to start a conversation")
+		return agentKeepPalette(m, a.Reason), nil
 
 	default:
-		return agentCmdErr(m, fmt.Sprintf("unknown agent tool: %s", call.Name))
+		return agentCmdErr(m, fmt.Sprintf("unknown pick_tool action: %s", a.Action))
 	}
+}
+
+// runCmdInspection executes a read-only find or count call against the buffer.
+// Returns the full tool result string for the LLM and a short label for cmdInfo.
+func runCmdInspection(m Model, call agent.ToolCall) (result, info string) {
+	var a struct {
+		Pattern string `json:"pattern"`
+		Flags   string `json:"flags"`
+	}
+	if err := json.Unmarshal(json.RawMessage(call.Arguments), &a); err != nil {
+		return "error: " + err.Error(), "error"
+	}
+	reStr := a.Pattern
+	if a.Flags == "i" {
+		reStr = "(?i)" + reStr
+	}
+	re, err := regexp.Compile(reStr)
+	if err != nil {
+		return "error: invalid pattern: " + err.Error(), "error"
+	}
+	n := m.buf.Len()
+
+	if call.Name == "count" {
+		cnt := 0
+		for i := 0; i < n; i++ {
+			if re.MatchString(m.buf.Line(i).Raw) {
+				cnt++
+			}
+		}
+		return fmt.Sprintf("count: %d of %d lines", cnt, n),
+			fmt.Sprintf("checking… %d matches", cnt)
+	}
+
+	// find: collect count, first/last line, up to 10 samples.
+	const maxSamples = 10
+	cnt := 0
+	firstLine := -1
+	lastLine := -1
+	var samples []string
+	for i := 0; i < n; i++ {
+		line := m.buf.Line(i)
+		if re.MatchString(line.Raw) {
+			cnt++
+			if firstLine == -1 {
+				firstLine = i + 1 // 1-based
+			}
+			lastLine = i + 1 // 1-based
+			if len(samples) < maxSamples {
+				samples = append(samples, fmt.Sprintf("[line %d] %s", i+1, line.Raw))
+			}
+		}
+	}
+	info = fmt.Sprintf("checking… %d matches", cnt)
+	if cnt == 0 {
+		result = fmt.Sprintf("count: 0 of %d lines — no matches", n)
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "count: %d of %d lines\nfirst_line: %d\nlast_line: %d\nsamples:\n", cnt, n, firstLine, lastLine)
+	for _, s := range samples {
+		b.WriteString("  ")
+		b.WriteString(s)
+		b.WriteByte('\n')
+	}
+	result = b.String()
+	return
 }
 
 // agentCmdErr shows an error in the palette without closing it.

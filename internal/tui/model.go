@@ -42,6 +42,9 @@ const (
 // MaxToolTurns is the maximum number of tool round-trips per user question.
 const MaxToolTurns = 6
 
+// MaxCmdToolTurns is the maximum number of inspection round-trips for a palette command.
+const MaxCmdToolTurns = 3
+
 // turnActivity records status for one assistant turn (from user question to
 // final answer). It is displayed as a dim activity line in the sidebar.
 type turnActivity struct {
@@ -107,16 +110,14 @@ type Model struct {
 	toolBudget   int         // remaining tool round-trips in current chat turn
 	spinnerTick  int
 
-	chatAgent *Agent // non-nil while the chat agent loop is running
-	cmdAgent  *Agent // non-nil while a palette agent command is in flight
+	chatAgent    *Agent // non-nil while the chat agent loop is running
+	cmdAgent     *Agent // non-nil while a palette agent command is in flight
+	cmdToolBudget int   // remaining inspection round-trips for current palette command
 
 	hintIdx int // cycles through inputHints
 
 	// sessionSample is the one-shot log snapshot captured on first submit.
 	sessionSample []string
-
-	// agentCmdContext is a cached log sample for agent command routing; cleared on clearChat.
-	agentCmdContext string
 
 	// ctx controls in-flight chat requests; cancelled on quit.
 	ctx    context.Context

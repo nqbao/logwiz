@@ -54,9 +54,6 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 			m.cmdInfo = ""
 			return m, nil
 		}
-		if m.agentCmdContext == "" {
-			m.agentCmdContext = buildAgentCmdContext(m)
-		}
 		m.cmdInfo = "thinking…"
 		m.cmdErr = ""
 		return startAgentCmd(m, raw)
@@ -280,7 +277,6 @@ func clearChat(m Model) Model {
 	m.turnIdxByMsg = make(map[int]int)
 	m.activeTurn = -1
 	m.sessionSample = nil
-	m.agentCmdContext = ""
 	m.chatAgent = nil
 	m.cmdAgent = nil
 	return m
