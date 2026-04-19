@@ -87,9 +87,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		if a.Mode == "exclude" {
 			verb = "exclude"
 		}
-		n := len(m.filterIndices)
-		info := fmt.Sprintf("%s %q · %d line%s", verb, a.Pattern, n, pluralS(n))
-		return agentKeepPalette(m, info), nil
+		return agentKeepPalette(m, fmt.Sprintf("%s: %q", verb, a.Pattern)), nil
 
 	case "clear_grep":
 		m.clearFilter()
@@ -107,9 +105,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		runSearch(&m, re)
-		n := len(m.searchMatches)
-		info := fmt.Sprintf("search %q · %d match%s", a.Pattern, n, pluralS(n))
-		return agentKeepPalette(m, info), nil
+		return agentKeepPalette(m, fmt.Sprintf("search: %q", a.Pattern)), nil
 
 	case "jump":
 		var a struct {
@@ -128,9 +124,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			m.searchCursor = len(m.searchMatches) - 1
 			m.logs.JumpTo(m.searchMatches[m.searchCursor])
 		}
-		n := len(m.searchMatches)
-		info := fmt.Sprintf("jump %q · %d match%s", a.Pattern, n, pluralS(n))
-		return agentKeepPalette(m, info), nil
+		return agentKeepPalette(m, fmt.Sprintf("jump: %q", a.Pattern)), nil
 
 	case "set_model":
 		var a struct {
