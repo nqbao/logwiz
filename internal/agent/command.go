@@ -39,6 +39,18 @@ func CmdToolDefs() []ToolSpec {
 			Parameters:  must(`{"type":"object","properties":{}}`),
 		},
 		{
+			Name:        "count",
+			Description: "Count log lines matching a pattern and report the number.",
+			Parameters: must(`{
+				"type": "object",
+				"properties": {
+					"pattern": {"type": "string", "description": "Go regex pattern"},
+					"flags":   {"type": "string", "enum": ["i", ""], "description": "i = case-insensitive"}
+				},
+				"required": ["pattern"]
+			}`),
+		},
+		{
 			Name:        "jump",
 			Description: "Jump the log viewport to the first or last line matching a pattern.",
 			Parameters: must(`{
