@@ -89,6 +89,7 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 			// saves the new value then reports it).
 			newM.cmdInfo = ie.msg
 			newM.cmdErr = ""
+			newM.cmdInput.SetValue("")
 			return newM, cmd
 		}
 		m.cmdErr = err.Error()
