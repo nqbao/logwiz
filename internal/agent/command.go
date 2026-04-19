@@ -39,12 +39,13 @@ func CmdToolDefs() []ToolSpec {
 			Parameters:  must(`{"type":"object","properties":{}}`),
 		},
 		{
-			Name:        "search",
-			Description: "Highlight log lines matching a pattern without hiding others.",
+			Name:        "count",
+			Description: "Count log lines matching a pattern and report the number.",
 			Parameters: must(`{
 				"type": "object",
 				"properties": {
-					"pattern": {"type": "string", "description": "Go regex pattern"}
+					"pattern": {"type": "string", "description": "Go regex pattern"},
+					"flags":   {"type": "string", "enum": ["i", ""], "description": "i = case-insensitive"}
 				},
 				"required": ["pattern"]
 			}`),
@@ -77,17 +78,21 @@ func CmdToolDefs() []ToolSpec {
 			Description: "Reset the chat conversation history.",
 			Parameters:  must(`{"type":"object","properties":{}}`),
 		},
-		{
-			Name:        "answer",
-			Description: "Open the chat sidebar and submit a question about the logs. Use for any analysis or question request.",
-			Parameters: must(`{
-				"type": "object",
-				"properties": {
-					"question": {"type": "string", "description": "the question to ask about the logs"}
-				},
-				"required": ["question"]
-			}`),
-		},
+		// TODO: "answer" is disabled — intended to bridge the palette agent into
+		// the chat agent by forwarding the question to the sidebar. Needs a
+		// cleaner handoff design before re-enabling.
+		//
+		// {
+		// 	Name:        "answer",
+		// 	Description: "Open the chat sidebar and submit a question about the logs. Use for any analysis or question request.",
+		// 	Parameters: must(`{
+		// 		"type": "object",
+		// 		"properties": {
+		// 			"question": {"type": "string", "description": "the question to ask about the logs"}
+		// 		},
+		// 		"required": ["question"]
+		// 	}`),
+		// },
 		{
 			Name:        "quit",
 			Description: "Exit logwiz.",
@@ -112,8 +117,10 @@ func BuildCmdPrompt(question, logContext string) []Message {
 	sys := "You are a log-viewer assistant. Translate the user's natural-language command into exactly one tool call.\n\n" +
 		"Rules:\n" +
 		"- Always call exactly one tool.\n" +
-		"- Use grep/search/jump to operate on log lines; produce valid Go regex.\n" +
-		"- Use answer for any question or analysis request about the logs.\n" +
+		"- Use grep to filter lines (show only matching or hide matching); produces valid Go regex.\n" +
+		"- Use count when the user asks how many lines match a pattern (e.g. 'how many errors', 'count warnings').\n" +
+		"- Use jump when the user wants to navigate to the first or last occurrence of a pattern.\n" +
+		"- Use clear_grep to remove active filters.\n" +
 		"- Call reject when the input is random text, gibberish, or completely unrelated to log viewing.\n"
 	if logContext != "" {
 		sys += "\n" + logContext

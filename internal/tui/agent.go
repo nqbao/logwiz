@@ -83,25 +83,40 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			mode = filterExclude
 		}
 		addFilter(&m, re, mode)
-		return agentClosePalette(m), nil
+		verb := "filter"
+		if a.Mode == "exclude" {
+			verb = "exclude"
+		}
+		return agentKeepPalette(m, fmt.Sprintf("%s: %q", verb, a.Pattern)), nil
 
 	case "clear_grep":
 		m.clearFilter()
-		return agentClosePalette(m), nil
+		return agentKeepPalette(m, "filters cleared"), nil
 
-	case "search":
+	case "count":
 		var a struct {
 			Pattern string `json:"pattern"`
+			Flags   string `json:"flags"`
 		}
 		if err := json.Unmarshal(args, &a); err != nil {
 			return agentCmdErr(m, "agent command error: "+err.Error())
 		}
-		re, err := regexp.Compile(a.Pattern)
+		reStr := a.Pattern
+		if a.Flags == "i" {
+			reStr = "(?i)" + reStr
+		}
+		re, err := regexp.Compile(reStr)
 		if err != nil {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
-		runSearch(&m, re)
-		return agentClosePalette(m), nil
+		n := m.buf.Len()
+		count := 0
+		for i := 0; i < n; i++ {
+			if re.MatchString(m.buf.Line(i).Raw) {
+				count++
+			}
+		}
+		return agentKeepPalette(m, fmt.Sprintf("count %q · %d of %d line%s", a.Pattern, count, n, pluralS(n))), nil
 
 	case "jump":
 		var a struct {
@@ -120,7 +135,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			m.searchCursor = len(m.searchMatches) - 1
 			m.logs.JumpTo(m.searchMatches[m.searchCursor])
 		}
-		return agentClosePalette(m), nil
+		return agentKeepPalette(m, fmt.Sprintf("jump: %q", a.Pattern)), nil
 
 	case "set_model":
 		var a struct {
@@ -133,43 +148,42 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		if err != nil {
 			return agentCmdErr(m, err.Error())
 		}
-		return agentClosePalette(newM), cmd
+		return agentKeepPalette(newM, "model: "+a.Model), cmd
 
 	case "clear_chat":
 		m = clearChat(m)
-		return agentClosePalette(m), nil
+		return agentKeepPalette(m, "chat cleared"), nil
 
-	case "answer":
-		var a struct {
-			Question string `json:"question"`
-		}
-		if err := json.Unmarshal(args, &a); err != nil {
-			return agentCmdErr(m, "agent command error: "+err.Error())
-		}
-		m.cmdActive = false
-		m.cmdErr = ""
-		m.cmdInfo = ""
-		m.cmdInput.Blur()
-		m.sidebarOpen = true
-		m.focus = focusChat
-		m.input.SetValue(a.Question)
-		m = m.onResize(m.width, m.height)
-		focusCmd := m.input.Focus()
-		model, cmd := m.submitChat()
-		return model.(Model), tea.Batch(focusCmd, cmd)
+	// TODO: "answer" was intended to bridge the command-palette agent and the
+	// chat agent — forwarding a question from the palette directly into the
+	// sidebar chat turn. Disabled for now until we decide the right UX for
+	// handing off context between the two agents.
+	//
+	// case "answer":
+	// 	var a struct {
+	// 		Question string `json:"question"`
+	// 	}
+	// 	if err := json.Unmarshal(args, &a); err != nil {
+	// 		return agentCmdErr(m, "agent command error: "+err.Error())
+	// 	}
+	// 	m.cmdActive = false
+	// 	m.cmdErr = ""
+	// 	m.cmdInfo = ""
+	// 	m.cmdInput.Blur()
+	// 	m.sidebarOpen = true
+	// 	m.focus = focusChat
+	// 	m.input.SetValue(a.Question)
+	// 	m = m.onResize(m.width, m.height)
+	// 	focusCmd := m.input.Focus()
+	// 	model, cmd := m.submitChat()
+	// 	return model.(Model), tea.Batch(focusCmd, cmd)
 
 	case "quit":
 		m.Cancel()
 		return m, tea.Quit
 
 	case "reject":
-		var a struct {
-			Reason string `json:"reason"`
-		}
-		if err := json.Unmarshal(args, &a); err != nil {
-			return agentCmdErr(m, "not a recognized command")
-		}
-		return agentCmdErr(m, a.Reason)
+		return agentCmdErr(m, "command not understood — use :chat to start a conversation")
 
 	default:
 		return agentCmdErr(m, fmt.Sprintf("unknown agent tool: %s", call.Name))
@@ -183,13 +197,12 @@ func agentCmdErr(m Model, msg string) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// agentClosePalette closes the palette after a successful agent command.
-func agentClosePalette(m Model) Model {
-	m.cmdActive = false
+// agentKeepPalette keeps the palette open after a successful agent command,
+// clears the input, and shows an informational summary.
+func agentKeepPalette(m Model, info string) Model {
+	m.cmdInfo = info
 	m.cmdErr = ""
-	m.cmdInfo = ""
-	m.cmdInput.Blur()
-	m = m.onResize(m.width, m.height)
+	m.cmdInput.SetValue("")
 	return m
 }
 
