@@ -37,7 +37,17 @@
     {"name": "crash-frame-fn",  "template": "main.{choice:handler,processItems,run,serve}(...)"},
     {"name": "crash-frame-loc", "template": "\t/app/{choice:main,handler,server}.go:{rand:20-120} +0x{rand:100-999}"},
     {"name": "crash-stdlib",    "template": "net/http.(*ServeMux).ServeHTTP(...)"},
-    {"name": "crash-exit",      "template": "exit status 2"}
+    {"name": "crash-exit",      "template": "exit status 2"},
+
+    {"name": "pyecom-cart-add",        "template": "{ts} DEBUG cart.item_added     user_id={rand:1-5000} sku={choice:SKU-001,SKU-042,SKU-107,SKU-203,SKU-388} qty={rand:1-5} price={rand:5-299}.{rand:10-99}"},
+    {"name": "pyecom-inventory-check", "template": "{ts} DEBUG inventory.check     sku={choice:SKU-001,SKU-042,SKU-107,SKU-203,SKU-388} stock={rand:0-500}"},
+    {"name": "pyecom-order-created",   "template": "{ts} INFO  order.created       order_id={rand:10000-99999} user_id={rand:1-5000} items={rand:1-8} total={rand:10-499}.{rand:10-99}"},
+    {"name": "pyecom-payment-ok",      "template": "{ts} INFO  payment.charged     order_id={rand:10000-99999} provider={choice:stripe,paypal,braintree} amount={rand:10-499}.{rand:10-99} duration_ms={rand:80-600}"},
+    {"name": "pyecom-order-fulfilled", "template": "{ts} INFO  order.fulfilled     order_id={rand:10000-99999} warehouse={choice:US-EAST,US-WEST,EU-CENTRAL} items={rand:1-8}"},
+    {"name": "pyecom-order-shipped",   "template": "{ts} INFO  shipment.dispatched order_id={rand:10000-99999} carrier={choice:fedex,ups,usps,dhl} tracking={rand:100000000-999999999}"},
+    {"name": "pyecom-payment-failed",  "template": "{ts} WARNING payment.failed    order_id={rand:10000-99999} provider={choice:stripe,paypal} reason={choice:insufficient_funds,card_declined,fraud_detected}"},
+    {"name": "pyecom-stock-low",       "template": "{ts} WARNING inventory.low     sku={choice:SKU-001,SKU-042,SKU-107} stock={rand:1-10} threshold=20"},
+    {"name": "pyecom-exception", "template": "Traceback (most recent call last):{nl}  File \"/app/{choice:orders/views,payments/processor,cart/models,inventory/tasks}.py\", line {rand:20-200}, in {choice:process_order,handle_payment,checkout,reserve_stock}{nl}    {choice:result = gateway.charge(order),order.save(),cart.checkout(),inventory.reserve(sku)}{nl}{choice:stripe.error.CardError,django.db.OperationalError,requests.exceptions.Timeout,KeyError,ValueError}: {choice:Your card was declined.,no such table: orders_orderitem,Read timed out. (connect timeout=5),'product_id',invalid literal for int() with base 10}"}
   ],
   "presets": [
     {
@@ -97,6 +107,20 @@
         {"name": "crash-frame-loc", "weight": 15},
         {"name": "crash-stdlib",    "weight": 10},
         {"name": "crash-exit",      "weight": 5}
+      ]
+    },
+    {
+      "name": "pyecom",
+      "templates": [
+        {"name": "pyecom-cart-add",        "weight": 25},
+        {"name": "pyecom-inventory-check", "weight": 20},
+        {"name": "pyecom-order-created",   "weight": 15},
+        {"name": "pyecom-payment-ok",      "weight": 10},
+        {"name": "pyecom-order-fulfilled", "weight": 8},
+        {"name": "pyecom-order-shipped",   "weight": 7},
+        {"name": "pyecom-payment-failed",  "weight": 4},
+        {"name": "pyecom-stock-low",       "weight": 3},
+        {"name": "pyecom-exception", "weight": 3}
       ]
     }
   ]

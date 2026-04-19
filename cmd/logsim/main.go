@@ -33,6 +33,7 @@
 //	{rand:N-M}      random integer in [N, M]
 //	{choice:a,b,c}  random pick from the comma-separated list
 //	{cr}            carriage return (\r) — for testing logwiz CR handling
+//	{nl}            newline (\n) — emit multiple lines from one template
 package main
 
 import (
@@ -70,8 +71,8 @@ type entry struct {
 }
 
 var (
-	tmplMap    = map[string]string{}
-	presetMap  = map[string]PresetDef{}
+	tmplMap     = map[string]string{}
+	presetMap   = map[string]PresetDef{}
 	presetOrder []string
 )
 
@@ -157,6 +158,8 @@ func expand(tmpl string, seq int) string {
 				rand.Intn(256), rand.Intn(256), rand.Intn(256), rand.Intn(256))
 		case inner == "cr":
 			return "\r"
+		case inner == "nl":
+			return "\n"
 		case strings.HasPrefix(inner, "rand:"):
 			parts := strings.SplitN(inner[5:], "-", 2)
 			if len(parts) != 2 {
@@ -281,5 +284,6 @@ func main() {
 			<-ticker.C
 		}
 		fmt.Println(expand(pickEntry(entries), seq))
+		os.Stdout.Sync()
 	}
 }
