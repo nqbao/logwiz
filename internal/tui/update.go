@@ -40,6 +40,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.filterRules) > 0 {
 			m.updateFilter(len(msg.Lines), evictions)
 		}
+		if len(m.hlRules) > 0 {
+			updateHL(&m, len(msg.Lines), evictions)
+		}
 		return m, nil
 
 	case source.EOFMsg:
@@ -290,6 +293,17 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyFilterClear:
 		if len(m.filterRules) > 0 {
 			m.clearFilter()
+		}
+		return m, nil
+	case keyHlToggle:
+		if len(m.hlRules) > 0 {
+			if m.hlEnabled {
+				m.hlEnabled = false
+				m.logs.hlMatchMap = nil
+			} else {
+				m.hlEnabled = true
+				rebuildHlMatchMap(&m)
+			}
 		}
 		return m, nil
 	case keyEscape:
