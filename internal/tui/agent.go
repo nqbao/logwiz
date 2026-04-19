@@ -93,20 +93,6 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		m.clearFilter()
 		return agentKeepPalette(m, "filters cleared"), nil
 
-	case "search":
-		var a struct {
-			Pattern string `json:"pattern"`
-		}
-		if err := json.Unmarshal(args, &a); err != nil {
-			return agentCmdErr(m, "agent command error: "+err.Error())
-		}
-		re, err := regexp.Compile(a.Pattern)
-		if err != nil {
-			return agentCmdErr(m, "invalid regex: "+err.Error())
-		}
-		runSearch(&m, re)
-		return agentKeepPalette(m, fmt.Sprintf("search: %q", a.Pattern)), nil
-
 	case "jump":
 		var a struct {
 			Pattern  string `json:"pattern"`

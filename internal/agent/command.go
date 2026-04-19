@@ -39,17 +39,6 @@ func CmdToolDefs() []ToolSpec {
 			Parameters:  must(`{"type":"object","properties":{}}`),
 		},
 		{
-			Name:        "search",
-			Description: "Highlight log lines matching a pattern without hiding others.",
-			Parameters: must(`{
-				"type": "object",
-				"properties": {
-					"pattern": {"type": "string", "description": "Go regex pattern"}
-				},
-				"required": ["pattern"]
-			}`),
-		},
-		{
 			Name:        "jump",
 			Description: "Jump the log viewport to the first or last line matching a pattern.",
 			Parameters: must(`{
