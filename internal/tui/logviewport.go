@@ -55,7 +55,8 @@ func newLogViewport(buf *buffer.Buffer) LogViewport {
 
 // SetFilter replaces the active filter index list. Pass nil to show all lines.
 // Recomputes the wrap cache when Wrap is true; repositions to the tail when
-// autoScroll is on.
+// autoScroll is on. When autoScroll is off, YOffset is clamped to the new
+// valid range so stale offsets don't leave a blank viewport.
 func (v *LogViewport) SetFilter(indices []int) {
 	v.filterIndices = indices
 	if v.Wrap {
@@ -63,6 +64,8 @@ func (v *LogViewport) SetFilter(indices []int) {
 	}
 	if v.autoScroll {
 		v.GotoBottom()
+	} else {
+		v.YOffset = clamp(v.YOffset, 0, v.maxYOffset())
 	}
 }
 

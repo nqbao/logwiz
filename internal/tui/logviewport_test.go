@@ -673,3 +673,37 @@ func TestWrap_RecomputeOnWidthChange(t *testing.T) {
 		t.Errorf("after resize totalRows = %d, want 1", v.totalRows)
 	}
 }
+
+// TestSetFilter_ClampsStaleYOffset is a regression test for the blank-screen
+// bug: when autoScroll is off and the user has scrolled far down, applying a
+// grep/filter that returns far fewer lines must clamp YOffset so all matches
+// are visible immediately without requiring manual scrolling.
+func TestSetFilter_ClampsStaleYOffset(t *testing.T) {
+	// 50 lines, height=10 → maxYOffset without filter = 40.
+	lines := make([]string, 50)
+	for i := range lines {
+		lines[i] = "line"
+	}
+	v := newTestViewport(80, 10, lines...)
+	v.autoScroll = false
+	v.YOffset = 40 // user scrolled to the bottom manually
+
+	// Apply a filter that yields only 5 matches (positions 0–4).
+	indices := []int{0, 1, 2, 3, 4}
+	v.SetFilter(indices)
+
+	// With 5 filtered lines and height=10, maxYOffset=0.
+	// YOffset must be clamped to 0, not left at 40.
+	if v.YOffset != 0 {
+		t.Errorf("after SetFilter YOffset = %d, want 0 (clamped to maxYOffset)", v.YOffset)
+	}
+
+	// The view must render all 5 matched lines, not a blank screen.
+	out := v.View(noStyle)
+	for i := 0; i < 5; i++ {
+		if !strings.Contains(out, "line") {
+			t.Errorf("View() after SetFilter with stale YOffset is blank; got:\n%s", out)
+			break
+		}
+	}
+}
