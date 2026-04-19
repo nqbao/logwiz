@@ -84,12 +84,15 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 	if err != nil {
 		var ie infoErr
 		if errors.As(err, &ie) {
-			m.cmdInfo = ie.msg
-			m.cmdErr = ""
-		} else {
-			m.cmdErr = err.Error()
-			m.cmdInfo = ""
+			// infoErr keeps the palette open with a dim info line.
+			// State changes from the handler are preserved (e.g. :config
+			// saves the new value then reports it).
+			newM.cmdInfo = ie.msg
+			newM.cmdErr = ""
+			return newM, cmd
 		}
+		m.cmdErr = err.Error()
+		m.cmdInfo = ""
 		return m, nil
 	}
 
@@ -225,7 +228,8 @@ func cmdConfig(m Model, args string) (Model, tea.Cmd, error) {
 	if err := config.SaveKey(key, value); err != nil {
 		return m, nil, fmt.Errorf("applied in memory but could not persist: %w", err)
 	}
-	return m, nil, nil
+	display, _ := configGetDisplay(m.cfg, key)
+	return m, nil, infoErr{"saved " + key + ": " + display}
 }
 
 func configGetDisplay(cfg config.Config, key string) (string, bool) {

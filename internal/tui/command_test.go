@@ -160,18 +160,28 @@ func TestDispatchCommand_ConfigGetModel(t *testing.T) {
 	}
 }
 
-// TestDispatchCommand_ConfigSetModel changes the model and closes the palette.
+// TestDispatchCommand_ConfigSetModel changes the model and shows a confirm
+// info line in the still-open palette.
 func TestDispatchCommand_ConfigSetModel(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 	m.cfg.Model = "gpt-4o-mini"
 
 	m2, _ := m.dispatchCommand(":config model claude-sonnet-4-6")
-	if m2.cmdActive {
-		t.Error("cmdActive should be false after :config model <name>")
+	if !m2.cmdActive {
+		t.Error("cmdActive should remain true to show the saved info line")
 	}
 	if m2.cfg.Model != "claude-sonnet-4-6" {
 		t.Errorf("cfg.Model = %q, want claude-sonnet-4-6", m2.cfg.Model)
+	}
+	if m2.cmdErr != "" {
+		t.Errorf("cmdErr = %q, want empty (save should not be an error)", m2.cmdErr)
+	}
+	if m2.cmdInfo == "" {
+		t.Error("cmdInfo should confirm the saved value")
+	}
+	if !strings.Contains(m2.cmdInfo, "claude-sonnet-4-6") {
+		t.Errorf("cmdInfo = %q, should contain the saved value", m2.cmdInfo)
 	}
 }
 
