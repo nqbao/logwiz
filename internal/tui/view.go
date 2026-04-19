@@ -184,6 +184,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  F             clear all filter rules",
 		"  :hl [-i] [-F] re    highlight matching lines in colour (stackable, does not hide)",
 		"  :nohl         clear all highlights",
+		"  :clear [chat|grep|hl|all]   clear chat / filters / highlights / all three",
 		"  H             toggle highlights on / off",
 		"  :config <key> [val]   show or set a config value (model, api-key, base-url, sidebar-width, context-lines, system-prompt)",
 		"  n / N         next / previous search match",
