@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -12,11 +13,19 @@ import (
 	"github.com/openai/openai-go/shared"
 )
 
+// thinkingParam is the Anthropic extended-thinking request body field.
+type thinkingParam struct {
+	Type         string `json:"type"`
+	BudgetTokens int    `json:"budget_tokens"`
+}
+
 // Client talks to an OpenAI-compatible /chat/completions endpoint.
 type Client struct {
-	apiKey string
-	model  string
-	inner  openai.Client
+	apiKey          string
+	model           string
+	thinkingBudget  int    // 0 = disabled; >= 1024 enables Anthropic extended thinking
+	reasoningEffort string // "", "low", "medium", "high" — OpenAI/Minimax style
+	inner           openai.Client
 }
 
 // New returns a Client backed by the official openai-go SDK.
@@ -38,62 +47,63 @@ func (c *Client) Model() string { return c.model }
 // SetModel updates the model used for subsequent requests.
 func (c *Client) SetModel(model string) { c.model = model }
 
+// ThinkingBudget returns the current extended-thinking token budget.
+func (c *Client) ThinkingBudget() int { return c.thinkingBudget }
+
+// SetThinkingBudget sets the token budget for Anthropic extended thinking.
+// Pass 0 to disable, or a value >= 1024 to enable.
+func (c *Client) SetThinkingBudget(n int) { c.thinkingBudget = n }
+
+// ReasoningEffort returns the current reasoning effort level.
+func (c *Client) ReasoningEffort() string { return c.reasoningEffort }
+
+// SetReasoningEffort sets the reasoning effort for OpenAI/Minimax-style providers.
+// Accepted values: "", "low", "medium", "high".
+func (c *Client) SetReasoningEffort(v string) { c.reasoningEffort = v }
+
+// thinkingOpts returns request options for reasoning/thinking when configured.
+// Only one mode is active: thinking-budget (Anthropic) takes precedence over
+// reasoning-effort (OpenAI/Minimax) if both are somehow set.
+func (c *Client) thinkingOpts() []option.RequestOption {
+	if c.thinkingBudget > 0 {
+		return []option.RequestOption{
+			option.WithJSONSet("thinking", thinkingParam{
+				Type:         "enabled",
+				BudgetTokens: c.thinkingBudget,
+			}),
+		}
+	}
+	if c.reasoningEffort != "" {
+		return []option.RequestOption{
+			option.WithJSONSet("reasoning_effort", c.reasoningEffort),
+		}
+	}
+	return nil
+}
+
 // CompleteWithTools sends msgs with tool_choice "required", forcing the model
 // to call exactly one of the provided tools. Returns the first tool call.
 func (c *Client) CompleteWithTools(ctx context.Context, msgs []Message, tools []ToolSpec) (ToolCall, error) {
-	if c.apiKey == "" {
-		return ToolCall{}, errors.New("chat: API key is not configured")
-	}
-	if c.model == "" {
-		return ToolCall{}, errors.New("chat: model is not configured")
-	}
-	if len(msgs) == 0 {
-		return ToolCall{}, errors.New("chat: no messages to send")
-	}
 	if len(tools) == 0 {
 		return ToolCall{}, errors.New("chat: no tools provided")
 	}
-
-	req := openai.ChatCompletionNewParams{
-		Model:    openai.ChatModel(c.model),
-		Messages: toSDKMessages(msgs),
-		Tools:    toSDKTools(tools),
-		ToolChoice: openai.ChatCompletionToolChoiceOptionUnionParam{
-			OfAuto: openai.String("required"),
-		},
-	}
-
-	completion, err := c.inner.Chat.Completions.New(ctx, req)
+	msg, err := c.complete(ctx, msgs, tools, "required")
 	if err != nil {
-		var apiErr *openai.Error
-		if errors.As(err, &apiErr) {
-			if apiErr.Message != "" {
-				return ToolCall{}, fmt.Errorf("chat: %s (status %d)", apiErr.Message, apiErr.StatusCode)
-			}
-			return ToolCall{}, fmt.Errorf("chat: unexpected status %d", apiErr.StatusCode)
-		}
-		return ToolCall{}, fmt.Errorf("chat: %w", err)
+		return ToolCall{}, err
 	}
-
-	if len(completion.Choices) == 0 {
-		return ToolCall{}, errors.New("chat: response contained no choices")
-	}
-
-	tcs := completion.Choices[0].Message.ToolCalls
-	if len(tcs) == 0 {
+	if len(msg.ToolCalls) == 0 {
 		return ToolCall{}, errors.New("chat: model did not call a tool")
 	}
-
-	return ToolCall{
-		ID:        tcs[0].ID,
-		Name:      tcs[0].Function.Name,
-		Arguments: tcs[0].Function.Arguments,
-	}, nil
+	return msg.ToolCalls[0], nil
 }
 
 // Complete sends msgs to the chat-completions endpoint and returns the
 // assistant's reply. Pass nil or empty tools when not using function calling.
 func (c *Client) Complete(ctx context.Context, msgs []Message, tools []ToolSpec) (Message, error) {
+	return c.complete(ctx, msgs, tools, "")
+}
+
+func (c *Client) complete(ctx context.Context, msgs []Message, tools []ToolSpec, toolChoice string) (Message, error) {
 	if c.apiKey == "" {
 		return Message{}, errors.New("chat: API key is not configured")
 	}
@@ -111,16 +121,27 @@ func (c *Client) Complete(ctx context.Context, msgs []Message, tools []ToolSpec)
 	if len(tools) > 0 {
 		req.Tools = toSDKTools(tools)
 	}
+	if toolChoice != "" {
+		req.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
+			OfAuto: openai.String(toolChoice),
+		}
+	}
 
-	completion, err := c.inner.Chat.Completions.New(ctx, req)
+	slog.Debug("chat request", "model", c.model, "msgs", len(msgs), "tools", len(tools),
+		"tool_choice", toolChoice, "thinking_budget", c.thinkingBudget, "reasoning_effort", c.reasoningEffort)
+
+	completion, err := c.inner.Chat.Completions.New(ctx, req, c.thinkingOpts()...)
 	if err != nil {
 		var apiErr *openai.Error
 		if errors.As(err, &apiErr) {
 			if apiErr.Message != "" {
+				slog.Error("chat request failed", "status", apiErr.StatusCode, "msg", apiErr.Message)
 				return Message{}, fmt.Errorf("chat: %s (status %d)", apiErr.Message, apiErr.StatusCode)
 			}
+			slog.Error("chat request failed", "status", apiErr.StatusCode)
 			return Message{}, fmt.Errorf("chat: unexpected status %d", apiErr.StatusCode)
 		}
+		slog.Error("chat request failed", "err", err)
 		return Message{}, fmt.Errorf("chat: %w", err)
 	}
 
@@ -140,6 +161,13 @@ func (c *Client) Complete(ctx context.Context, msgs []Message, tools []ToolSpec)
 			Arguments: tc.Function.Arguments,
 		})
 	}
+
+	slog.Debug("chat response", "tool_calls", len(out.ToolCalls),
+		"prompt_tokens", completion.Usage.PromptTokens,
+		"completion_tokens", completion.Usage.CompletionTokens,
+		"reasoning_tokens", completion.Usage.CompletionTokensDetails.ReasoningTokens,
+		"cached_tokens", completion.Usage.PromptTokensDetails.CachedTokens)
+
 	return out, nil
 }
 

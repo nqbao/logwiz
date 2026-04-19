@@ -69,7 +69,6 @@ func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser)
 		flushDelay = 10 * time.Millisecond
 	)
 	batch := make([]logmsg.LogMessage, 0, maxBatch)
-	var firstAt time.Time
 
 	flush := func() {
 		if len(batch) == 0 {
@@ -81,19 +80,38 @@ func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser)
 		batch = batch[:0]
 	}
 
-	for scanner.Scan() {
-		if ctx.Err() != nil {
+	// Feed scanned lines into a channel so we can select on both new lines
+	// and a flush ticker — without the ticker, the last batch would sit
+	// unsent until the next line arrived (noticeable with tail -f / slow streams).
+	lineCh := make(chan string)
+	go func() {
+		for scanner.Scan() {
+			lineCh <- scanner.Text()
+		}
+		close(lineCh)
+	}()
+
+	ticker := time.NewTicker(flushDelay)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
 			return
-		}
-		if len(batch) == 0 {
-			firstAt = time.Now()
-		}
-		batch = append(batch, parser.Parse(lastCRSegment(scanner.Text())))
-		if len(batch) >= maxBatch || time.Since(firstAt) >= flushDelay {
+		case <-ticker.C:
 			flush()
+		case line, ok := <-lineCh:
+			if !ok {
+				flush()
+				goto done
+			}
+			batch = append(batch, parser.Parse(lastCRSegment(line)))
+			if len(batch) >= maxBatch {
+				flush()
+			}
 		}
 	}
-	flush()
+done:
 
 	if ctx.Err() != nil {
 		return

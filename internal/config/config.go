@@ -55,6 +55,9 @@ type Config struct {
 	// means stdin mode.
 	File string
 
+	// LogFile is the path to write internal debug logs to. Empty disables logging.
+	LogFile string
+
 	// Format selects the line parser: "json" or "passthrough".
 	Format string
 
@@ -62,11 +65,19 @@ type Config struct {
 	// line is replaced with [REDACTED] before the line is sent to the LLM.
 	// The display layer is never affected.
 	RedactPatterns []string
+
+	// ThinkingBudget is the token budget for extended thinking (Anthropic
+	// models only). 0 disables thinking; values >= 1024 enable it.
+	ThinkingBudget int
+
+	// ReasoningEffort selects the reasoning level for OpenAI/Minimax-style
+	// providers. Accepted values: "" (disabled), "low", "medium", "high".
+	ReasoningEffort string
 }
 
 // ConfigurableKeys lists the keys accepted by ApplyKey and SaveKey.
 var ConfigurableKeys = []string{
-	"model", "api-key", "base-url", "sidebar-width", "context-lines", "system-prompt",
+	"model", "api-key", "base-url", "sidebar-width", "context-lines", "system-prompt", "thinking-budget", "reasoning-effort",
 }
 
 // fileConfig holds the subset of Config that can be set in
@@ -79,6 +90,8 @@ type fileConfig struct {
 	ContextLines   *int     `json:"context_lines,omitempty"`
 	SystemPrompt   string   `json:"system_prompt,omitempty"`
 	RedactPatterns []string `json:"redact_patterns,omitempty"`
+	ThinkingBudget  int    `json:"thinking_budget,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 }
 
 // stringSliceFlag implements flag.Value for a repeatable --redact flag.
@@ -154,6 +167,8 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	if fc.SystemPrompt != "" {
 		defaultSystemPrompt = fc.SystemPrompt
 	}
+	defaultThinkingBudget := fc.ThinkingBudget
+	defaultReasoningEffort := fc.ReasoningEffort
 
 	var (
 		cfg           Config
@@ -179,6 +194,12 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		"Path to a file with extra instructions appended to the system prompt")
 	fs.StringVar(&cfg.Format, "format", DefaultFormat,
 		`Line parser: "json" detects and colours JSON lines, "passthrough" renders everything as plain text`)
+	fs.StringVar(&cfg.LogFile, "log-file", "",
+		"Write internal debug logs to `file`")
+	fs.IntVar(&cfg.ThinkingBudget, "thinking-budget", defaultThinkingBudget,
+		"Token budget for extended thinking (Anthropic models only); 0 disables, minimum 1024 when enabled")
+	fs.StringVar(&cfg.ReasoningEffort, "reasoning-effort", defaultReasoningEffort,
+		`Reasoning level for OpenAI/Minimax-style providers: "low", "medium", "high", or "" to disable`)
 
 	fs.Usage = func() {
 		fmt.Fprintln(out, "Usage: logwiz [flags] [file]")
@@ -219,6 +240,15 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	}
 	if cfg.Format != "json" && cfg.Format != "passthrough" {
 		return Config{}, errors.New(`--format must be "json" or "passthrough"`)
+	}
+	if cfg.ThinkingBudget != 0 && cfg.ThinkingBudget < 1024 {
+		return Config{}, errors.New("--thinking-budget must be 0 (disabled) or >= 1024")
+	}
+	if cfg.ReasoningEffort != "" && cfg.ReasoningEffort != "low" && cfg.ReasoningEffort != "medium" && cfg.ReasoningEffort != "high" {
+		return Config{}, errors.New(`--reasoning-effort must be "low", "medium", or "high"`)
+	}
+	if cfg.ThinkingBudget > 0 && cfg.ReasoningEffort != "" {
+		return Config{}, errors.New("--thinking-budget and --reasoning-effort are mutually exclusive")
 	}
 
 	if cfg.InstructionsFile != "" {
@@ -280,6 +310,26 @@ func ApplyKey(cfg *Config, key, value string) error {
 		cfg.ContextLines = n
 	case "system-prompt":
 		cfg.SystemPrompt = value
+	case "thinking-budget":
+		n, err := strconv.Atoi(value)
+		if err != nil || (n != 0 && n < 1024) {
+			return fmt.Errorf("thinking-budget must be 0 (disabled) or an integer >= 1024")
+		}
+		cfg.ThinkingBudget = n
+		if n > 0 {
+			cfg.ReasoningEffort = ""
+		}
+	case "reasoning-effort":
+		if value == "off" {
+			value = ""
+		}
+		if value != "" && value != "low" && value != "medium" && value != "high" {
+			return fmt.Errorf(`reasoning-effort must be "low", "medium", "high", or "off" to disable`)
+		}
+		cfg.ReasoningEffort = value
+		if value != "" {
+			cfg.ThinkingBudget = 0
+		}
 	default:
 		return fmt.Errorf("unknown config key %q (valid: %s)", key, strings.Join(ConfigurableKeys, ", "))
 	}
@@ -309,6 +359,20 @@ func SaveKey(key, value string) error {
 		fc.ContextLines = &n
 	case "system-prompt":
 		fc.SystemPrompt = value
+	case "thinking-budget":
+		n, _ := strconv.Atoi(value)
+		fc.ThinkingBudget = n
+		if n > 0 {
+			fc.ReasoningEffort = ""
+		}
+	case "reasoning-effort":
+		if value == "off" {
+			value = ""
+		}
+		fc.ReasoningEffort = value
+		if value != "" {
+			fc.ThinkingBudget = 0
+		}
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}

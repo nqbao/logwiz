@@ -16,6 +16,7 @@ import (
 
 func newTestModel(t *testing.T) Model {
 	t.Helper()
+	t.Setenv("HOME", t.TempDir())
 	cfg := config.Config{
 		MaxLines:     100,
 		ContextLines: 10,

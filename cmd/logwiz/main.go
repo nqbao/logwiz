@@ -9,6 +9,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,8 +20,8 @@ import (
 	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
 	"github.com/nqbao/logwiz/internal/config"
-	"github.com/nqbao/logwiz/internal/redact"
 	"github.com/nqbao/logwiz/internal/logmsg"
+	"github.com/nqbao/logwiz/internal/redact"
 	"github.com/nqbao/logwiz/internal/source"
 	"github.com/nqbao/logwiz/internal/tools"
 	"github.com/nqbao/logwiz/internal/tui"
@@ -48,6 +49,19 @@ func run() error {
 	cfg, err := config.ParseOSArgs()
 	if err != nil {
 		return err
+	}
+
+	if cfg.LogFile != "" {
+		f, err := os.OpenFile(cfg.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		if err != nil {
+			return fmt.Errorf("--log-file: %w", err)
+		}
+		defer f.Close()
+		slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})))
+		slog.Info("logwiz started", "log_file", cfg.LogFile)
+	} else {
+		// No log file: discard everything so slog calls are no-ops.
+		slog.SetDefault(slog.New(slog.DiscardHandler))
 	}
 
 	// Decide source: explicit file > stdin (if piped). Reject if neither.
@@ -85,6 +99,8 @@ func run() error {
 	var client *agent.Client
 	if cfg.APIKey != "" {
 		client = agent.New(cfg.BaseURL, cfg.APIKey, cfg.Model)
+		client.SetThinkingBudget(cfg.ThinkingBudget)
+		client.SetReasoningEffort(cfg.ReasoningEffort)
 	}
 
 	registry := tools.NewDefault(redactor)

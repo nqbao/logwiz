@@ -217,8 +217,10 @@ func cmdConfig(m Model, args string) (Model, tea.Cmd, error) {
 	if err := config.ApplyKey(&m.cfg, key, value); err != nil {
 		return m, nil, err
 	}
-	if key == "model" && m.chatClient != nil {
-		m.chatClient.SetModel(value)
+	if m.chatClient != nil {
+		m.chatClient.SetModel(m.cfg.Model)
+		m.chatClient.SetThinkingBudget(m.cfg.ThinkingBudget)
+		m.chatClient.SetReasoningEffort(m.cfg.ReasoningEffort)
 	}
 	if err := config.SaveKey(key, value); err != nil {
 		return m, nil, fmt.Errorf("applied in memory but could not persist: %w", err)
@@ -243,6 +245,10 @@ func configGetDisplay(cfg config.Config, key string) (string, bool) {
 		return strconv.Itoa(cfg.ContextLines), true
 	case "system-prompt":
 		return cfg.SystemPrompt, true
+	case "thinking-budget":
+		return strconv.Itoa(cfg.ThinkingBudget), true
+	case "reasoning-effort":
+		return cfg.ReasoningEffort, true
 	}
 	return "", false
 }
