@@ -22,6 +22,8 @@ const (
 	keyFilterToggle = "f" // pause/resume active filter
 	keyFilterClear  = "F" // wipe all filter rules
 
+	keyHlToggle = "H" // pause/resume active highlights
+
 	// Log viewport scroll keys (mirrors viewport.DefaultKeyMap).
 	keyScrollDown       = "j"
 	keyScrollUp         = "k"

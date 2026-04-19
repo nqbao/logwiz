@@ -47,6 +47,10 @@ type LogViewport struct {
 
 	// Wrap=false: longest visible line width for horizontal-scroll clamping.
 	longestLineWidth int
+
+	// hlMatchMap maps buffer indices to their highlight background colour.
+	// Set by rebuildHlMatchMap; nil when no highlights are active.
+	hlMatchMap map[int]lipgloss.Color
 }
 
 func newLogViewport(buf *buffer.Buffer) LogViewport {
@@ -483,6 +487,8 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 		}
 		if bufIdx == v.Selected {
 			line = selectedStyle.Width(v.Width).Render(ansi.Strip(line))
+		} else if col, ok := v.hlMatchMap[bufIdx]; ok {
+			line = lipgloss.NewStyle().Background(col).Width(v.Width).Render(ansi.Strip(line))
 		}
 
 		if i > top {
@@ -534,6 +540,8 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 			segment := ansi.Cut(line, wr*v.Width, (wr+1)*v.Width)
 			if bufIdx == v.Selected {
 				segment = selectedStyle.Width(v.Width).Render(ansi.Strip(segment))
+			} else if col, ok := v.hlMatchMap[bufIdx]; ok {
+				segment = lipgloss.NewStyle().Background(col).Width(v.Width).Render(ansi.Strip(segment))
 			}
 			if !first {
 				sb.WriteByte('\n')
