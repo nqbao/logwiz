@@ -47,7 +47,7 @@ func TestCmdToolDefs_PickToolHasActionEnum(t *testing.T) {
 	if err := json.Unmarshal(pt.Parameters, &schema); err != nil {
 		t.Fatalf("parsing pick_tool schema: %v", err)
 	}
-	want := []string{"grep", "clear_grep", "jump", "set_model", "clear_chat", "quit", "reject"}
+	want := []string{"grep", "clear_grep", "jump", "highlight", "clear_highlight", "set_model", "clear_chat", "quit", "reject"}
 	got := make(map[string]bool)
 	for _, a := range schema.Properties.Action.Enum {
 		got[a] = true

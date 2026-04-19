@@ -65,7 +65,7 @@ func CmdCommitToolDef() ToolSpec {
 			"properties": {
 				"action": {
 					"type": "string",
-					"enum": ["grep", "clear_grep", "jump", "set_model", "clear_chat", "quit", "reject"],
+					"enum": ["grep", "clear_grep", "jump", "highlight", "clear_highlight", "set_model", "clear_chat", "quit", "reject"],
 					"description": "The action to perform"
 				},
 				"pattern":  {"type": "string", "description": "Go regex pattern (grep, jump)"},
@@ -91,6 +91,7 @@ Rules:
 - Inspection tools are read-only — they do not modify the view.
 - Use find before jump when the user names something that might match unrelated lines (e.g. "500 error" could match timestamps — verify with find first).
 - Use count when the user asks "how many" — then report the result via pick_tool(action="reject", reason="N of M lines match ...").
+- Use highlight to colour-band matching lines without hiding others; use clear_highlight to remove all colour bands.
 - Use pick_tool(action="reject") for gibberish, out-of-scope requests, or to report an informational result.
 
 Examples:
@@ -101,6 +102,12 @@ User: "filter to only errors"
 User: "go to first 500 error"
 → find(pattern="500", flags="") → {count: 8, first_line: 45, samples: ["2024-01-01T00:00:500ms ...", "HTTP 500 ..."]}
 → pick_tool(action="jump", pattern="HTTP 500", position="first")
+
+User: "highlight warnings"
+→ pick_tool(action="highlight", pattern="warn", flags="i")
+
+User: "clear highlights"
+→ pick_tool(action="clear_highlight")
 
 User: "how many warnings"
 → count(pattern="warn", flags="i") → {count: 12 of 200 lines}

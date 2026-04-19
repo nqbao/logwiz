@@ -143,6 +143,22 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		}
 		return agentKeepPalette(m, fmt.Sprintf("jump: %q", a.Pattern)), nil
 
+	case "highlight":
+		reStr := a.Pattern
+		if a.Flags == "i" {
+			reStr = "(?i)" + reStr
+		}
+		re, err := regexp.Compile(reStr)
+		if err != nil {
+			return agentCmdErr(m, "invalid regex: "+err.Error())
+		}
+		addHL(&m, re)
+		return agentKeepPalette(m, fmt.Sprintf("highlight: %q", a.Pattern)), nil
+
+	case "clear_highlight":
+		clearHL(&m)
+		return agentKeepPalette(m, "highlights cleared"), nil
+
 	case "set_model":
 		newM, cmd, err := cmdConfig(m, "model "+a.Model)
 		if err != nil {
