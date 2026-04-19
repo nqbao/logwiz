@@ -154,8 +154,9 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		m.focus = focusChat
 		m.input.SetValue(a.Question)
 		m = m.onResize(m.width, m.height)
+		focusCmd := m.input.Focus()
 		model, cmd := m.submitChat()
-		return model.(Model), cmd
+		return model.(Model), tea.Batch(focusCmd, cmd)
 
 	case "quit":
 		m.Cancel()
