@@ -129,17 +129,28 @@ func (v *LogViewport) display(msg logmsg.LogMessage) string {
 
 // --- wrap-height cache ---
 
+// contentWidth returns the usable width for log line content.
+// When highlights are active a 1-column gutter is reserved on the left for
+// the colour bar, so content gets v.Width-1 columns.
+func (v *LogViewport) contentWidth() int {
+	if v.hlMatchMap != nil {
+		return v.Width - 1
+	}
+	return v.Width
+}
+
 // lineWrapHeight returns the number of screen rows required to display line
-// at the current viewport width.
+// at the current content width.
 func (v *LogViewport) lineWrapHeight(line string) int {
-	if v.Width <= 0 {
+	cw := v.contentWidth()
+	if cw <= 0 {
 		return 1
 	}
 	w := ansi.StringWidth(line)
 	if w == 0 {
 		return 1
 	}
-	return (w + v.Width - 1) / v.Width
+	return (w + cw - 1) / cw
 }
 
 // recomputeWrapCache rebuilds the full cache in O(N) over the effective set.
@@ -158,7 +169,7 @@ func (v *LogViewport) recomputeWrapCache() {
 		v.wrapCache[i] = h
 		v.totalRows += h
 	}
-	v.wrapCacheWidth = v.Width
+	v.wrapCacheWidth = v.contentWidth()
 }
 
 // updateWrapCache incrementally appends heights for newLines newly-appended
@@ -168,7 +179,7 @@ func (v *LogViewport) updateWrapCache(newLines int) {
 	if v.Width <= 0 {
 		return
 	}
-	if v.wrapCacheWidth != v.Width {
+	if v.wrapCacheWidth != v.contentWidth() {
 		v.recomputeWrapCache()
 		return
 	}
@@ -211,7 +222,7 @@ func (v *LogViewport) ensureWrapCache() {
 	if v.Width <= 0 {
 		return
 	}
-	if v.wrapCacheWidth == v.Width && len(v.wrapCache) == v.effectiveLen() {
+	if v.wrapCacheWidth == v.contentWidth() && len(v.wrapCache) == v.effectiveLen() {
 		return
 	}
 	v.recomputeWrapCache()
@@ -320,7 +331,7 @@ func (v *LogViewport) ScrollRight(n int) {
 		return
 	}
 	v.xOffset += n
-	if m := v.longestLineWidth - v.Width; m > 0 && v.xOffset > m {
+	if m := v.longestLineWidth - v.contentWidth(); m > 0 && v.xOffset > m {
 		v.xOffset = m
 	}
 }
@@ -475,6 +486,7 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 	var sb strings.Builder
 	v.longestLineWidth = 0
 
+	cw := v.contentWidth()
 	for i := top; i < bot; i++ {
 		bufIdx := v.effectiveBufIdx(i)
 		line := v.display(v.buf.Line(bufIdx))
@@ -482,13 +494,19 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 		if w := ansi.StringWidth(line); w > v.longestLineWidth {
 			v.longestLineWidth = w
 		}
-		if v.xOffset > 0 || ansi.StringWidth(line) > v.Width {
-			line = ansi.Cut(line, v.xOffset, v.xOffset+v.Width)
+		if v.xOffset > 0 || ansi.StringWidth(line) > cw {
+			line = ansi.Cut(line, v.xOffset, v.xOffset+cw)
 		}
 		if bufIdx == v.Selected {
-			line = selectedStyle.Width(v.Width).Render(ansi.Strip(line))
+			line = selectedStyle.Width(cw).Render(ansi.Strip(line))
+			if v.hlMatchMap != nil {
+				line = " " + line
+			}
 		} else if col, ok := v.hlMatchMap[bufIdx]; ok {
-			line = lipgloss.NewStyle().Background(col).Width(v.Width).Render(ansi.Strip(line))
+			bar := lipgloss.NewStyle().Foreground(col).Render("▌")
+			line = bar + lipgloss.NewStyle().Width(cw).Render(line)
+		} else if v.hlMatchMap != nil {
+			line = " " + line
 		}
 
 		if i > top {
@@ -519,6 +537,7 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 	yOff := clamp(v.YOffset, 0, v.maxYOffset())
 	startLine, startWrapRow := v.screenRowToLine(yOff)
 
+	cw := v.contentWidth()
 	var sb strings.Builder
 	rowsWritten := 0
 	first := true
@@ -537,11 +556,17 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 		}
 
 		for wr := wStart; wr < h && rowsWritten < v.Height; wr++ {
-			segment := ansi.Cut(line, wr*v.Width, (wr+1)*v.Width)
+			segment := ansi.Cut(line, wr*cw, (wr+1)*cw)
 			if bufIdx == v.Selected {
-				segment = selectedStyle.Width(v.Width).Render(ansi.Strip(segment))
+				segment = selectedStyle.Width(cw).Render(ansi.Strip(segment))
+				if v.hlMatchMap != nil {
+					segment = " " + segment
+				}
 			} else if col, ok := v.hlMatchMap[bufIdx]; ok {
-				segment = lipgloss.NewStyle().Background(col).Width(v.Width).Render(ansi.Strip(segment))
+				bar := lipgloss.NewStyle().Foreground(col).Render("▌")
+				segment = bar + lipgloss.NewStyle().Width(cw).Render(segment)
+			} else if v.hlMatchMap != nil {
+				segment = " " + segment
 			}
 			if !first {
 				sb.WriteByte('\n')
