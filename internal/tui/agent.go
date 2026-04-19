@@ -172,13 +172,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "reject":
-		var a struct {
-			Reason string `json:"reason"`
-		}
-		if err := json.Unmarshal(args, &a); err != nil {
-			return agentCmdErr(m, "not a recognized command")
-		}
-		return agentCmdErr(m, a.Reason+"\nTip: use :chat to start a conversation")
+		return agentCmdErr(m, "command not understood — use :chat to start a conversation")
 
 	default:
 		return agentCmdErr(m, fmt.Sprintf("unknown agent tool: %s", call.Name))
