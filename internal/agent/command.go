@@ -77,17 +77,21 @@ func CmdToolDefs() []ToolSpec {
 			Description: "Reset the chat conversation history.",
 			Parameters:  must(`{"type":"object","properties":{}}`),
 		},
-		{
-			Name:        "answer",
-			Description: "Open the chat sidebar and submit a question about the logs. Use for any analysis or question request.",
-			Parameters: must(`{
-				"type": "object",
-				"properties": {
-					"question": {"type": "string", "description": "the question to ask about the logs"}
-				},
-				"required": ["question"]
-			}`),
-		},
+		// TODO: "answer" is disabled — intended to bridge the palette agent into
+		// the chat agent by forwarding the question to the sidebar. Needs a
+		// cleaner handoff design before re-enabling.
+		//
+		// {
+		// 	Name:        "answer",
+		// 	Description: "Open the chat sidebar and submit a question about the logs. Use for any analysis or question request.",
+		// 	Parameters: must(`{
+		// 		"type": "object",
+		// 		"properties": {
+		// 			"question": {"type": "string", "description": "the question to ask about the logs"}
+		// 		},
+		// 		"required": ["question"]
+		// 	}`),
+		// },
 		{
 			Name:        "quit",
 			Description: "Exit logwiz.",
@@ -113,7 +117,6 @@ func BuildCmdPrompt(question, logContext string) []Message {
 		"Rules:\n" +
 		"- Always call exactly one tool.\n" +
 		"- Use grep/search/jump to operate on log lines; produce valid Go regex.\n" +
-		"- Use answer for any question or analysis request about the logs.\n" +
 		"- Call reject when the input is random text, gibberish, or completely unrelated to log viewing.\n"
 	if logContext != "" {
 		sys += "\n" + logContext
