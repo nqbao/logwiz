@@ -491,10 +491,11 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 		bufIdx := v.effectiveBufIdx(i)
 		line := v.display(v.buf.Line(bufIdx))
 
-		if w := ansi.StringWidth(line); w > v.longestLineWidth {
+		w := ansi.StringWidth(line)
+		if w > v.longestLineWidth {
 			v.longestLineWidth = w
 		}
-		if v.xOffset > 0 || ansi.StringWidth(line) > cw {
+		if v.xOffset > 0 || w > cw {
 			line = ansi.Cut(line, v.xOffset, v.xOffset+cw)
 		}
 		if bufIdx == v.Selected {

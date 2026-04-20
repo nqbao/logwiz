@@ -17,6 +17,12 @@ type ChatReplyMsg struct{ Content string }
 // spinnerTickMsg drives the spinner animation while chatLoading is true.
 type spinnerTickMsg struct{}
 
+// scrollFlushMsg is fired as an immediate command after the first wheel event
+// in a burst. By the time it arrives on the event loop, subsequent wheel
+// events have typically already incremented pendingScrollY/X, so one flush
+// applies all of them at once instead of one tiny viewport move per event.
+type scrollFlushMsg struct{}
+
 var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
 // Update handles all tea messages.
@@ -114,6 +120,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.onKey(msg)
 
+	case scrollFlushMsg:
+		m.flushScrollPending = false
+		if m.pendingScrollY != 0 {
+			if m.pendingScrollY > 0 {
+				m.logs.ScrollDown(m.pendingScrollY)
+				if m.logs.AtBottom() {
+					m.logs.autoScroll = true
+				}
+			} else {
+				m.logs.ScrollUp(-m.pendingScrollY)
+				m.logs.autoScroll = false
+			}
+			m.pendingScrollY = 0
+		}
+		if m.pendingScrollX != 0 {
+			if m.pendingScrollX > 0 {
+				m.logs.ScrollRight(m.pendingScrollX)
+			} else {
+				m.logs.ScrollLeft(-m.pendingScrollX)
+			}
+			m.pendingScrollX = 0
+		}
+		return m, nil
+
 	case tea.MouseMsg:
 		if msg.Action != tea.MouseActionPress {
 			return m, nil
@@ -129,14 +159,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-			// Only pass wheel scroll through to logs; block clicks so the
-			// sidebar doesn't accidentally trigger log-row highlighting.
-			if msg.Button != tea.MouseButtonWheelUp && msg.Button != tea.MouseButtonWheelDown {
+			// Block clicks so the sidebar doesn't accidentally trigger
+			// log-row highlighting. Wheel events (all four directions)
+			// fall through to the coalescing logic below.
+			switch msg.Button {
+			case tea.MouseButtonWheelUp, tea.MouseButtonWheelDown,
+				tea.MouseButtonWheelLeft, tea.MouseButtonWheelRight:
+				// fall through
+			default:
 				return m, nil
 			}
 		}
 
-		m.logs.Update(msg)
+		// Coalesce wheel events: accumulate deltas and fire a single flush
+		// command. Rapid trackpad bursts (including OS-level momentum events)
+		// pile up in the stdin buffer; processing them one-by-one causes the
+		// viewport to keep moving after the user stops. With coalescing,
+		// multiple events in a burst collapse into one viewport move per flush.
+		const scrollStep = 3
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.pendingScrollY -= scrollStep
+		case tea.MouseButtonWheelDown:
+			m.pendingScrollY += scrollStep
+		case tea.MouseButtonWheelLeft:
+			m.pendingScrollX -= scrollStep
+		case tea.MouseButtonWheelRight:
+			m.pendingScrollX += scrollStep
+		default:
+			// Non-wheel events (clicks) are handled immediately.
+			m.logs.Update(msg)
+			return m, nil
+		}
+
+		if !m.flushScrollPending {
+			m.flushScrollPending = true
+			return m, func() tea.Msg { return scrollFlushMsg{} }
+		}
 		return m, nil
 	}
 	return m, nil
