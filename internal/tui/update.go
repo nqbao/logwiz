@@ -121,27 +121,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.onKey(msg)
 
 	case scrollFlushMsg:
-		m.flushScrollPending = false
-		if m.pendingScrollY != 0 {
-			if m.pendingScrollY > 0 {
-				m.logs.ScrollDown(m.pendingScrollY)
-				if m.logs.AtBottom() {
-					m.logs.autoScroll = true
-				}
-			} else {
-				m.logs.ScrollUp(-m.pendingScrollY)
-				m.logs.autoScroll = false
-			}
-			m.pendingScrollY = 0
-		}
-		if m.pendingScrollX != 0 {
-			if m.pendingScrollX > 0 {
-				m.logs.ScrollRight(m.pendingScrollX)
-			} else {
-				m.logs.ScrollLeft(-m.pendingScrollX)
-			}
-			m.pendingScrollX = 0
-		}
+		m = applyPendingScroll(m)
 		return m, nil
 
 	case tea.MouseMsg:
@@ -171,12 +151,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Coalesce wheel events: accumulate deltas and fire a single flush
-		// command. Rapid trackpad bursts (including OS-level momentum events)
-		// pile up in the stdin buffer; processing them one-by-one causes the
-		// viewport to keep moving after the user stops. With coalescing,
-		// multiple events in a burst collapse into one viewport move per flush.
-		const scrollStep = 3
+		// Accumulate wheel events into a pending delta rather than moving the
+		// viewport on every tick. A scrollFlushMsg goroutine is scheduled to
+		// drain the delta, but on a fast trackpad the input reader goroutine
+		// wins the channel race every time and the flush never fires. The cap
+		// (maxPendingScroll) forces an immediate apply after every 5 events so
+		// the viewport stays responsive regardless of goroutine scheduling.
+		const (
+			scrollStep      = 3
+			maxPendingScroll = scrollStep * 5
+		)
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
 			m.pendingScrollY -= scrollStep
@@ -192,6 +176,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		yFull := m.pendingScrollY >= maxPendingScroll || m.pendingScrollY <= -maxPendingScroll
+		xFull := m.pendingScrollX >= maxPendingScroll || m.pendingScrollX <= -maxPendingScroll
+		if yFull || xFull {
+			m = applyPendingScroll(m)
+			return m, nil
+		}
+
 		if !m.flushScrollPending {
 			m.flushScrollPending = true
 			return m, func() tea.Msg { return scrollFlushMsg{} }
@@ -199,6 +190,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// applyPendingScroll moves the viewport by the accumulated pending deltas and
+// resets them. It is called both from scrollFlushMsg and from the inline cap
+// path when enough wheel events have arrived before the goroutine could fire.
+func applyPendingScroll(m Model) Model {
+	m.flushScrollPending = false
+	if m.pendingScrollY != 0 {
+		if m.pendingScrollY > 0 {
+			m.logs.ScrollDown(m.pendingScrollY)
+			if m.logs.AtBottom() {
+				m.logs.autoScroll = true
+			}
+		} else {
+			m.logs.ScrollUp(-m.pendingScrollY)
+			m.logs.autoScroll = false
+		}
+		m.pendingScrollY = 0
+	}
+	if m.pendingScrollX != 0 {
+		if m.pendingScrollX > 0 {
+			m.logs.ScrollRight(m.pendingScrollX)
+		} else {
+			m.logs.ScrollLeft(-m.pendingScrollX)
+		}
+		m.pendingScrollX = 0
+	}
+	return m
 }
 
 
