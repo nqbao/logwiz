@@ -122,13 +122,6 @@ type Model struct {
 
 	hintIdx int // cycles through inputHints
 
-	// Scroll coalescing: wheel events accumulate here and are flushed in a
-	// single scrollFlushMsg so rapid trackpad bursts don't pile up viewport
-	// moves and drive excess View() recomputes.
-	pendingScrollY     int
-	pendingScrollX     int
-	flushScrollPending bool
-
 	// sessionSample is the one-shot log snapshot captured on first submit.
 	sessionSample []string
 

@@ -448,17 +448,17 @@ func (v *LogViewport) Update(msg tea.Msg) {
 		case tea.MouseButtonLeft:
 			v.SelectAt(msg.Y)
 		case tea.MouseButtonWheelUp:
-			v.ScrollUp(3)
+			v.ScrollUp(5)
 			v.autoScroll = false
 		case tea.MouseButtonWheelDown:
-			v.ScrollDown(3)
+			v.ScrollDown(5)
 			if v.AtBottom() {
 				v.autoScroll = true
 			}
 		case tea.MouseButtonWheelLeft:
-			v.ScrollLeft(3)
+			v.ScrollLeft(10)
 		case tea.MouseButtonWheelRight:
-			v.ScrollRight(3)
+			v.ScrollRight(10)
 		}
 	}
 }

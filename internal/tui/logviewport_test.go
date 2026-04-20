@@ -309,9 +309,10 @@ func TestUpdate_ReachingBottomEnablesAutoScroll(t *testing.T) {
 // --- Update (MouseMsg) ---
 
 func TestUpdate_MouseWheelUp(t *testing.T) {
-	v := newTestViewport(80, 3, "a", "b", "c", "d", "e", "f", "g")
+	// 11 lines, height 3 → maxYOffset = 8; start at 6, wheel-up(5) → 1
+	v := newTestViewport(80, 3, "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k")
 	v.autoScroll = false
-	v.ScrollDown(4)
+	v.ScrollDown(6)
 	v.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelUp})
 	if v.YOffset != 1 {
 		t.Errorf("wheel up: YOffset = %d, want 1", v.YOffset)
@@ -319,11 +320,12 @@ func TestUpdate_MouseWheelUp(t *testing.T) {
 }
 
 func TestUpdate_MouseWheelDown(t *testing.T) {
-	v := newTestViewport(80, 3, "a", "b", "c", "d", "e", "f")
+	// 11 lines, height 3 → maxYOffset = 8; wheel-down(5) from 0 → 5
+	v := newTestViewport(80, 3, "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k")
 	v.autoScroll = false
 	v.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
-	if v.YOffset != 3 {
-		t.Errorf("wheel down: YOffset = %d, want 3", v.YOffset)
+	if v.YOffset != 5 {
+		t.Errorf("wheel down: YOffset = %d, want 5", v.YOffset)
 	}
 }
 
