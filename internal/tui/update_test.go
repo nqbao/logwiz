@@ -158,6 +158,166 @@ func TestToolBudgetExhaustion(t *testing.T) {
 // Compile-time check that tea.Model is satisfied (update returns tea.Model).
 var _ tea.Model = Model{}
 
+// --- Command agent loop tests ---
+
+// TestCmdAgentPickToolQuit verifies pick_tool(quit) fires tea.Quit and nils cmdAgent.
+func TestCmdAgentPickToolQuit(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.cmdAgent = &Agent{}
+	m.cmdToolBudget = MaxCmdToolTurns
+
+	asst := agent.Message{
+		Role:      "assistant",
+		ToolCalls: []agent.ToolCall{{ID: "c1", Name: "pick_tool", Arguments: `{"action":"quit"}`}},
+	}
+	m2, cmd := m.Update(AgentStepMsg{Agent: m.cmdAgent, Asst: asst, Calls: asst.ToolCalls})
+	mm := m2.(Model)
+
+	if mm.cmdAgent != nil {
+		t.Error("cmdAgent should be nil after pick_tool commit")
+	}
+	if cmd == nil {
+		t.Fatal("expected tea.Quit cmd")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("cmd returned %T, want tea.QuitMsg", cmd())
+	}
+}
+
+// TestCmdAgentFindKeepsLoopAlive verifies an inspection call does not commit.
+func TestCmdAgentFindKeepsLoopAlive(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	ag := &Agent{}
+	m.cmdAgent = ag
+	m.cmdToolBudget = MaxCmdToolTurns
+	m.buf.Append(logmsg.LogMessage{Raw: "HTTP 500 error"})
+	m.buf.Append(logmsg.LogMessage{Raw: "HTTP 200 ok"})
+
+	asst := agent.Message{
+		Role:      "assistant",
+		ToolCalls: []agent.ToolCall{{ID: "c1", Name: "find", Arguments: `{"pattern":"500","flags":""}`}},
+	}
+	m2, cmd := m.Update(AgentStepMsg{Agent: ag, Asst: asst, Calls: asst.ToolCalls})
+	mm := m2.(Model)
+
+	if mm.cmdAgent == nil {
+		t.Error("cmdAgent should remain non-nil after inspection")
+	}
+	if mm.cmdToolBudget != MaxCmdToolTurns-1 {
+		t.Errorf("cmdToolBudget = %d, want %d", mm.cmdToolBudget, MaxCmdToolTurns-1)
+	}
+	if len(mm.filterRules) != 0 {
+		t.Error("inspection must not mutate filter rules")
+	}
+	if len(mm.searchMatches) != 0 {
+		t.Error("inspection must not mutate search state")
+	}
+	if cmd == nil {
+		t.Error("expected step cmd after inspection")
+	}
+	if mm.cmdInfo == "" {
+		t.Error("cmdInfo should reflect inspection progress")
+	}
+}
+
+// TestCmdAgentBudgetExhaustionNarrowsTools verifies that at budget=0 the
+// agent's Tools are narrowed to pick_tool only before the next Step.
+func TestCmdAgentBudgetExhaustionNarrowsTools(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	ag := &Agent{}
+	m.cmdAgent = ag
+	m.cmdToolBudget = 1 // hits zero after this inspection call
+
+	asst := agent.Message{
+		Role:      "assistant",
+		ToolCalls: []agent.ToolCall{{ID: "c1", Name: "count", Arguments: `{"pattern":"error"}`}},
+	}
+	m.Update(AgentStepMsg{Agent: ag, Asst: asst, Calls: asst.ToolCalls})
+
+	if len(ag.Tools) != 1 || ag.Tools[0].Name != "pick_tool" {
+		t.Errorf("Tools after budget exhaustion = %v, want [pick_tool]", toolNames(ag.Tools))
+	}
+}
+
+// TestCmdAgentInspectionDoesNotMutateViewport verifies viewport and filter are unchanged.
+func TestCmdAgentInspectionDoesNotMutateViewport(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.cmdAgent = &Agent{}
+	m.cmdToolBudget = MaxCmdToolTurns
+	m.buf.Append(logmsg.LogMessage{Raw: "alpha"})
+	m.buf.Append(logmsg.LogMessage{Raw: "beta"})
+	origSelected := m.logs.Selected
+
+	asst := agent.Message{
+		Role:      "assistant",
+		ToolCalls: []agent.ToolCall{{ID: "c1", Name: "count", Arguments: `{"pattern":"alpha"}`}},
+	}
+	m2, _ := m.Update(AgentStepMsg{Agent: m.cmdAgent, Asst: asst, Calls: asst.ToolCalls})
+	mm := m2.(Model)
+
+	if mm.logs.Selected != origSelected {
+		t.Errorf("logs.Selected changed %d → %d during inspection", origSelected, mm.logs.Selected)
+	}
+	if len(mm.filterRules) != 0 {
+		t.Error("filterRules should not change during inspection")
+	}
+	if len(mm.searchMatches) != 0 {
+		t.Error("searchMatches should not change during inspection")
+	}
+}
+
+// TestCmdAgentFindThenJump simulates a 2-step loop: find → pick_tool(jump).
+func TestCmdAgentFindThenJump(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	ag := &Agent{}
+	m.cmdAgent = ag
+	m.cmdToolBudget = MaxCmdToolTurns
+	m.buf.Append(logmsg.LogMessage{Raw: "HTTP 500 error"})
+	m.buf.Append(logmsg.LogMessage{Raw: "HTTP 200 ok"})
+
+	// Step 1: find.
+	asst1 := agent.Message{
+		Role:      "assistant",
+		ToolCalls: []agent.ToolCall{{ID: "c1", Name: "find", Arguments: `{"pattern":"500","flags":""}`}},
+	}
+	m2, _ := m.Update(AgentStepMsg{Agent: ag, Asst: asst1, Calls: asst1.ToolCalls})
+	mm := m2.(Model)
+	if mm.cmdAgent == nil {
+		t.Fatal("cmdAgent should remain alive after find")
+	}
+
+	// Step 2: pick_tool(jump).
+	asst2 := agent.Message{
+		Role:      "assistant",
+		ToolCalls: []agent.ToolCall{{ID: "c2", Name: "pick_tool", Arguments: `{"action":"jump","pattern":"500","position":"first"}`}},
+	}
+	m3, _ := mm.Update(AgentStepMsg{Agent: ag, Asst: asst2, Calls: asst2.ToolCalls})
+	mmm := m3.(Model)
+
+	if mmm.cmdAgent != nil {
+		t.Error("cmdAgent should be nil after pick_tool commit")
+	}
+	if mmm.cmdInfo == "" {
+		t.Error("cmdInfo should be set after jump")
+	}
+	if len(mmm.searchMatches) == 0 {
+		t.Error("searchMatches should be non-empty after jump to 500")
+	}
+}
+
+func toolNames(specs []agent.ToolSpec) []string {
+	names := make([]string, len(specs))
+	for i, s := range specs {
+		names[i] = s.Name
+	}
+	return names
+}
+
 // --- Command palette key tests ---
 
 // TestSlashKeyOpensPalette verifies that / sets cmdActive and does not open sidebar.

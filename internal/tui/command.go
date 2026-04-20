@@ -57,9 +57,6 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 			m.cmdInfo = ""
 			return m, nil
 		}
-		if m.agentCmdContext == "" {
-			m.agentCmdContext = buildAgentCmdContext(m)
-		}
 		m.cmdInfo = "thinking…"
 		m.cmdErr = ""
 		return startAgentCmd(m, raw)
@@ -92,6 +89,7 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 			// saves the new value then reports it).
 			newM.cmdInfo = ie.msg
 			newM.cmdErr = ""
+			newM.cmdInput.SetValue("")
 			return newM, cmd
 		}
 		m.cmdErr = err.Error()
@@ -260,8 +258,19 @@ func configGetDisplay(cfg config.Config, key string) (string, bool) {
 	return "", false
 }
 
-func cmdClear(m Model, _ string) (Model, tea.Cmd, error) {
-	return clearChat(m), nil, nil
+func cmdClear(m Model, args string) (Model, tea.Cmd, error) {
+	switch strings.TrimSpace(args) {
+	case "chat":
+		return clearChat(m), nil, nil
+	case "grep", "filter":
+		m.clearFilter()
+		return m, nil, infoErr{"grep filters cleared"}
+	case "hl", "highlight":
+		clearHL(&m)
+		return m, nil, infoErr{"highlights cleared"}
+	default:
+		return m, nil, fmt.Errorf("usage: clear chat|grep|hl")
+	}
 }
 
 func cmdHelp(m Model, _ string) (Model, tea.Cmd, error) {
@@ -316,7 +325,6 @@ func clearChat(m Model) Model {
 	m.turnIdxByMsg = make(map[int]int)
 	m.activeTurn = -1
 	m.sessionSample = nil
-	m.agentCmdContext = ""
 	m.chatAgent = nil
 	m.cmdAgent = nil
 	return m
