@@ -39,6 +39,11 @@ type LogViewport struct {
 	// filtering. All iteration uses effectiveLen / effectiveBufIdx.
 	filterIndices []int
 
+	// Per-line visual width cache (ansi.StringWidth of the raw line).
+	// Always maintained regardless of Wrap mode; indexed over the effective set.
+	// Evicted/appended in O(newLines) to stay in sync with the ring buffer.
+	widthCache []int
+
 	// Wrap=true: per-line wrap-height cache keyed to wrapCacheWidth.
 	// When filterIndices != nil the cache is indexed over the filtered set.
 	wrapCache      []int
@@ -63,6 +68,7 @@ func newLogViewport(buf *buffer.Buffer) LogViewport {
 // valid range so stale offsets don't leave a blank viewport.
 func (v *LogViewport) SetFilter(indices []int) {
 	v.filterIndices = indices
+	v.recomputeWidthCache()
 	if v.Wrap {
 		v.recomputeWrapCache()
 	}
@@ -127,6 +133,44 @@ func (v *LogViewport) display(msg logmsg.LogMessage) string {
 	return v.h.Display(msg)
 }
 
+// --- visual-width cache ---
+
+// recomputeWidthCache rebuilds widthCache from scratch over the effective set.
+func (v *LogViewport) recomputeWidthCache() {
+	n := v.effectiveLen()
+	if cap(v.widthCache) >= n {
+		v.widthCache = v.widthCache[:n]
+	} else {
+		v.widthCache = make([]int, n)
+	}
+	for i := 0; i < n; i++ {
+		v.widthCache[i] = ansi.StringWidth(v.buf.Line(v.effectiveBufIdx(i)).Raw)
+	}
+}
+
+// updateWidthCache incrementally evicts front entries and appends widths for
+// the newLines lines just appended to the unfiltered buffer. O(newLines).
+func (v *LogViewport) updateWidthCache(newLines int) {
+	bufLen := v.buf.Len()
+	bufCap := v.buf.Cap()
+	evictions := max(0, len(v.widthCache)+newLines-bufCap)
+	if evictions > len(v.widthCache) {
+		v.recomputeWidthCache()
+		return
+	}
+	if evictions > 0 {
+		copy(v.widthCache, v.widthCache[evictions:])
+		v.widthCache = v.widthCache[:len(v.widthCache)-evictions]
+	}
+	start := bufLen - newLines
+	if start < 0 {
+		start = 0
+	}
+	for i := start; i < bufLen; i++ {
+		v.widthCache = append(v.widthCache, ansi.StringWidth(v.buf.Line(i).Raw))
+	}
+}
+
 // --- wrap-height cache ---
 
 // contentWidth returns the usable width for log line content.
@@ -139,15 +183,11 @@ func (v *LogViewport) contentWidth() int {
 	return v.Width
 }
 
-// lineWrapHeight returns the number of screen rows required to display line
-// at the current content width.
-func (v *LogViewport) lineWrapHeight(line string) int {
+// lineWrapHeight returns the number of screen rows required to display a line
+// of the given visual width at the current content width.
+func (v *LogViewport) lineWrapHeight(w int) int {
 	cw := v.contentWidth()
-	if cw <= 0 {
-		return 1
-	}
-	w := ansi.StringWidth(line)
-	if w == 0 {
+	if cw <= 0 || w == 0 {
 		return 1
 	}
 	return (w + cw - 1) / cw
@@ -156,8 +196,13 @@ func (v *LogViewport) lineWrapHeight(line string) int {
 // recomputeWrapCache rebuilds the full cache in O(N) over the effective set.
 // When filterIndices != nil the cache is indexed over the filtered set.
 // Called on resize (width change), filter change, or when the cache is stale.
+// Reads widthCache to avoid re-scanning line content; rebuilds widthCache first
+// if it is stale.
 func (v *LogViewport) recomputeWrapCache() {
 	n := v.effectiveLen()
+	if len(v.widthCache) != n {
+		v.recomputeWidthCache()
+	}
 	if cap(v.wrapCache) >= n {
 		v.wrapCache = v.wrapCache[:n]
 	} else {
@@ -165,7 +210,7 @@ func (v *LogViewport) recomputeWrapCache() {
 	}
 	v.totalRows = 0
 	for i := 0; i < n; i++ {
-		h := v.lineWrapHeight(v.display(v.buf.Line(v.effectiveBufIdx(i))))
+		h := v.lineWrapHeight(v.widthCache[i])
 		v.wrapCache[i] = h
 		v.totalRows += h
 	}
@@ -174,7 +219,7 @@ func (v *LogViewport) recomputeWrapCache() {
 
 // updateWrapCache incrementally appends heights for newLines newly-appended
 // lines and evicts heights for any lines the ring buffer has overwritten.
-// O(newLines) when the cache is already at the right width.
+// Also keeps widthCache in sync. O(newLines) when the cache is at the right width.
 func (v *LogViewport) updateWrapCache(newLines int) {
 	if v.Width <= 0 {
 		return
@@ -190,27 +235,30 @@ func (v *LogViewport) updateWrapCache(newLines int) {
 	// How many old entries were overwritten by the ring?
 	evictions := max(0, len(v.wrapCache)+newLines-bufCap)
 	if evictions > len(v.wrapCache) {
-		// Cache is more stale than expected; full rebuild.
 		v.recomputeWrapCache()
 		return
 	}
 
-	// Remove evicted heights from the front.
+	// Remove evicted entries from the front of both caches.
 	for i := 0; i < evictions; i++ {
 		v.totalRows -= v.wrapCache[i]
 	}
 	if evictions > 0 {
 		copy(v.wrapCache, v.wrapCache[evictions:])
 		v.wrapCache = v.wrapCache[:len(v.wrapCache)-evictions]
+		copy(v.widthCache, v.widthCache[evictions:])
+		v.widthCache = v.widthCache[:len(v.widthCache)-evictions]
 	}
 
-	// Append heights for the new lines (last newLines entries in the buffer).
+	// Append for the new lines (last newLines entries in the buffer).
 	start := bufLen - newLines
 	if start < 0 {
 		start = 0
 	}
 	for i := start; i < bufLen; i++ {
-		h := v.lineWrapHeight(v.display(v.buf.Line(i)))
+		w := ansi.StringWidth(v.buf.Line(i).Raw)
+		v.widthCache = append(v.widthCache, w)
+		h := v.lineWrapHeight(w)
 		v.wrapCache = append(v.wrapCache, h)
 		v.totalRows += h
 	}
@@ -362,11 +410,15 @@ func (v *LogViewport) SelectAt(screenY int) {
 }
 
 // OnNewLines must be called after n lines have been appended to the buffer.
-// It keeps the wrap-height cache in sync and applies auto-scroll.
-// When a filter is active the wrap cache is managed by SetFilter instead.
+// It keeps both caches in sync and applies auto-scroll.
+// When a filter is active the caches are managed by SetFilter instead.
 func (v *LogViewport) OnNewLines(n int) {
-	if v.Wrap && v.filterIndices == nil {
-		v.updateWrapCache(n)
+	if v.filterIndices == nil {
+		if v.Wrap {
+			v.updateWrapCache(n) // also evicts/appends widthCache
+		} else {
+			v.updateWidthCache(n)
+		}
 	}
 	if v.autoScroll {
 		v.GotoBottom()
@@ -483,6 +535,10 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 	top := clamp(v.YOffset, 0, max(0, n-1))
 	bot := clamp(top+v.Height, top, n)
 
+	if len(v.widthCache) != n {
+		v.recomputeWidthCache()
+	}
+
 	var sb strings.Builder
 	v.longestLineWidth = 0
 
@@ -491,7 +547,7 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 		bufIdx := v.effectiveBufIdx(i)
 		line := v.display(v.buf.Line(bufIdx))
 
-		w := ansi.StringWidth(line)
+		w := v.widthCache[i]
 		if w > v.longestLineWidth {
 			v.longestLineWidth = w
 		}

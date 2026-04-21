@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	"github.com/nqbao/logwiz/internal/buffer"
@@ -467,7 +468,7 @@ func TestWrap_LineWrapHeight(t *testing.T) {
 		{"abcdefghijabcdefghija", 3}, // 21 chars → 3 rows
 	}
 	for _, tc := range cases {
-		got := v.lineWrapHeight(tc.line)
+		got := v.lineWrapHeight(ansi.StringWidth(tc.line))
 		if got != tc.want {
 			t.Errorf("lineWrapHeight(%q) = %d, want %d", tc.line, got, tc.want)
 		}
