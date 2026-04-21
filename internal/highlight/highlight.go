@@ -42,9 +42,13 @@ func (h *Highlighter) Display(msg logmsg.LogMessage) string {
 		return cached
 	}
 	var result string
-	if msg.Format != "" && len(msg.Raw) <= maxHighlightLen {
+	if msg.Format != "" {
 		if fn, ok := h.handlers[msg.Format]; ok {
-			result = fn(msg.Raw)
+			if len(msg.Raw) > maxHighlightLen {
+				result = fn(msg.Raw[:maxHighlightLen]) + msg.Raw[maxHighlightLen:]
+			} else {
+				result = fn(msg.Raw)
+			}
 		} else {
 			result = msg.Raw
 		}
