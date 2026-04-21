@@ -382,13 +382,25 @@ func (v *LogViewport) ScrollLeft(n int) {
 	}
 }
 
+func (v *LogViewport) maxWidthCached() int {
+	m := 0
+	for _, w := range v.widthCache {
+		if w > m {
+			m = w
+		}
+	}
+	return m
+}
+
 func (v *LogViewport) ScrollRight(n int) {
 	if v.Wrap {
 		return
 	}
 	v.xOffset += n
-	if m := v.longestLineWidth - v.contentWidth(); m > 0 && v.xOffset > m {
+	if m := v.maxWidthCached() - v.contentWidth(); m > 0 && v.xOffset > m {
 		v.xOffset = m
+	} else if m <= 0 {
+		v.xOffset = 0
 	}
 }
 
