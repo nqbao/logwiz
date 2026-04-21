@@ -24,7 +24,7 @@ type KV struct{ Key, Value string }
 // Fields holds the canonical columns extracted from a structured log line.
 // Empty strings indicate absent fields; Rest preserves input key order.
 type Fields struct {
-	Time    string // YYYY-MM-DD HH:MM:SS.mmm (UTC), or "" if absent/unparseable
+	Time    string // raw timestamp value from the log line, or "" if absent
 	Level   string // 5-char padded uppercase ("INFO ", "WARN ", "ERROR", "DEBUG", "TRACE", "FATAL")
 	Message string
 	Rest    []KV
@@ -111,7 +111,7 @@ func ExtractFromJSON(raw string) (Fields, bool) {
 		keyLower := strings.ToLower(key)
 		switch {
 		case !seenTS && containsStr(tsKeys, keyLower):
-			f.Time = normalizeTime(jsonValToStr(val))
+			f.Time = jsonValToStr(val)
 			seenTS = true
 		case !seenLevel && containsStr(levelKeys, keyLower):
 			f.Level = normalizeLevel(jsonValToStr(val))
@@ -147,7 +147,7 @@ func ExtractFromLogfmt(raw string) (Fields, bool) {
 		keyLower := strings.ToLower(key)
 		switch {
 		case !seenTS && containsStr(tsKeys, keyLower):
-			f.Time = normalizeTime(val)
+			f.Time = val
 			seenTS = true
 		case !seenLevel && containsStr(levelKeys, keyLower):
 			f.Level = normalizeLevel(val)
