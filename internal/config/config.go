@@ -61,6 +61,10 @@ type Config struct {
 	// Format selects the line parser: "json" or "passthrough".
 	Format string
 
+	// Pretty enables humanlog-style rendering (time LEVEL message key=val …)
+	// for json and logfmt lines instead of raw syntax-coloured output.
+	Pretty bool
+
 	// RedactPatterns is a list of Go regex patterns. Any match in a log
 	// line is replaced with [REDACTED] before the line is sent to the LLM.
 	// The display layer is never affected.
@@ -194,6 +198,8 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		"Path to a file with extra instructions appended to the system prompt")
 	fs.StringVar(&cfg.Format, "format", DefaultFormat,
 		`Line parser: "auto" (default, detects per line), "json", "logfmt", or "passthrough"`)
+	fs.BoolVar(&cfg.Pretty, "pretty", false,
+		"Enable pretty mode: render json/logfmt lines as \"time LEVEL message key=val …\" (toggle with P inside the viewer)")
 	fs.StringVar(&cfg.LogFile, "log-file", "",
 		"Write internal debug logs to `file`")
 	fs.IntVar(&cfg.ThinkingBudget, "thinking-budget", defaultThinkingBudget,

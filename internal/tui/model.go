@@ -159,8 +159,13 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 	ctx, cancel := context.WithCancel(context.Background())
 
 	h := highlight.New()
-	h.Register("json", highlight.JSONRenderer)
-	h.Register("logfmt", highlight.LogfmtRenderer)
+	if cfg.Pretty {
+		h.Register("json", highlight.PrettyJSONRenderer)
+		h.Register("logfmt", highlight.PrettyLogfmtRenderer)
+	} else {
+		h.Register("json", highlight.JSONRenderer)
+		h.Register("logfmt", highlight.LogfmtRenderer)
+	}
 
 	lv := newLogViewport(buf)
 	lv.h = h
@@ -170,6 +175,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 		sourceKind:   kind,
 		buf:          buf,
 		highlighter:  h,
+		prettyMode:   cfg.Pretty,
 		logs:         lv,
 		convo:        viewport.New(0, 0),
 		input:        ta,

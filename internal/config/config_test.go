@@ -244,3 +244,25 @@ func TestParseFormatInvalid(t *testing.T) {
 		t.Fatal("expected error for --format bogus")
 	}
 }
+
+func TestParsePrettyFlag(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := Parse([]string{"--pretty"}, envFromMap(nil), io.Discard)
+	if err != nil {
+		t.Fatalf("Parse --pretty: %v", err)
+	}
+	if !cfg.Pretty {
+		t.Error("cfg.Pretty should be true when --pretty flag is set")
+	}
+}
+
+func TestParsePrettyDefaultOff(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := Parse(nil, envFromMap(nil), io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Pretty {
+		t.Error("cfg.Pretty should be false by default")
+	}
+}
