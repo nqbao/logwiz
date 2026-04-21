@@ -5,39 +5,39 @@ import (
 	"testing"
 )
 
-var hhmmssRe = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}\.\d{3}$`)
+var fullTsRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$`)
 
 func TestNormalizeTime_RFC3339Nano(t *testing.T) {
 	got := normalizeTime("2026-04-21T14:02:31.123Z")
-	if !hhmmssRe.MatchString(got) {
-		t.Errorf("normalizeTime(RFC3339Nano) = %q, want HH:MM:SS.mmm format", got)
+	if !fullTsRe.MatchString(got) {
+		t.Errorf("normalizeTime(RFC3339Nano) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
 	}
-	if got != "14:02:31.123" {
-		t.Errorf("normalizeTime(RFC3339Nano UTC) = %q, want \"14:02:31.123\"", got)
+	if got != "2026-04-21 14:02:31.123" {
+		t.Errorf("normalizeTime(RFC3339Nano UTC) = %q, want \"2026-04-21 14:02:31.123\"", got)
 	}
 }
 
 func TestNormalizeTime_RFC3339(t *testing.T) {
 	got := normalizeTime("2026-04-21T14:02:31Z")
-	if !hhmmssRe.MatchString(got) {
-		t.Errorf("normalizeTime(RFC3339) = %q, want HH:MM:SS.mmm format", got)
+	if !fullTsRe.MatchString(got) {
+		t.Errorf("normalizeTime(RFC3339) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
 	}
-	if got != "14:02:31.000" {
-		t.Errorf("normalizeTime(RFC3339 UTC) = %q, want \"14:02:31.000\"", got)
+	if got != "2026-04-21 14:02:31.000" {
+		t.Errorf("normalizeTime(RFC3339 UTC) = %q, want \"2026-04-21 14:02:31.000\"", got)
 	}
 }
 
 func TestNormalizeTime_EpochSec(t *testing.T) {
 	got := normalizeTime("1745234551")
-	if !hhmmssRe.MatchString(got) {
-		t.Errorf("normalizeTime(epoch-sec) = %q, want HH:MM:SS.mmm format", got)
+	if !fullTsRe.MatchString(got) {
+		t.Errorf("normalizeTime(epoch-sec) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
 	}
 }
 
 func TestNormalizeTime_EpochMs(t *testing.T) {
 	got := normalizeTime("1745234551123")
-	if !hhmmssRe.MatchString(got) {
-		t.Errorf("normalizeTime(epoch-ms) = %q, want HH:MM:SS.mmm format", got)
+	if !fullTsRe.MatchString(got) {
+		t.Errorf("normalizeTime(epoch-ms) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
 	}
 }
 

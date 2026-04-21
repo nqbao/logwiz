@@ -24,20 +24,20 @@ type KV struct{ Key, Value string }
 // Fields holds the canonical columns extracted from a structured log line.
 // Empty strings indicate absent fields; Rest preserves input key order.
 type Fields struct {
-	Time    string // HH:MM:SS.mmm (UTC), or "" if absent/unparseable
+	Time    string // YYYY-MM-DD HH:MM:SS.mmm (UTC), or "" if absent/unparseable
 	Level   string // 5-char padded uppercase ("INFO ", "WARN ", "ERROR", "DEBUG", "TRACE", "FATAL")
 	Message string
 	Rest    []KV
 }
 
 // normalizeTime parses RFC3339, epoch-sec, or epoch-ms timestamps and returns
-// HH:MM:SS.mmm (UTC). Returns s unchanged when no format matches.
+// YYYY-MM-DD HH:MM:SS.mmm (UTC). Returns s unchanged when no format matches.
 func normalizeTime(s string) string {
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-		return t.UTC().Format("15:04:05.000")
+		return t.UTC().Format("2006-01-02 15:04:05.000")
 	}
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC().Format("15:04:05.000")
+		return t.UTC().Format("2006-01-02 15:04:05.000")
 	}
 	if f, err := strconv.ParseFloat(s, 64); err == nil && f > 0 {
 		var t time.Time
@@ -49,7 +49,7 @@ func normalizeTime(s string) string {
 			nsec := int64(math.Round((f - float64(sec)) * 1e9))
 			t = time.Unix(sec, nsec)
 		}
-		return t.UTC().Format("15:04:05.000")
+		return t.UTC().Format("2006-01-02 15:04:05.000")
 	}
 	return s
 }
