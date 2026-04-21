@@ -211,3 +211,36 @@ func TestParseEmptyEnvTreatedAsUnset(t *testing.T) {
 		t.Errorf("Model = %q, want %q", cfg.Model, DefaultModel)
 	}
 }
+
+func TestParseFormat(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	for _, format := range []string{"auto", "json", "logfmt", "passthrough"} {
+		cfg, err := Parse([]string{"--format", format}, envFromMap(nil), io.Discard)
+		if err != nil {
+			t.Errorf("--format %s: unexpected error: %v", format, err)
+			continue
+		}
+		if cfg.Format != format {
+			t.Errorf("--format %s: got %q", format, cfg.Format)
+		}
+	}
+}
+
+func TestParseFormatDefault(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := Parse(nil, envFromMap(nil), io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Format != "auto" {
+		t.Errorf("default Format = %q, want \"auto\"", cfg.Format)
+	}
+}
+
+func TestParseFormatInvalid(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_, err := Parse([]string{"--format", "bogus"}, envFromMap(nil), io.Discard)
+	if err == nil {
+		t.Fatal("expected error for --format bogus")
+	}
+}

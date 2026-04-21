@@ -69,6 +69,10 @@ func run() error {
 	switch cfg.Format {
 	case "json":
 		parser = logmsg.JSONParser{}
+	case "logfmt":
+		parser = logmsg.LogfmtParser{}
+	case "auto":
+		parser = logmsg.AutoParser{}
 	default:
 		parser = logmsg.PassthroughParser{}
 	}

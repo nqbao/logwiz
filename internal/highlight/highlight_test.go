@@ -129,3 +129,48 @@ func TestJSONRenderer_FallbackOnEmpty(t *testing.T) {
 	// way it must not panic.
 	_ = JSONRenderer("")
 }
+
+// --- LogfmtRenderer ---
+
+func TestLogfmtRenderer_ProducesANSI(t *testing.T) {
+	out := LogfmtRenderer("level=info msg=hello retries=3")
+	if !strings.Contains(out, "\x1b[") {
+		t.Error("LogfmtRenderer should produce ANSI escape codes")
+	}
+	if !strings.Contains(out, "level") {
+		t.Error("LogfmtRenderer output missing 'level' key")
+	}
+}
+
+func TestLogfmtRenderer_LevelError_IsRed(t *testing.T) {
+	out := LogfmtRenderer("level=error msg=down")
+	// ANSI color 203 bold: contains the bold+color sequence
+	if !strings.Contains(out, "\x1b[") {
+		t.Error("expected ANSI codes in output")
+	}
+	if !strings.Contains(out, "error") {
+		t.Error("expected 'error' in output")
+	}
+}
+
+func TestLogfmtRenderer_NumericValue_IsYellow(t *testing.T) {
+	out := LogfmtRenderer("a=1 retries=3")
+	if !strings.Contains(out, "\x1b[") {
+		t.Error("expected ANSI codes for numeric value")
+	}
+	if !strings.Contains(out, "3") {
+		t.Error("expected '3' in output")
+	}
+}
+
+func TestLogfmtRenderer_NoSpans_ReturnsUnchanged(t *testing.T) {
+	in := "plain prose with no equals signs"
+	out := LogfmtRenderer(in)
+	if out != in {
+		t.Errorf("LogfmtRenderer(%q) = %q, want unchanged", in, out)
+	}
+}
+
+func TestLogfmtRenderer_EmptyInput(t *testing.T) {
+	_ = LogfmtRenderer("") // must not panic
+}

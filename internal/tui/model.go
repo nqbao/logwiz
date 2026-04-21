@@ -156,6 +156,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 
 	h := highlight.New()
 	h.Register("json", highlight.JSONRenderer)
+	h.Register("logfmt", highlight.LogfmtRenderer)
 
 	lv := newLogViewport(buf)
 	lv.h = h
