@@ -162,16 +162,16 @@ func TestSubmitWithoutClientSetsError(t *testing.T) {
 func TestPKeyTogglesPrettyMode(t *testing.T) {
 	m := newTestModel(t)
 
-	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	mm := m2.(Model)
 	if !mm.prettyMode {
-		t.Fatal("prettyMode should be true after pressing P once")
+		t.Fatal("prettyMode should be true after pressing p once")
 	}
 
-	m3, _ := mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
+	m3, _ := mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	mm = m3.(Model)
 	if mm.prettyMode {
-		t.Fatal("prettyMode should be false after pressing P twice")
+		t.Fatal("prettyMode should be false after pressing p twice")
 	}
 }
 

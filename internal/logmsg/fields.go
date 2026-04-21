@@ -30,9 +30,9 @@ type Fields struct {
 	Rest    []KV
 }
 
-// normalizeTime parses RFC3339, epoch-sec, or epoch-ms timestamps and returns
+// NormalizeTime parses RFC3339, epoch-sec, or epoch-ms timestamps and returns
 // YYYY-MM-DD HH:MM:SS.mmm (UTC). Returns s unchanged when no format matches.
-func normalizeTime(s string) string {
+func NormalizeTime(s string) string {
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
 		return t.UTC().Format("2006-01-02 15:04:05.000")
 	}

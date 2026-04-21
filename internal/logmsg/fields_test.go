@@ -8,43 +8,43 @@ import (
 var fullTsRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$`)
 
 func TestNormalizeTime_RFC3339Nano(t *testing.T) {
-	got := normalizeTime("2026-04-21T14:02:31.123Z")
+	got := NormalizeTime("2026-04-21T14:02:31.123Z")
 	if !fullTsRe.MatchString(got) {
-		t.Errorf("normalizeTime(RFC3339Nano) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
+		t.Errorf("NormalizeTime(RFC3339Nano) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
 	}
 	if got != "2026-04-21 14:02:31.123" {
-		t.Errorf("normalizeTime(RFC3339Nano UTC) = %q, want \"2026-04-21 14:02:31.123\"", got)
+		t.Errorf("NormalizeTime(RFC3339Nano UTC) = %q, want \"2026-04-21 14:02:31.123\"", got)
 	}
 }
 
 func TestNormalizeTime_RFC3339(t *testing.T) {
-	got := normalizeTime("2026-04-21T14:02:31Z")
+	got := NormalizeTime("2026-04-21T14:02:31Z")
 	if !fullTsRe.MatchString(got) {
-		t.Errorf("normalizeTime(RFC3339) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
+		t.Errorf("NormalizeTime(RFC3339) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
 	}
 	if got != "2026-04-21 14:02:31.000" {
-		t.Errorf("normalizeTime(RFC3339 UTC) = %q, want \"2026-04-21 14:02:31.000\"", got)
+		t.Errorf("NormalizeTime(RFC3339 UTC) = %q, want \"2026-04-21 14:02:31.000\"", got)
 	}
 }
 
 func TestNormalizeTime_EpochSec(t *testing.T) {
-	got := normalizeTime("1745234551")
+	got := NormalizeTime("1745234551")
 	if !fullTsRe.MatchString(got) {
-		t.Errorf("normalizeTime(epoch-sec) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
+		t.Errorf("NormalizeTime(epoch-sec) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
 	}
 }
 
 func TestNormalizeTime_EpochMs(t *testing.T) {
-	got := normalizeTime("1745234551123")
+	got := NormalizeTime("1745234551123")
 	if !fullTsRe.MatchString(got) {
-		t.Errorf("normalizeTime(epoch-ms) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
+		t.Errorf("NormalizeTime(epoch-ms) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
 	}
 }
 
 func TestNormalizeTime_Unparseable(t *testing.T) {
 	const s = "not-a-timestamp"
-	if got := normalizeTime(s); got != s {
-		t.Errorf("normalizeTime(unparseable) = %q, want unchanged %q", got, s)
+	if got := NormalizeTime(s); got != s {
+		t.Errorf("NormalizeTime(unparseable) = %q, want unchanged %q", got, s)
 	}
 }
 
