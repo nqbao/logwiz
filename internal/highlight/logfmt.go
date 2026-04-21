@@ -20,20 +20,23 @@ var lfr = func() *lipgloss.Renderer {
 }()
 
 var (
-	lfKey   = lfr.NewStyle().Foreground(lipgloss.Color("86"))
-	lfEq    = lfr.NewStyle().Foreground(lipgloss.Color("244"))
-	lfStr   = lfr.NewStyle().Foreground(lipgloss.Color("114"))
-	lfNum   = lfr.NewStyle().Foreground(lipgloss.Color("179"))
+	// Keys and = are intentionally subdued so they don't compete with JSON/monokai.
+	lfKey = lfr.NewStyle().Foreground(lipgloss.Color("240")) // dim gray
+	lfEq  = lfr.NewStyle().Foreground(lipgloss.Color("238")) // dimmer gray
+
+	// Only level severity and numeric values get distinct color.
+	lfNum   = lfr.NewStyle().Foreground(lipgloss.Color("179")) // soft yellow — matches monokai numbers
 	lfError = lfr.NewStyle().Foreground(lipgloss.Color("203")).Bold(true)
 	lfWarn  = lfr.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
-	lfInfo  = lfr.NewStyle().Foreground(lipgloss.Color("111")).Bold(true)
+	lfInfo  = lfr.NewStyle().Foreground(lipgloss.Color("111"))
 	lfDebug = lfr.NewStyle().Faint(true)
 )
 
-// LogfmtRenderer colourises a logfmt line. Keys are cyan, = is dim gray,
-// level values are coloured by severity, numeric values are yellow, and
-// other values are green. Falls back to raw text when the line has fewer
-// than two key=value pairs or cannot be decoded.
+// LogfmtRenderer colourises a logfmt line. Keys and = are dim so the values
+// stand out; level severity is colour-coded; numeric values are soft yellow.
+// All other values are rendered in the default foreground colour. Falls back
+// to raw text when the line has fewer than two key=value pairs or cannot be
+// decoded.
 func LogfmtRenderer(text string) string {
 	if strings.Count(text, "=") < 2 {
 		return text
@@ -78,5 +81,5 @@ func lfRenderValue(key, val string) string {
 	if _, err := strconv.ParseFloat(val, 64); err == nil {
 		return lfNum.Render(val)
 	}
-	return lfStr.Render(val)
+	return val // default fg — no lipgloss overhead for the common case
 }
