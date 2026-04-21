@@ -25,6 +25,7 @@ var cmdRegistry = map[string]cmdHandler{
 	"help":      cmdHelp,
 	"config":    cmdConfig,
 	"quit":      cmdQuit,
+	"pretty":    cmdPretty,
 }
 
 // infoErr is returned by handlers that want to keep the palette open and
@@ -313,6 +314,23 @@ func cmdHighlight(m Model, args string) (Model, tea.Cmd, error) {
 // cmdNoHL clears all highlight rules.
 func cmdNoHL(m Model, _ string) (Model, tea.Cmd, error) {
 	clearHL(&m)
+	return m, nil, nil
+}
+
+// cmdPretty implements :pretty [on|off].
+// With no argument it toggles pretty mode; "on"/"off" set it explicitly.
+func cmdPretty(m Model, args string) (Model, tea.Cmd, error) {
+	switch strings.TrimSpace(args) {
+	case "on":
+		m.prettyMode = true
+	case "off":
+		m.prettyMode = false
+	case "":
+		m.prettyMode = !m.prettyMode
+	default:
+		return m, nil, fmt.Errorf("usage: pretty [on|off]")
+	}
+	applyPrettyMode(&m)
 	return m, nil, nil
 }
 

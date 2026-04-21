@@ -159,6 +159,22 @@ func TestSubmitWithoutClientSetsError(t *testing.T) {
 	}
 }
 
+func TestPKeyTogglesPrettyMode(t *testing.T) {
+	m := newTestModel(t)
+
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
+	mm := m2.(Model)
+	if !mm.prettyMode {
+		t.Fatal("prettyMode should be true after pressing P once")
+	}
+
+	m3, _ := mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
+	mm = m3.(Model)
+	if mm.prettyMode {
+		t.Fatal("prettyMode should be false after pressing P twice")
+	}
+}
+
 // --- helpers ---
 
 type errExample string

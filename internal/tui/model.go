@@ -122,6 +122,10 @@ type Model struct {
 
 	hintIdx int // cycles through inputHints
 
+	// prettyMode renders structured lines (json/logfmt) in humanlog-style layout
+	// (time level message key=val …) instead of raw syntax-coloured output.
+	prettyMode bool
+
 	// sessionSample is the one-shot log snapshot captured on first submit.
 	sessionSample []string
 
