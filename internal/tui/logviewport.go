@@ -183,14 +183,22 @@ func (v *LogViewport) contentWidth() int {
 	return v.Width
 }
 
+// maxWrapLines caps how many screen rows a single log line may occupy in wrap
+// mode. Lines that would exceed this are shown truncated with a "..." suffix.
+const maxWrapLines = 4
+
 // lineWrapHeight returns the number of screen rows required to display a line
-// of the given visual width at the current content width.
+// of the given visual width at the current content width, capped at maxWrapLines.
 func (v *LogViewport) lineWrapHeight(w int) int {
 	cw := v.contentWidth()
 	if cw <= 0 || w == 0 {
 		return 1
 	}
-	return (w + cw - 1) / cw
+	h := (w + cw - 1) / cw
+	if h > maxWrapLines {
+		return maxWrapLines
+	}
+	return h
 }
 
 // recomputeWrapCache rebuilds the full cache in O(N) over the effective set.
@@ -612,8 +620,14 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 			wStart = startWrapRow
 		}
 
+		truncated := h == maxWrapLines && i < len(v.widthCache) && v.widthCache[i] > maxWrapLines*cw
 		for wr := wStart; wr < h && rowsWritten < v.Height; wr++ {
-			segment := ansi.Cut(line, wr*cw, (wr+1)*cw)
+			var segment string
+			if truncated && wr == h-1 && cw > 3 {
+				segment = ansi.Cut(line, wr*cw, wr*cw+cw-3) + "..."
+			} else {
+				segment = ansi.Cut(line, wr*cw, (wr+1)*cw)
+			}
 			if bufIdx == v.Selected {
 				segment = selectedStyle.Width(cw).Render(ansi.Strip(segment))
 				if v.hlMatchMap != nil {
