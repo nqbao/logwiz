@@ -227,6 +227,10 @@ func cmdConfig(m Model, args string) (Model, tea.Cmd, error) {
 		m.chatClient.SetThinkingBudget(m.cfg.ThinkingBudget)
 		m.chatClient.SetReasoningEffort(m.cfg.ReasoningEffort)
 	}
+	if key == "pretty" {
+		m.prettyMode = m.cfg.Pretty
+		applyPrettyMode(&m)
+	}
 	if err := config.SaveKey(key, value); err != nil {
 		return m, nil, fmt.Errorf("applied in memory but could not persist: %w", err)
 	}
@@ -255,6 +259,11 @@ func configGetDisplay(cfg config.Config, key string) (string, bool) {
 		return strconv.Itoa(cfg.ThinkingBudget), true
 	case "reasoning-effort":
 		return cfg.ReasoningEffort, true
+	case "pretty":
+		if cfg.Pretty {
+			return "on", true
+		}
+		return "off", true
 	}
 	return "", false
 }

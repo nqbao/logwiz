@@ -81,7 +81,7 @@ type Config struct {
 
 // ConfigurableKeys lists the keys accepted by ApplyKey and SaveKey.
 var ConfigurableKeys = []string{
-	"model", "api-key", "base-url", "sidebar-width", "context-lines", "system-prompt", "thinking-budget", "reasoning-effort",
+	"model", "api-key", "base-url", "sidebar-width", "context-lines", "system-prompt", "thinking-budget", "reasoning-effort", "pretty",
 }
 
 // fileConfig holds the subset of Config that can be set in
@@ -96,6 +96,7 @@ type fileConfig struct {
 	RedactPatterns []string `json:"redact_patterns,omitempty"`
 	ThinkingBudget  int    `json:"thinking_budget,omitempty"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	Pretty          bool   `json:"pretty,omitempty"`
 }
 
 // stringSliceFlag implements flag.Value for a repeatable --redact flag.
@@ -173,6 +174,7 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	}
 	defaultThinkingBudget := fc.ThinkingBudget
 	defaultReasoningEffort := fc.ReasoningEffort
+	defaultPretty := fc.Pretty
 
 	var (
 		cfg           Config
@@ -198,8 +200,8 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		"Path to a file with extra instructions appended to the system prompt")
 	fs.StringVar(&cfg.Format, "format", DefaultFormat,
 		`Line parser: "auto" (default, detects per line), "json", "logfmt", or "passthrough"`)
-	fs.BoolVar(&cfg.Pretty, "pretty", false,
-		"Enable pretty mode: render json/logfmt lines as \"time LEVEL message key=val …\" (toggle with P inside the viewer)")
+	fs.BoolVar(&cfg.Pretty, "pretty", defaultPretty,
+		"Enable pretty mode: render json/logfmt lines as \"time LEVEL message key=val …\" (toggle with P inside the viewer, persist with :config pretty on/off)")
 	fs.StringVar(&cfg.LogFile, "log-file", "",
 		"Write internal debug logs to `file`")
 	fs.IntVar(&cfg.ThinkingBudget, "thinking-budget", defaultThinkingBudget,
@@ -338,6 +340,15 @@ func ApplyKey(cfg *Config, key, value string) error {
 		if value != "" {
 			cfg.ThinkingBudget = 0
 		}
+	case "pretty":
+		switch strings.ToLower(value) {
+		case "on", "true", "1":
+			cfg.Pretty = true
+		case "off", "false", "0":
+			cfg.Pretty = false
+		default:
+			return fmt.Errorf(`pretty must be "on" or "off"`)
+		}
 	default:
 		return fmt.Errorf("unknown config key %q (valid: %s)", key, strings.Join(ConfigurableKeys, ", "))
 	}
@@ -381,6 +392,8 @@ func SaveKey(key, value string) error {
 		if value != "" {
 			fc.ThinkingBudget = 0
 		}
+	case "pretty":
+		fc.Pretty = strings.ToLower(value) == "on" || strings.ToLower(value) == "true" || value == "1"
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}
