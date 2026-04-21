@@ -47,7 +47,20 @@
     {"name": "pyecom-order-shipped",   "template": "{ts} INFO  shipment.dispatched order_id={rand:10000-99999} carrier={choice:fedex,ups,usps,dhl} tracking={rand:100000000-999999999}"},
     {"name": "pyecom-payment-failed",  "template": "{ts} WARNING payment.failed    order_id={rand:10000-99999} provider={choice:stripe,paypal} reason={choice:insufficient_funds,card_declined,fraud_detected}"},
     {"name": "pyecom-stock-low",       "template": "{ts} WARNING inventory.low     sku={choice:SKU-001,SKU-042,SKU-107} stock={rand:1-10} threshold=20"},
-    {"name": "pyecom-exception", "template": "Traceback (most recent call last):{nl}  File \"/app/{choice:orders/views,payments/processor,cart/models,inventory/tasks}.py\", line {rand:20-200}, in {choice:process_order,handle_payment,checkout,reserve_stock}{nl}    {choice:result = gateway.charge(order),order.save(),cart.checkout(),inventory.reserve(sku)}{nl}{choice:stripe.error.CardError,django.db.OperationalError,requests.exceptions.Timeout,KeyError,ValueError}: {choice:Your card was declined.,no such table: orders_orderitem,Read timed out. (connect timeout=5),'product_id',invalid literal for int() with base 10}"}
+    {"name": "pyecom-exception", "template": "Traceback (most recent call last):{nl}  File \"/app/{choice:orders/views,payments/processor,cart/models,inventory/tasks}.py\", line {rand:20-200}, in {choice:process_order,handle_payment,checkout,reserve_stock}{nl}    {choice:result = gateway.charge(order),order.save(),cart.checkout(),inventory.reserve(sku)}{nl}{choice:stripe.error.CardError,django.db.OperationalError,requests.exceptions.Timeout,KeyError,ValueError}: {choice:Your card was declined.,no such table: orders_orderitem,Read timed out. (connect timeout=5),'product_id',invalid literal for int() with base 10}"},
+
+    {"name": "goweb-req-ok",      "template": "ts=\"{ts}\" level=info msg=request method={choice:GET,GET,GET,POST,PUT} path=/api/v1/{choice:users,orders,items,events} status=200 duration={rand:1-150}ms bytes={rand:100-8000}"},
+    {"name": "goweb-req-slow",    "template": "ts=\"{ts}\" level=warn msg=slow_request method=GET path=/api/v1/{choice:users,orders,items} status=200 duration={rand:500-3000}ms bytes={rand:100-8000}"},
+    {"name": "goweb-req-error",   "template": "ts=\"{ts}\" level=error msg=handler_failed method={choice:GET,POST} path=/api/v1/{choice:users,orders,items} status=500 error={choice:timeout,db_unavailable,nil_pointer}"},
+    {"name": "goweb-req-unauth",  "template": "ts=\"{ts}\" level=warn msg=unauthorized method=POST path=/api/v1/{choice:admin,tokens,users} status=401 ip={ip}"},
+    {"name": "goweb-db-query",    "template": "ts=\"{ts}\" level=debug msg=db_query table={choice:users,orders,items,events} duration={rand:1-80}ms rows={rand:0-500}"},
+    {"name": "goweb-db-slow",     "template": "ts=\"{ts}\" level=warn msg=slow_query table={choice:users,orders,items} duration={rand:200-2000}ms threshold=100ms rows={rand:0-500}"},
+    {"name": "goweb-db-error",    "template": "ts=\"{ts}\" level=error msg=db_error table={choice:users,orders} error={choice:deadlock,conn_reset,too_many_connections} retries={rand:1-5}"},
+    {"name": "goweb-cache-hit",   "template": "ts=\"{ts}\" level=debug msg=cache_hit key={choice:user,session,order}:{rand:1-9999} ttl={rand:60-3600}"},
+    {"name": "goweb-cache-miss",  "template": "ts=\"{ts}\" level=debug msg=cache_miss key={choice:user,session,order}:{rand:1-9999}"},
+    {"name": "goweb-worker-ok",   "template": "ts=\"{ts}\" level=info msg=job_complete worker={rand:1-8} job={choice:email,notify,export,import} duration={rand:50-5000}ms"},
+    {"name": "goweb-worker-fail", "template": "ts=\"{ts}\" level=error msg=job_failed worker={rand:1-8} job={choice:email,notify,export} error={choice:timeout,panic_recovered,queue_full} retries={rand:1-5}"},
+    {"name": "goweb-gc",          "template": "ts=\"{ts}\" level=debug msg=gc_pause duration={rand:1-30}ms heap_mb={rand:50-512} goroutines={rand:10-200}"}
   ],
   "presets": [
     {
@@ -121,6 +134,42 @@
         {"name": "pyecom-payment-failed",  "weight": 4},
         {"name": "pyecom-stock-low",       "weight": 3},
         {"name": "pyecom-exception", "weight": 3}
+      ]
+    },
+    {
+      "name": "go-webapp",
+      "templates": [
+        {"name": "goweb-req-ok",      "weight": 50},
+        {"name": "goweb-req-slow",    "weight": 5},
+        {"name": "goweb-req-error",   "weight": 3},
+        {"name": "goweb-req-unauth",  "weight": 2},
+        {"name": "goweb-db-query",    "weight": 20},
+        {"name": "goweb-db-slow",     "weight": 4},
+        {"name": "goweb-db-error",    "weight": 1},
+        {"name": "goweb-cache-hit",   "weight": 8},
+        {"name": "goweb-cache-miss",  "weight": 3},
+        {"name": "goweb-worker-ok",   "weight": 3},
+        {"name": "goweb-worker-fail", "weight": 0.5},
+        {"name": "goweb-gc",          "weight": 0.5}
+      ]
+    },
+    {
+      "name": "mixed",
+      "templates": [
+        {"name": "json-request",      "weight": 20},
+        {"name": "json-cache",        "weight": 8},
+        {"name": "json-slowquery",    "weight": 4},
+        {"name": "json-error",        "weight": 2},
+        {"name": "goweb-req-ok",      "weight": 20},
+        {"name": "goweb-db-query",    "weight": 8},
+        {"name": "goweb-req-slow",    "weight": 3},
+        {"name": "goweb-req-error",   "weight": 2},
+        {"name": "log-info-complete", "weight": 10},
+        {"name": "log-debug-cache",   "weight": 8},
+        {"name": "log-warn-queue",    "weight": 5},
+        {"name": "log-error-conn",    "weight": 3},
+        {"name": "crash-panic",       "weight": 1},
+        {"name": "crash-goroutine",   "weight": 1}
       ]
     }
   ]

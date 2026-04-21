@@ -23,7 +23,7 @@ const (
 	DefaultContextLines = 10
 	DefaultSidebarWidth = 50
 	DefaultSystemPrompt = "You are logwiz, an assistant analyzing terminal logs. You have access to tools: tail(n), read(start, n), count_regex(pattern, case_insensitive, since_line), search_regex(pattern, max, case_insensitive, since_line). Use count_regex first to assess scale cheaply, then search_regex to fetch matching lines. Use them to fetch the log data you need — do not guess. Indexes are absolute line numbers in the current buffer (0 = oldest). Cite line numbers when giving findings. Keep answers concise."
-	DefaultFormat       = "json"
+	DefaultFormat       = "auto"
 )
 
 // Env var names.
@@ -193,7 +193,7 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	fs.StringVar(&cfg.InstructionsFile, "instructions-file", "",
 		"Path to a file with extra instructions appended to the system prompt")
 	fs.StringVar(&cfg.Format, "format", DefaultFormat,
-		`Line parser: "json" detects and colours JSON lines, "passthrough" renders everything as plain text`)
+		`Line parser: "auto" (default, detects per line), "json", "logfmt", or "passthrough"`)
 	fs.StringVar(&cfg.LogFile, "log-file", "",
 		"Write internal debug logs to `file`")
 	fs.IntVar(&cfg.ThinkingBudget, "thinking-budget", defaultThinkingBudget,
@@ -238,8 +238,10 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	if cfg.SidebarWidth < 10 {
 		return Config{}, errors.New("--sidebar-width must be >= 10")
 	}
-	if cfg.Format != "json" && cfg.Format != "passthrough" {
-		return Config{}, errors.New(`--format must be "json" or "passthrough"`)
+	switch cfg.Format {
+	case "auto", "json", "logfmt", "passthrough":
+	default:
+		return Config{}, errors.New(`--format must be "auto", "json", "logfmt", or "passthrough"`)
 	}
 	if cfg.ThinkingBudget != 0 && cfg.ThinkingBudget < 1024 {
 		return Config{}, errors.New("--thinking-budget must be 0 (disabled) or >= 1024")
