@@ -28,9 +28,15 @@ func (h *Highlighter) Register(format string, fn SpanRenderer) {
 	h.handlers[format] = fn
 }
 
+// maxHighlightLen is the maximum byte length a line may have before syntax
+// highlighting is skipped. Chroma tokenising 50k–170k of JSON is very slow;
+// lines this long are typically opaque blobs that don't benefit from colour.
+const maxHighlightLen = 10240
+
 // Display returns the colourised representation of msg, computing and caching
 // it on the first call and returning the cached value on subsequent calls.
-// If no handler is registered for msg.Format, msg.Raw is returned unchanged.
+// If no handler is registered for msg.Format, or the line exceeds
+// maxHighlightLen bytes, msg.Raw is returned unchanged.
 func (h *Highlighter) Display(msg logmsg.LogMessage) string {
 	if cached, ok := h.cache[msg.ID]; ok {
 		return cached
@@ -38,7 +44,11 @@ func (h *Highlighter) Display(msg logmsg.LogMessage) string {
 	var result string
 	if msg.Format != "" {
 		if fn, ok := h.handlers[msg.Format]; ok {
-			result = fn(msg.Raw)
+			if len(msg.Raw) > maxHighlightLen {
+				result = fn(msg.Raw[:maxHighlightLen]) + msg.Raw[maxHighlightLen:]
+			} else {
+				result = fn(msg.Raw)
+			}
 		} else {
 			result = msg.Raw
 		}

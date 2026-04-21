@@ -129,9 +129,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-			// Only pass wheel scroll through to logs; block clicks so the
-			// sidebar doesn't accidentally trigger log-row highlighting.
-			if msg.Button != tea.MouseButtonWheelUp && msg.Button != tea.MouseButtonWheelDown {
+			// Block clicks so the sidebar doesn't accidentally trigger
+			// log-row highlighting. Wheel events (all four directions)
+			// fall through to the log viewport.
+			switch msg.Button {
+			case tea.MouseButtonWheelUp, tea.MouseButtonWheelDown,
+				tea.MouseButtonWheelLeft, tea.MouseButtonWheelRight:
+				// fall through
+			default:
 				return m, nil
 			}
 		}
