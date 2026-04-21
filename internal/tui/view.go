@@ -186,7 +186,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  :nohl         clear all highlights",
 		"  :clear chat|grep|hl   clear chat history / grep filters / highlights",
 		"  H             toggle highlights on / off",
-		"  P             toggle pretty mode (humanlog-style layout for json/logfmt)",
+		"  p             toggle pretty mode (humanlog-style layout for json/logfmt)",
 		"  :pretty       toggle pretty mode  |  :pretty on / :pretty off",
 		"  :config <key> [val]   show or set a config value (model, api-key, base-url, sidebar-width, context-lines, system-prompt)",
 		"  n / N         next / previous search match",
