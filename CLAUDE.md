@@ -21,7 +21,7 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
 1. `cmd/logwiz/main.go` wires everything: parses config, picks source, creates buffer, starts TUI program
 2. A `source.Source` goroutine reads lines and pushes `source.NewLineMsg` into the Bubble Tea event loop via `program.Send`
 3. `Update()` in `internal/tui/update.go` appends each line to the `buffer.Buffer` and calls `refreshLogsContent()` to update the viewport
-4. Chat requests are fired as `tea.Cmd` (off the event loop), returning `ChatReplyMsg` or `ChatErrMsg`
+4. Chat requests and palette agent commands are fired as `tea.Cmd` (off the event loop), returning agent step/done/err messages
 
 **Key design rule:** The `buffer.Buffer` is owned exclusively by the Bubble Tea event loop — only mutated inside `Update()`. No locking needed.
 
@@ -32,15 +32,20 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
 - `internal/buffer` — fixed-size ring buffer of log lines
 - `internal/source` — stdin and file readers; emit `NewLineMsg`/`EOFMsg`/`ErrMsg`
 - `internal/config` — flag + env var resolution (flag > env > `~/.logwiz/config.json` > default)
-- `internal/chat` — OpenAI-compatible HTTP client (`Complete` is non-streaming)
+- `internal/agent` — LLM client, message types, and agent lifecycle:
+  - `agent.go` — `Agent` struct, `Step()` loop, `FeedResults()`
+  - `chat.go` — `NewChatAgent`, `BuildChatMessages()` (system prompt + history + fenced log context)
+  - `command.go` — `NewCmdAgent`, `CmdToolDefs`, `CmdInspectToolDefs`, `CmdCommitToolDef`, `BuildCmdPrompt`
+  - `client.go` — OpenAI-compatible HTTP client
+  - `types.go` — `Message`, `ToolSpec`, `ToolCall` types
 - `internal/tui` — Bubble Tea model split across:
   - `model.go` — state struct + `New`
   - `update.go` — `Update()` dispatch, key handling, `refreshLogsContent`, status bar
-  - `view.go` — `View()` composition, sidebar rendering, help overlay
-  - `layout.go` — logs/sidebar width split calculation
+  - `view.go` — `View()` composition, sidebar rendering, inline banner, help overlay
+  - `layout.go` — logs/sidebar width split calculation (`computeLayout`)
   - `styles.go` — all lipgloss styles
   - `keys.go` — key name constants
-  - `prompt.go` — pure function `buildChatMessages()` that constructs the API message list (system prompt + history + fenced log context + question)
+  - `agent.go` — bridges agent execution with TUI state: `startAgentCmd`, `executeCmdTool`, `runCmdInspection`, `submitChat`, `onChatToolCalls`, `onChatDone`
   - `command.go` — command palette dispatcher (`dispatchCommand`) and handlers (`:chat`, `:search`, `:grep`, `:clear`, `:help`, `:model`, `:quit`)
   - `search.go` — regex search helpers: `runSearch`, `updateSearch`, `nextMatch`, `prevMatch`, `clearSearch`
   - `filter.go` — view-layer filter: `runFilter`, `updateFilter`, `clearFilter`, `intersectSearch`
@@ -48,6 +53,23 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
 ## TUI focus model
 
 The model tracks a `focusArea` (either `focusLogs` or `focusChat`). All key routing in `onKey()` branches on this first, so adding keybindings requires handling both states. Sidebar open/closed is independent of focus — the sidebar can be open with focus on logs (scrollable, non-editable) or on chat input.
+
+## Command palette agent
+
+Unprefixed palette input (no `:` or `/` prefix) is routed through a short-lived `cmdAgent` defined in `internal/agent/command.go`. The agent runs a two-phase loop:
+
+1. **Inspection** (`find`, `count`, `tail`, `read`) — read-only tools that query the buffer and feed results back into the loop. Budget: `MaxCmdToolTurns` (4).
+2. **Commit** (`pick_tool`) — a single umbrella call that names the action and closes the loop.
+
+`pick_tool` actions: `grep`, `clear_grep`, `jump`, `highlight`, `clear_highlight`, `set_model`, `clear_chat`, `quit`, `answer`, `reject`.
+
+The `answer` action closes the palette and displays a short inline banner (≤2 lines) above the status bar. `tab` promotes the Q&A pair into the chat sidebar; `esc` dismisses it.
+
+Inspection tool details:
+- `find(pattern, flags)` — returns count, first/last line, up to 10 samples
+- `count(pattern, flags)` — returns match count and total
+- `tail(n)` — last N lines (1–200), for questions about recent activity
+- `read(start, end)` — inclusive 1-based line range (max 200 lines), for specific ranges
 
 ## Input handling notes
 

@@ -43,7 +43,7 @@ const (
 const MaxToolTurns = 6
 
 // MaxCmdToolTurns is the maximum number of inspection round-trips for a palette command.
-const MaxCmdToolTurns = 3
+const MaxCmdToolTurns = 4
 
 // turnActivity records status for one assistant turn (from user question to
 // final answer). It is displayed as a dim activity line in the sidebar.

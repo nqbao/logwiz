@@ -105,7 +105,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil // stale agent, ignore
 
 	case spinnerTickMsg:
-		if m.chatLoading {
+		if m.chatLoading || m.cmdAgent != nil {
 			m.spinnerTick++
 			m.refreshConvoContent()
 			return m, spinnerCmd()

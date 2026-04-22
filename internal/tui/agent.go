@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -50,7 +51,7 @@ func startAgentCmd(m Model, raw string) (Model, tea.Cmd) {
 	msgs := agent.BuildCmdPrompt(raw, ctx)
 	m.cmdAgent = agent.NewCmdAgent(m.chatClient, m.ctx, msgs)
 	m.cmdToolBudget = MaxCmdToolTurns
-	return m, m.cmdAgent.Step()
+	return m, tea.Batch(m.cmdAgent.Step(), spinnerCmd())
 }
 
 // executeCmdTool routes the agent's tool call to the appropriate TUI handler.
@@ -65,7 +66,8 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 
 	// Inspection tools: read-only, feed result back, keep looping.
 	switch call.Name {
-	case "find", "count":
+	case "find", "count", "tail", "read":
+		slog.Debug("cmd agent tool", "tool", call.Name, "args", call.Arguments)
 		result, info := runCmdInspection(m, call)
 		toolMsg := agent.Message{
 			Role:       "tool",
@@ -84,6 +86,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 	}
 
 	// Commit tool: dispatch action and close the loop.
+	slog.Debug("cmd agent tool", "tool", call.Name, "args", call.Arguments)
 	m.cmdAgent = nil
 	if call.Name != "pick_tool" {
 		return agentCmdErr(m, fmt.Sprintf("unknown agent tool: %s", call.Name))
@@ -121,7 +124,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		if a.Mode == "exclude" {
 			verb = "exclude"
 		}
-		return agentKeepPalette(m, fmt.Sprintf("%s: %q", verb, a.Pattern)), nil
+		return agentKeepPalette(m, fmt.Sprintf("%s: %s", verb, a.Pattern)), nil
 
 	case "clear_grep":
 		m.clearFilter()
@@ -141,7 +144,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			m.searchCursor = len(m.searchMatches) - 1
 			m.logs.JumpTo(m.searchMatches[m.searchCursor])
 		}
-		return agentKeepPalette(m, fmt.Sprintf("jump: %q", a.Pattern)), nil
+		return agentKeepPalette(m, fmt.Sprintf("jump: %s", a.Pattern)), nil
 
 	case "highlight":
 		reStr := a.Pattern
@@ -153,7 +156,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		addHL(&m, re)
-		return agentKeepPalette(m, fmt.Sprintf("highlight: %q", a.Pattern)), nil
+		return agentKeepPalette(m, fmt.Sprintf("highlight: %s", a.Pattern)), nil
 
 	case "clear_highlight":
 		clearHL(&m)
@@ -174,6 +177,9 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		m.Cancel()
 		return m, tea.Quit
 
+	case "answer":
+		return agentKeepPalette(m, a.Reason), nil
+
 	case "reject":
 		return agentKeepPalette(m, a.Reason), nil
 
@@ -182,9 +188,77 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 	}
 }
 
-// runCmdInspection executes a read-only find or count call against the buffer.
+// runCmdInspection executes a read-only inspection call (find, count, tail, read) against the buffer.
 // Returns the full tool result string for the LLM and a short label for cmdInfo.
 func runCmdInspection(m Model, call agent.ToolCall) (result, info string) {
+	switch call.Name {
+	case "tail":
+		return runCmdTail(m, call)
+	case "read":
+		return runCmdRead(m, call)
+	default:
+		return runCmdFindCount(m, call)
+	}
+}
+
+func runCmdTail(m Model, call agent.ToolCall) (result, info string) {
+	var a struct {
+		N int `json:"n"`
+	}
+	if err := json.Unmarshal(json.RawMessage(call.Arguments), &a); err != nil {
+		return "error: " + err.Error(), "error"
+	}
+	if a.N < 1 {
+		a.N = 1
+	}
+	if a.N > 200 {
+		a.N = 200
+	}
+	n := m.buf.Len()
+	start := n - a.N
+	if start < 0 {
+		start = 0
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "tail: %d of %d lines\nlines:\n", n-start, n)
+	for i := start; i < n; i++ {
+		fmt.Fprintf(&b, "  [line %d] %s\n", i+1, m.buf.Line(i).Raw)
+	}
+	return b.String(), fmt.Sprintf("reading last %d lines", a.N)
+}
+
+func runCmdRead(m Model, call agent.ToolCall) (result, info string) {
+	var a struct {
+		Start int `json:"start"`
+		End   int `json:"end"`
+	}
+	if err := json.Unmarshal(json.RawMessage(call.Arguments), &a); err != nil {
+		return "error: " + err.Error(), "error"
+	}
+	if a.Start < 1 || a.End < 1 || a.Start > a.End {
+		return "error: invalid range (start and end must be ≥1 and start ≤ end)", "error"
+	}
+	n := m.buf.Len()
+	s := a.Start - 1 // convert to 0-based
+	e := a.End - 1
+	if s >= n {
+		return fmt.Sprintf("error: start %d is beyond buffer length %d", a.Start, n), "error"
+	}
+	if e >= n {
+		e = n - 1
+	}
+	if e-s+1 > 200 {
+		e = s + 199
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "read: lines %d-%d of %d\nlines:\n", a.Start, e+1, n)
+	for i := s; i <= e; i++ {
+		fmt.Fprintf(&b, "  [line %d] %s\n", i+1, m.buf.Line(i).Raw)
+	}
+	return b.String(), fmt.Sprintf("reading lines %d-%d", a.Start, e+1)
+}
+
+func runCmdFindCount(m Model, call agent.ToolCall) (result, info string) {
 	var a struct {
 		Pattern string `json:"pattern"`
 		Flags   string `json:"flags"`

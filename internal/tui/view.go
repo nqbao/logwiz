@@ -50,7 +50,14 @@ func (m Model) renderCommandPalette(width int) string {
 		innerW = 1
 	}
 	content := m.cmdInput.View()
-	if m.cmdErr != "" {
+	if m.cmdAgent != nil {
+		frame := string(spinnerFrames[m.spinnerTick%len(spinnerFrames)])
+		label := m.cmdInfo
+		if label == "" {
+			label = "thinking…"
+		}
+		content += "\n" + styleDim.Render(frame+" "+label)
+	} else if m.cmdErr != "" {
 		content += "\n" + styleErr.Render(m.cmdErr)
 	} else if m.cmdInfo != "" {
 		content += "\n" + styleDim.Render(m.cmdInfo)
@@ -176,6 +183,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 	help := strings.Join([]string{
 		"logwiz keys:",
 		"  /             open command palette",
+		"  /question     ask a question about the logs — answer shown in palette",
 		"  :chat [q]     open chat sidebar (optionally pre-filled)",
 		"  :search re    regex-search the buffer",
 		"  :grep [-i] [-F] [-v] re   filter lines (stackable, rules are ANDed)",
