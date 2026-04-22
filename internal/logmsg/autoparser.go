@@ -7,14 +7,16 @@ type AutoParser struct {
 	logfmt LogfmtParser
 }
 
-func (p AutoParser) Parse(raw string) LogMessage {
-	if m := p.json.Parse(raw); m.Format != "" {
-		return m
+func (p AutoParser) Parse(raw string) []LogMessage {
+	if ms := p.json.Parse(raw); ms[0].Format != "" {
+		return ms
 	}
-	if m := p.logfmt.Parse(raw); m.Format != "" {
-		return m
+	if ms := p.logfmt.Parse(raw); ms[0].Format != "" {
+		return ms
 	}
-	return LogMessage{Raw: raw}
+	return []LogMessage{{Raw: raw}}
 }
+
+func (AutoParser) Flush() []LogMessage { return nil }
 
 var _ Parser = AutoParser{}

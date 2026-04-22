@@ -2,11 +2,13 @@
 
 ## v1.1 — Remaining
 
-- **Multi-line log foundation (AnchorParser refactor)**: Group stack traces and
-  continuation lines into single `LogMessage` entries. `Flush() []LogMessage`
-  added to `Parser` interface for EOF / idle drain. 200 ms idle timeout flushes
-  an open message. `AnchorParser` holds the in-progress message and emits it on
-  flush or when a new anchor line (timestamp / log-level prefix) is detected.
+- **Multi-line logs (AnchorParser)**: Wraps an inner parser; groups lines into
+  single `LogMessage` entries via anchor regex. Anchor line starts a new message,
+  non-matching lines are continuations. `Raw` = `\n`-joined text.
+  Unstructured: `^\d{4}-\d{2}-\d{2}[T ]` (timestamp prefix). Pretty-printed JSON:
+  `^\s*[{\[]`. Logfmt/JSONL are line-oriented — degenerates to 1:1 passthrough.
+  `--multiline-pattern <regex>` override; auto-detect or default off.
+  50-line stack trace → 1 buffer slot.
 
 - **Inline AI answers**: One-shot query commands ("explain this", "summarize last
   50 lines", "what's the error rate?") render a 1-2 line response in the status

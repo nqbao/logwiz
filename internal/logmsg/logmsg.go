@@ -41,17 +41,23 @@ func (m LogMessage) Attr(key string) string {
 	return m.Attributes[key]
 }
 
-// Parser converts a raw log line into a LogMessage.
+// Parser converts a raw log line into zero or more LogMessages.
+// Multi-line parsers may buffer lines internally and emit 0, 1, or N
+// messages per call. Flush drains any buffered partial message.
 type Parser interface {
-	Parse(raw string) LogMessage
+	Parse(raw string) []LogMessage
+	Flush() []LogMessage
 }
 
 // PassthroughParser stores the line as-is with no attributes. It is
 // the default parser used until a real one is plugged in.
 type PassthroughParser struct{}
 
-// Parse returns a LogMessage whose Raw is the input line and whose
-// Attributes is nil.
-func (PassthroughParser) Parse(raw string) LogMessage {
-	return LogMessage{Raw: raw}
+// Parse returns a single-element slice containing a LogMessage whose Raw
+// is the input line and whose Attributes is nil.
+func (PassthroughParser) Parse(raw string) []LogMessage {
+	return []LogMessage{{Raw: raw}}
 }
+
+// Flush returns nil; PassthroughParser never buffers.
+func (PassthroughParser) Flush() []LogMessage { return nil }

@@ -191,12 +191,14 @@ func TestPumpBatchesLines(t *testing.T) {
 // the parser is actually invoked by pump.
 type stubParser struct{}
 
-func (stubParser) Parse(raw string) logmsg.LogMessage {
-	return logmsg.LogMessage{
+func (stubParser) Parse(raw string) []logmsg.LogMessage {
+	return []logmsg.LogMessage{{
 		Raw:        raw,
 		Attributes: map[string]string{"tag": "stubbed"},
-	}
+	}}
 }
+
+func (stubParser) Flush() []logmsg.LogMessage { return nil }
 
 func TestPumpAppliesParser(t *testing.T) {
 	rec := newRecorder()
@@ -354,6 +356,101 @@ func TestFileTailSeekScalesWithLineSize(t *testing.T) {
 		}
 	}
 }
+
+func TestPumpFlushesParserOnEOF(t *testing.T) {
+	var buf []string
+	p := &eofFlushParser{parse: func(raw string) []logmsg.LogMessage {
+		buf = append(buf, raw)
+		return nil
+	}, flush: func() []logmsg.LogMessage {
+		var out []logmsg.LogMessage
+		for _, s := range buf {
+			out = append(out, logmsg.LogMessage{Raw: s, Attributes: map[string]string{"tag": "flushed"}})
+		}
+		buf = buf[:0]
+		return out
+	}}
+
+	rec := newRecorder()
+	src := &Stdin{R: strings.NewReader("a\nb\n"), Parser: p}
+	src.Start(context.Background(), rec)
+	rec.waitForTerminal(t)
+
+	msgs := rec.snapshot()
+	var seen []logmsg.LogMessage
+	for _, m := range msgs {
+		if nl, ok := m.(NewLinesMsg); ok {
+			seen = append(seen, nl.Lines...)
+		}
+	}
+	if len(seen) != 2 {
+		t.Fatalf("got %d messages, want 2", len(seen))
+	}
+	for i, lm := range seen {
+		if lm.Attr("tag") != "flushed" {
+			t.Errorf("msg %d: Attr(tag) = %q, want flushed", i, lm.Attr("tag"))
+		}
+	}
+}
+
+func TestPumpFlushesParserOnIdle(t *testing.T) {
+	gotFlush := make(chan struct{}, 1)
+	p := &idleFlushParser{
+		parse: func(raw string) []logmsg.LogMessage {
+			return nil
+		},
+		flush: func() []logmsg.LogMessage {
+			select {
+			case gotFlush <- struct{}{}:
+			default:
+			}
+			return []logmsg.LogMessage{{Raw: "from-flush"}}
+		},
+	}
+
+	pr, pw := io.Pipe()
+	rec := newRecorder()
+	src := &Stdin{R: pr, Parser: p}
+	src.Start(context.Background(), rec)
+
+	_, _ = pw.Write([]byte("a\n"))
+
+	select {
+	case <-gotFlush:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Flush was not called within 500ms after last line")
+	}
+	_ = pw.Close()
+
+	rec.waitForTerminal(t)
+	msgs := rec.snapshot()
+	raws := collectRaws(msgs)
+	found := false
+	for _, r := range raws {
+		if r == "from-flush" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("did not observe 'from-flush' line; got %v", raws)
+	}
+}
+
+type eofFlushParser struct {
+	parse func(raw string) []logmsg.LogMessage
+	flush func() []logmsg.LogMessage
+}
+
+func (p *eofFlushParser) Parse(raw string) []logmsg.LogMessage { return p.parse(raw) }
+func (p *eofFlushParser) Flush() []logmsg.LogMessage            { return p.flush() }
+
+type idleFlushParser struct {
+	parse func(raw string) []logmsg.LogMessage
+	flush func() []logmsg.LogMessage
+}
+
+func (p *idleFlushParser) Parse(raw string) []logmsg.LogMessage { return p.parse(raw) }
+func (p *idleFlushParser) Flush() []logmsg.LogMessage            { return p.flush() }
 
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {

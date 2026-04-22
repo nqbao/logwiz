@@ -59,14 +59,13 @@ func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser)
 	}
 
 	scanner := bufio.NewScanner(r)
-	// Allow long lines (up to 1 MiB). Default bufio.Scanner buffer
-	// maxes out at 64 KiB which is easy to blow past in real logs.
 	const maxLine = 1 << 20
 	scanner.Buffer(make([]byte, 64*1024), maxLine)
 
 	const (
-		maxBatch   = 100
-		flushDelay = 10 * time.Millisecond
+		maxBatch    = 100
+		flushDelay  = 10 * time.Millisecond
+		idleDelay   = 200 * time.Millisecond
 	)
 	batch := make([]logmsg.LogMessage, 0, maxBatch)
 
@@ -80,9 +79,6 @@ func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser)
 		batch = batch[:0]
 	}
 
-	// Feed scanned lines into a channel so we can select on both new lines
-	// and a flush ticker — without the ticker, the last batch would sit
-	// unsent until the next line arrived (noticeable with tail -f / slow streams).
 	lineCh := make(chan string)
 	go func() {
 		for scanner.Scan() {
@@ -94,18 +90,36 @@ func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser)
 	ticker := time.NewTicker(flushDelay)
 	defer ticker.Stop()
 
+	idleTimer := time.NewTimer(idleDelay)
+	defer idleTimer.Stop()
+
+	resetIdle := func() {
+		if !idleTimer.Stop() {
+			select {
+			case <-idleTimer.C:
+			default:
+			}
+		}
+		idleTimer.Reset(idleDelay)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			flush()
+		case <-idleTimer.C:
+			batch = append(batch, parser.Flush()...)
+			flush()
 		case line, ok := <-lineCh:
 			if !ok {
+				batch = append(batch, parser.Flush()...)
 				flush()
 				goto done
 			}
-			batch = append(batch, parser.Parse(lastCRSegment(line)))
+			batch = append(batch, parser.Parse(lastCRSegment(line))...)
+			resetIdle()
 			if len(batch) >= maxBatch {
 				flush()
 			}
