@@ -50,7 +50,7 @@ func startAgentCmd(m Model, raw string) (Model, tea.Cmd) {
 	msgs := agent.BuildCmdPrompt(raw, ctx)
 	m.cmdAgent = agent.NewCmdAgent(m.chatClient, m.ctx, msgs)
 	m.cmdToolBudget = MaxCmdToolTurns
-	return m, m.cmdAgent.Step()
+	return m, tea.Batch(m.cmdAgent.Step(), spinnerCmd())
 }
 
 // executeCmdTool routes the agent's tool call to the appropriate TUI handler.

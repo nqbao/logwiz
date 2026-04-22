@@ -50,7 +50,14 @@ func (m Model) renderCommandPalette(width int) string {
 		innerW = 1
 	}
 	content := m.cmdInput.View()
-	if m.cmdErr != "" {
+	if m.cmdAgent != nil {
+		frame := string(spinnerFrames[m.spinnerTick%len(spinnerFrames)])
+		label := m.cmdInfo
+		if label == "" {
+			label = "thinking…"
+		}
+		content += "\n" + styleDim.Render(frame+" "+label)
+	} else if m.cmdErr != "" {
 		content += "\n" + styleErr.Render(m.cmdErr)
 	} else if m.cmdInfo != "" {
 		content += "\n" + styleDim.Render(m.cmdInfo)
