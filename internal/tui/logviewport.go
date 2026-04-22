@@ -39,7 +39,11 @@ type LogViewport struct {
 	// filtering. All iteration uses effectiveLen / effectiveBufIdx.
 	filterIndices []int
 
-	// Per-line visual width cache (ansi.StringWidth of the raw line).
+	// Per-line visual width cache (ansi.StringWidth of the rendered line).
+	// Using the rendered width (not msg.Raw) ensures pretty mode — which
+	// reformats content to a different visual length — gets correct wrap heights
+	// and cut boundaries. In normal mode the two are identical because syntax
+	// highlighting only adds zero-width ANSI codes.
 	// Always maintained regardless of Wrap mode; indexed over the effective set.
 	// Evicted/appended in O(newLines) to stay in sync with the ring buffer.
 	widthCache []int
@@ -144,7 +148,7 @@ func (v *LogViewport) recomputeWidthCache() {
 		v.widthCache = make([]int, n)
 	}
 	for i := 0; i < n; i++ {
-		v.widthCache[i] = ansi.StringWidth(v.buf.Line(v.effectiveBufIdx(i)).Raw)
+		v.widthCache[i] = ansi.StringWidth(v.display(v.buf.Line(v.effectiveBufIdx(i))))
 	}
 }
 
@@ -167,7 +171,7 @@ func (v *LogViewport) updateWidthCache(newLines int) {
 		start = 0
 	}
 	for i := start; i < bufLen; i++ {
-		v.widthCache = append(v.widthCache, ansi.StringWidth(v.buf.Line(i).Raw))
+		v.widthCache = append(v.widthCache, ansi.StringWidth(v.display(v.buf.Line(i))))
 	}
 }
 
@@ -264,7 +268,7 @@ func (v *LogViewport) updateWrapCache(newLines int) {
 		start = 0
 	}
 	for i := start; i < bufLen; i++ {
-		w := ansi.StringWidth(v.buf.Line(i).Raw)
+		w := ansi.StringWidth(v.display(v.buf.Line(i)))
 		v.widthCache = append(v.widthCache, w)
 		h := v.lineWrapHeight(w)
 		v.wrapCache = append(v.wrapCache, h)

@@ -286,6 +286,61 @@ func TestGrepCommand_UnknownFlagKeepsPaletteOpen(t *testing.T) {
 	}
 }
 
+// --- :pretty command ---
+
+func TestDispatchCommand_PrettyToggle(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+
+	m2, _ := m.dispatchCommand(":pretty")
+	if m2.cmdActive {
+		t.Error("cmdActive should be false after :pretty")
+	}
+	if !m2.prettyMode {
+		t.Error("prettyMode should be true after first :pretty toggle")
+	}
+
+	m2.cmdActive = true
+	m3, _ := m2.dispatchCommand(":pretty")
+	if m3.prettyMode {
+		t.Error("prettyMode should be false after second :pretty toggle")
+	}
+}
+
+func TestDispatchCommand_PrettyOn(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+
+	m2, _ := m.dispatchCommand(":pretty on")
+	if !m2.prettyMode {
+		t.Error("prettyMode should be true after :pretty on")
+	}
+}
+
+func TestDispatchCommand_PrettyOff(t *testing.T) {
+	m := newTestModel(t)
+	m.prettyMode = true
+	m.cmdActive = true
+
+	m2, _ := m.dispatchCommand(":pretty off")
+	if m2.prettyMode {
+		t.Error("prettyMode should be false after :pretty off")
+	}
+}
+
+func TestDispatchCommand_PrettyBadArg(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+
+	m2, _ := m.dispatchCommand(":pretty badarg")
+	if !m2.cmdActive {
+		t.Error("cmdActive should remain true after :pretty with bad argument")
+	}
+	if m2.cmdErr == "" {
+		t.Error("cmdErr should be set for unrecognised :pretty argument")
+	}
+}
+
 // TestDispatchCommand_Search sets searchRe and positions viewport.
 func TestDispatchCommand_Search(t *testing.T) {
 	m := newTestModel(t)

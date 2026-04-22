@@ -8,6 +8,8 @@ import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/go-logfmt/logfmt"
+
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 // logfmtStyles holds the lipgloss styles derived from the active chroma theme.
@@ -119,6 +121,17 @@ func LogfmtRenderer(text string) string {
 		return text
 	}
 	return sb.String()
+}
+
+// PrettyLogfmtRenderer parses raw as a logfmt line and renders it in
+// humanlog-style layout (time level message key=val …), coloured via the
+// active chroma style. Falls back to LogfmtRenderer on parse errors.
+func PrettyLogfmtRenderer(raw string) string {
+	f, ok := logmsg.ExtractFromLogfmt(raw)
+	if !ok {
+		return LogfmtRenderer(raw)
+	}
+	return renderPrettyFields(f)
 }
 
 func lfRenderValue(ls logfmtStyles, key, val string) string {

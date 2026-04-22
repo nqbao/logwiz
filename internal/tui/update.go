@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/nqbao/logwiz/internal/agent"
+	"github.com/nqbao/logwiz/internal/highlight"
 	"github.com/nqbao/logwiz/internal/source"
 )
 
@@ -311,6 +312,10 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case keyPrettyToggle:
+		m.prettyMode = !m.prettyMode
+		applyPrettyMode(&m)
+		return m, nil
 	case keyEscape:
 		if m.help {
 			m.help = false
@@ -391,6 +396,21 @@ func (m *Model) refreshConvoContent() {
 }
 
 
+// applyPrettyMode registers the appropriate highlight handlers for m.prettyMode
+// and invalidates all render caches so the next View call re-renders every line.
+func applyPrettyMode(m *Model) {
+	if m.prettyMode {
+		m.highlighter.Register("json", highlight.PrettyJSONRenderer)
+		m.highlighter.Register("logfmt", highlight.PrettyLogfmtRenderer)
+	} else {
+		m.highlighter.Register("json", highlight.JSONRenderer)
+		m.highlighter.Register("logfmt", highlight.LogfmtRenderer)
+	}
+	m.highlighter.Clear()
+	m.logs.recomputeWidthCache()
+	m.logs.recomputeWrapCache()
+}
+
 // statusLine composes the bottom bar text.
 func (m Model) statusLine(lay layout) string {
 	mode := string(m.sourceKind)
@@ -404,6 +424,9 @@ func (m Model) statusLine(lay layout) string {
 	}
 
 	left := styleStatusBar.Render(fmt.Sprintf(" logwiz [%s]  %d lines ", mode, lines)) + " " + badge
+	if m.prettyMode {
+		left += " " + styleStatusBadgePretty.Render("pretty")
+	}
 
 	var right string
 	switch {

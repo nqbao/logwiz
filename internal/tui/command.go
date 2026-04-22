@@ -25,6 +25,7 @@ var cmdRegistry = map[string]cmdHandler{
 	"help":      cmdHelp,
 	"config":    cmdConfig,
 	"quit":      cmdQuit,
+	"pretty":    cmdPretty,
 }
 
 // infoErr is returned by handlers that want to keep the palette open and
@@ -226,6 +227,10 @@ func cmdConfig(m Model, args string) (Model, tea.Cmd, error) {
 		m.chatClient.SetThinkingBudget(m.cfg.ThinkingBudget)
 		m.chatClient.SetReasoningEffort(m.cfg.ReasoningEffort)
 	}
+	if key == "pretty" {
+		m.prettyMode = m.cfg.Pretty
+		applyPrettyMode(&m)
+	}
 	if err := config.SaveKey(key, value); err != nil {
 		return m, nil, fmt.Errorf("applied in memory but could not persist: %w", err)
 	}
@@ -254,6 +259,11 @@ func configGetDisplay(cfg config.Config, key string) (string, bool) {
 		return strconv.Itoa(cfg.ThinkingBudget), true
 	case "reasoning-effort":
 		return cfg.ReasoningEffort, true
+	case "pretty":
+		if cfg.Pretty {
+			return "on", true
+		}
+		return "off", true
 	}
 	return "", false
 }
@@ -313,6 +323,23 @@ func cmdHighlight(m Model, args string) (Model, tea.Cmd, error) {
 // cmdNoHL clears all highlight rules.
 func cmdNoHL(m Model, _ string) (Model, tea.Cmd, error) {
 	clearHL(&m)
+	return m, nil, nil
+}
+
+// cmdPretty implements :pretty [on|off].
+// With no argument it toggles pretty mode; "on"/"off" set it explicitly.
+func cmdPretty(m Model, args string) (Model, tea.Cmd, error) {
+	switch strings.TrimSpace(args) {
+	case "on":
+		m.prettyMode = true
+	case "off":
+		m.prettyMode = false
+	case "":
+		m.prettyMode = !m.prettyMode
+	default:
+		return m, nil, fmt.Errorf("usage: pretty [on|off]")
+	}
+	applyPrettyMode(&m)
 	return m, nil, nil
 }
 
