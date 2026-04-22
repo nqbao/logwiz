@@ -12,11 +12,12 @@ type layout struct {
 // computeLayout returns a layout for the given window size and UI state.
 // cmdRows is the number of rows consumed by the command palette (0 when
 // inactive, 3 for border+input+border, +1 when an error line is shown).
+// inlineRows is the number of rows consumed by the inline answer banner (0 or 2).
 // A minimum width is enforced so very narrow terminals stay readable;
 // extreme edge cases just render whatever fits.
-func computeLayout(width, height, cmdRows int, sidebarOpen bool, sidebarPref int) layout {
-	// Status bar occupies 1 row; command palette occupies cmdRows rows.
-	paneH := height - 1 - cmdRows
+func computeLayout(width, height, cmdRows, inlineRows int, sidebarOpen bool, sidebarPref int) layout {
+	// Status bar occupies 1 row; command palette and inline banner occupy their respective rows.
+	paneH := height - 1 - cmdRows - inlineRows
 	if paneH < 1 {
 		paneH = 1
 	}

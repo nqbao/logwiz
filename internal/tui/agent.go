@@ -46,6 +46,7 @@ func buildAgentCmdContext(m Model) string {
 // startAgentCmd creates a short-lived cmd agent and fires its first Step.
 // Context is rebuilt fresh each invocation.
 func startAgentCmd(m Model, raw string) (Model, tea.Cmd) {
+	m.inlineQuestion = raw // saved so tab can promote an answer action to chat
 	ctx := buildAgentCmdContext(m)
 	msgs := agent.BuildCmdPrompt(raw, ctx)
 	m.cmdAgent = agent.NewCmdAgent(m.chatClient, m.ctx, msgs)
@@ -65,7 +66,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 
 	// Inspection tools: read-only, feed result back, keep looping.
 	switch call.Name {
-	case "find", "count":
+	case "find", "count", "tail", "read":
 		result, info := runCmdInspection(m, call)
 		toolMsg := agent.Message{
 			Role:       "tool",
@@ -174,6 +175,16 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		m.Cancel()
 		return m, tea.Quit
 
+	case "answer":
+		// Close palette and show the answer as an inline banner above the status bar.
+		m.inlineAnswer = a.Reason
+		m.cmdActive = false
+		m.cmdErr = ""
+		m.cmdInfo = ""
+		m.cmdInput.SetValue("")
+		m = m.onResize(m.width, m.height)
+		return m, nil
+
 	case "reject":
 		return agentKeepPalette(m, a.Reason), nil
 
@@ -182,9 +193,77 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 	}
 }
 
-// runCmdInspection executes a read-only find or count call against the buffer.
+// runCmdInspection executes a read-only inspection call (find, count, tail, read) against the buffer.
 // Returns the full tool result string for the LLM and a short label for cmdInfo.
 func runCmdInspection(m Model, call agent.ToolCall) (result, info string) {
+	switch call.Name {
+	case "tail":
+		return runCmdTail(m, call)
+	case "read":
+		return runCmdRead(m, call)
+	default:
+		return runCmdFindCount(m, call)
+	}
+}
+
+func runCmdTail(m Model, call agent.ToolCall) (result, info string) {
+	var a struct {
+		N int `json:"n"`
+	}
+	if err := json.Unmarshal(json.RawMessage(call.Arguments), &a); err != nil {
+		return "error: " + err.Error(), "error"
+	}
+	if a.N < 1 {
+		a.N = 1
+	}
+	if a.N > 200 {
+		a.N = 200
+	}
+	n := m.buf.Len()
+	start := n - a.N
+	if start < 0 {
+		start = 0
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "tail: %d of %d lines\nlines:\n", n-start, n)
+	for i := start; i < n; i++ {
+		fmt.Fprintf(&b, "  [line %d] %s\n", i+1, m.buf.Line(i).Raw)
+	}
+	return b.String(), fmt.Sprintf("reading last %d lines", a.N)
+}
+
+func runCmdRead(m Model, call agent.ToolCall) (result, info string) {
+	var a struct {
+		Start int `json:"start"`
+		End   int `json:"end"`
+	}
+	if err := json.Unmarshal(json.RawMessage(call.Arguments), &a); err != nil {
+		return "error: " + err.Error(), "error"
+	}
+	if a.Start < 1 || a.End < 1 || a.Start > a.End {
+		return "error: invalid range (start and end must be ≥1 and start ≤ end)", "error"
+	}
+	n := m.buf.Len()
+	s := a.Start - 1 // convert to 0-based
+	e := a.End - 1
+	if s >= n {
+		return fmt.Sprintf("error: start %d is beyond buffer length %d", a.Start, n), "error"
+	}
+	if e >= n {
+		e = n - 1
+	}
+	if e-s+1 > 200 {
+		e = s + 199
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "read: lines %d-%d of %d\nlines:\n", a.Start, e+1, n)
+	for i := s; i <= e; i++ {
+		fmt.Fprintf(&b, "  [line %d] %s\n", i+1, m.buf.Line(i).Raw)
+	}
+	return b.String(), fmt.Sprintf("reading lines %d-%d", a.Start, e+1)
+}
+
+func runCmdFindCount(m Model, call agent.ToolCall) (result, info string) {
 	var a struct {
 		Pattern string `json:"pattern"`
 		Flags   string `json:"flags"`

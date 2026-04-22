@@ -43,7 +43,7 @@ const (
 const MaxToolTurns = 6
 
 // MaxCmdToolTurns is the maximum number of inspection round-trips for a palette command.
-const MaxCmdToolTurns = 3
+const MaxCmdToolTurns = 4
 
 // turnActivity records status for one assistant turn (from user question to
 // final answer). It is displayed as a dim activity line in the sidebar.
@@ -121,6 +121,12 @@ type Model struct {
 	cmdToolBudget int   // remaining inspection round-trips for current palette command
 
 	hintIdx int // cycles through inputHints
+
+	// inlineAnswer is a short answer (≤2 lines) shown above the status bar after
+	// an agent "answer" action. inlineQuestion is the original palette input that
+	// produced it, kept so tab can promote the pair into the chat sidebar.
+	inlineAnswer   string
+	inlineQuestion string
 
 	// prettyMode renders structured lines (json/logfmt) in humanlog-style layout
 	// (time level message key=val …) instead of raw syntax-coloured output.

@@ -16,7 +16,7 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	lay := computeLayout(m.width, m.height, m.cmdRows(), m.sidebarOpen, m.cfg.SidebarWidth)
+	lay := computeLayout(m.width, m.height, m.cmdRows(), m.inlineRows(), m.sidebarOpen, m.cfg.SidebarWidth)
 
 	logsView := m.logs.View(styleSelectedRow)
 
@@ -30,7 +30,15 @@ func (m Model) View() string {
 	status := m.statusLine(lay)
 
 	var full string
-	if m.cmdActive {
+	if m.inlineAnswer != "" {
+		banner := m.renderInlineBanner(m.width)
+		if m.cmdActive {
+			palette := m.renderCommandPalette(m.width)
+			full = lipgloss.JoinVertical(lipgloss.Left, body, palette, banner, status)
+		} else {
+			full = lipgloss.JoinVertical(lipgloss.Left, body, banner, status)
+		}
+	} else if m.cmdActive {
 		palette := m.renderCommandPalette(m.width)
 		full = lipgloss.JoinVertical(lipgloss.Left, body, palette, status)
 	} else {
@@ -60,6 +68,20 @@ func (m Model) renderCommandPalette(width int) string {
 		BorderForeground(lipgloss.Color("62")).
 		Width(innerW).
 		Render(content)
+}
+
+// renderInlineBanner renders the inline answer above the status bar, capped at 2 lines.
+func (m Model) renderInlineBanner(width int) string {
+	rendered := lipgloss.NewStyle().Width(width).Render(m.inlineAnswer)
+	lines := strings.Split(rendered, "\n")
+	if len(lines) > 2 {
+		lines = lines[:2]
+	}
+	// Pad to exactly 2 lines so the layout height stays constant.
+	for len(lines) < 2 {
+		lines = append(lines, strings.Repeat(" ", width))
+	}
+	return styleDim.Render(strings.Join(lines, "\n"))
 }
 
 func (m Model) renderSidebar(lay layout) string {
@@ -176,6 +198,9 @@ func (m Model) renderHelpOverlay(underneath string) string {
 	help := strings.Join([]string{
 		"logwiz keys:",
 		"  /             open command palette",
+		"  /question     ask a question about the logs — shows inline answer",
+		"    tab           open inline answer in chat sidebar",
+		"    esc           dismiss inline answer",
 		"  :chat [q]     open chat sidebar (optionally pre-filled)",
 		"  :search re    regex-search the buffer",
 		"  :grep [-i] [-F] [-v] re   filter lines (stackable, rules are ANDed)",

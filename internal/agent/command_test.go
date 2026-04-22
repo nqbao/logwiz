@@ -47,7 +47,7 @@ func TestCmdToolDefs_PickToolHasActionEnum(t *testing.T) {
 	if err := json.Unmarshal(pt.Parameters, &schema); err != nil {
 		t.Fatalf("parsing pick_tool schema: %v", err)
 	}
-	want := []string{"grep", "clear_grep", "jump", "highlight", "clear_highlight", "set_model", "clear_chat", "quit", "reject"}
+	want := []string{"grep", "clear_grep", "jump", "highlight", "clear_highlight", "set_model", "clear_chat", "quit", "answer", "reject"}
 	got := make(map[string]bool)
 	for _, a := range schema.Properties.Action.Enum {
 		got[a] = true
@@ -59,14 +59,16 @@ func TestCmdToolDefs_PickToolHasActionEnum(t *testing.T) {
 	}
 }
 
-func TestCmdInspectToolDefs_OnlyFindAndCount(t *testing.T) {
+func TestCmdInspectToolDefs_HasExpectedTools(t *testing.T) {
 	defs := CmdInspectToolDefs()
-	if len(defs) != 2 {
-		t.Fatalf("CmdInspectToolDefs len = %d, want 2", len(defs))
+	names := make(map[string]bool)
+	for _, d := range defs {
+		names[d.Name] = true
 	}
-	names := map[string]bool{defs[0].Name: true, defs[1].Name: true}
-	if !names["find"] || !names["count"] {
-		t.Errorf("CmdInspectToolDefs = %v, want [find count]", []string{defs[0].Name, defs[1].Name})
+	for _, want := range []string{"find", "count", "tail", "read"} {
+		if !names[want] {
+			t.Errorf("CmdInspectToolDefs missing tool %q", want)
+		}
 	}
 }
 
