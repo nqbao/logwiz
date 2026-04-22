@@ -124,7 +124,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		if a.Mode == "exclude" {
 			verb = "exclude"
 		}
-		return agentKeepPalette(m, fmt.Sprintf("%s: %q", verb, a.Pattern)), nil
+		return agentKeepPalette(m, fmt.Sprintf("%s: %s", verb, a.Pattern)), nil
 
 	case "clear_grep":
 		m.clearFilter()
@@ -144,7 +144,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			m.searchCursor = len(m.searchMatches) - 1
 			m.logs.JumpTo(m.searchMatches[m.searchCursor])
 		}
-		return agentKeepPalette(m, fmt.Sprintf("jump: %q", a.Pattern)), nil
+		return agentKeepPalette(m, fmt.Sprintf("jump: %s", a.Pattern)), nil
 
 	case "highlight":
 		reStr := a.Pattern
@@ -156,7 +156,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		addHL(&m, re)
-		return agentKeepPalette(m, fmt.Sprintf("highlight: %q", a.Pattern)), nil
+		return agentKeepPalette(m, fmt.Sprintf("highlight: %s", a.Pattern)), nil
 
 	case "clear_highlight":
 		clearHL(&m)
