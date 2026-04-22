@@ -1,100 +1,49 @@
 # logwiz — Roadmap
 
-## Completed
+## v1.1 — Remaining
 
-### ✅ v1.0 — Core TUI
-Ring buffer, stdin/file sources, Bubble Tea TUI, chat sidebar, layout, keybindings,
-focus model, help overlay, EOF badge, `\r` handling, SIGTERM to process group.
+- **Multi-line log foundation (AnchorParser refactor)**: Group stack traces and
+  continuation lines into single `LogMessage` entries. `Flush() []LogMessage`
+  added to `Parser` interface for EOF / idle drain. 200 ms idle timeout flushes
+  an open message. `AnchorParser` holds the in-progress message and emits it on
+  flush or when a new anchor line (timestamp / log-level prefix) is detected.
 
-### ✅ Source batching (PR #2)
-`source.pump` batches lines into `NewLinesMsg{ Lines []string }`, fixing O(n)-per-line
-UI refresh on high-volume streams.
-
-### ✅ File-mode tail-seek
-`source.File` samples near EOF to estimate line size, seeks backward to cover
-`--max-lines` lines, and emits a truncation marker when content is skipped. Keeps
-startup O(budget) instead of O(fileSize) on large files. No new user-facing flag.
-
----
-
-## v1.1 — Message foundation + agentic chat
-
-### New: `internal/logrec`
-
-```go
-type LogMessage struct {
-    Lines      []string
-    Timestamp  time.Time         // zero until format profiles (v1.2)
-    Level      string            // "" until format profiles (v1.2)
-    Fields     map[string]string // nil until format profiles (v1.2)
-    SourceLine int64
-}
-
-type Parser interface {
-    Feed(line string) []LogMessage
-    Flush() []LogMessage  // EOF / idle timeout
-}
-```
-
-`LineParser` (1 line = 1 message) is the only parser in v1.1. `AnchorParser` ships in v1.2.
-
-Pipeline: `pump → NewLinesMsg → parser.Feed() → []LogMessage → buf.Append(msg)`
-
-### Buffer retyped to `[]LogMessage`
-
-`buffer.Buffer` stores `[]logrec.LogMessage`. New method `LineCount()` alongside `Len()`.
-`--max-lines` means messages; `--max-bytes` (~50 MB) caps memory regardless of message size.
-
-### Viewport rendering
-
-Walks messages, joins `msg.Lines` fields. Output identical to today with `LineParser`.
-
-### Agentic chat
-
-Always inject current viewport messages as system context. Expose two tools:
-- `get_viewport()` — re-fetch viewport snapshot (if logs moved during in-flight request)
-- `search(pattern string)` — regex over lines in full buffer, returns matching messages
-
-`internal/chat.Client` gains tool-call support: send `tools`, handle `tool_calls` response,
-run locally, append `tool` role message, re-request until done.
+- **Inline AI answers**: One-shot query commands ("explain this", "summarize last
+  50 lines", "what's the error rate?") render a 1-2 line response in the status
+  bar instead of requiring full chat mode. Uses the same agent call with a
+  system prompt constraint ("answer in 1-2 lines max"). Response fades after ~5s.
+  If the user wants to dig deeper, they can open full chat manually.
 
 ---
 
-## v1.2 — Navigation + filter + format profiles
+## Deferred
 
-- **Find** (`Ctrl+F`): regex over `LogMessage.Lines`; `n`/`N` jump message-to-message
-- **Filter toggle**: whole-message show/hide (stack traces stay intact)
-- **Highlight rules**: substring + `level=` field matching
-- **Format profiles** (JSON, logfmt, anchor/timestamp): auto-detect → pick parser +
-  populate `Level`, `Timestamp`, `Fields`. Ships `AnchorParser` for multi-line grouping.
-
----
-
-## v1.3 — Follow mode
-
-- `--follow` / `-f`: keep file open after EOF, stream appended lines
-- `fsnotify` watch with polling fallback; rotation/truncation handling
-- `[following]` status badge
-
----
-
-## v1.4+ — Deferred
-
+- `--follow` / `-f`: keep file open after EOF, stream appended lines (`fsnotify` watch with polling fallback; rotation/truncation handling; `[following]` status badge)
 - Response streaming (SSE)
-- `--tee` / `--out` to mirror stdin to stdout/file
 - Copy answer to clipboard, retry last prompt
+- Multi-file support: open and merge multiple log files by timestamp
+- Filter by field: scoped filters on parsed attributes (e.g. `level=ERROR`, `service=auth`)
+- Filter by timeline: `:since` / `:until` commands, `--since`/`--until` CLI flags, relative and absolute time ranges
+- More log formats: syslog, glog, Python logging (in addition to existing JSON/logfmt)
+- Aggregation / group-by: count by field, error rate, top-N values. Natural language
+  queries like "how many errors per service?" or "top 5 endpoints by count" translated
+  to internal aggregation queries — no SQL required.
+- User knowledge injection: let users share domain-specific context with the agent
+  (e.g. "request_id correlates lines across services", "duration_ms > 5000 is a regression").
+  Possible approaches: (1) context file (`.logwiz/context.md`) loaded on startup,
+  (2) `--context` flag for ad-hoc sessions, (3) in-chat "remember" command that
+  persists to the context file.
+- Full log line detail view: expand a line (e.g. Enter key) to show a vertical
+  key-value table of all parsed fields, full message, and multi-line stack traces
+  without terminal width truncation.
 - SQL-over-fields, bookmarks, timeline navigation
 - Full large-file navigation: `FileBackedSource` with mmap + lazy line-offset index
   + paged reads on scroll, so users can view any part of a multi-GB file without
   loading it all into the ring buffer. Tail-seek remains the fast-startup default.
+- Line folding: collapse N consecutive identical/similar lines into `[×42]`
+- Live level stats: status bar shows level distribution (e.g. "3 ERR | 47 WARN"),
+  level toggle keys (1-5) to show/hide DEBUG/INFO/WARN/ERROR/FATAL
+- Compression support: transparent .gz/.bz2 reading (low priority — users can
+  pipe `zcat` manually)
 
 ---
-
-## Risks
-
-| Risk | Mitigation |
-| ---- | ---------- |
-| Huge log bursts | Source batching (shipped) |
-| AnchorParser holds message open | 200ms idle timeout + EOF flush |
-| Huge single messages (10k-line trace) | `--max-bytes` cap |
-| API key in crash logs | Never log request bodies |
