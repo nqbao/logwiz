@@ -46,7 +46,6 @@ func buildAgentCmdContext(m Model) string {
 // startAgentCmd creates a short-lived cmd agent and fires its first Step.
 // Context is rebuilt fresh each invocation.
 func startAgentCmd(m Model, raw string) (Model, tea.Cmd) {
-	m.inlineQuestion = raw // saved so tab can promote an answer action to chat
 	ctx := buildAgentCmdContext(m)
 	msgs := agent.BuildCmdPrompt(raw, ctx)
 	m.cmdAgent = agent.NewCmdAgent(m.chatClient, m.ctx, msgs)
@@ -176,14 +175,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "answer":
-		// Close palette and show the answer as an inline banner above the status bar.
-		m.inlineAnswer = a.Reason
-		m.cmdActive = false
-		m.cmdErr = ""
-		m.cmdInfo = ""
-		m.cmdInput.SetValue("")
-		m = m.onResize(m.width, m.height)
-		return m, nil
+		return agentKeepPalette(m, a.Reason), nil
 
 	case "reject":
 		return agentKeepPalette(m, a.Reason), nil

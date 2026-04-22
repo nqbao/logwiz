@@ -122,12 +122,6 @@ type Model struct {
 
 	hintIdx int // cycles through inputHints
 
-	// inlineAnswer is a short answer (≤2 lines) shown above the status bar after
-	// an agent "answer" action. inlineQuestion is the original palette input that
-	// produced it, kept so tab can promote the pair into the chat sidebar.
-	inlineAnswer   string
-	inlineQuestion string
-
 	// prettyMode renders structured lines (json/logfmt) in humanlog-style layout
 	// (time level message key=val …) instead of raw syntax-coloured output.
 	prettyMode bool

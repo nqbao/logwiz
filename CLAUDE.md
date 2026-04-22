@@ -71,10 +71,6 @@ Inspection tool details:
 - `tail(n)` — last N lines (1–200), for questions about recent activity
 - `read(start, end)` — inclusive 1-based line range (max 200 lines), for specific ranges
 
-## Inline answer layout
-
-When `inlineAnswer` is non-empty, `inlineRows()` returns 2 and `computeLayout` subtracts those rows from `paneHeight`, keeping the log viewport from being obscured. The banner is rendered in `view.go:renderInlineBanner`, padded to exactly 2 rows so the layout stays stable. State fields on `Model`: `inlineAnswer` (text), `inlineQuestion` (original palette input for tab-to-promote).
-
 ## Input handling notes
 
 - Lines are sanitized in `source/source.go:pump` using `lastCRSegment` — this mimics terminal `\r` overwrite behaviour (keeps only the last segment after splitting on `\r`). This handles spinner/progress output from tools like vite and uvicorn.

@@ -167,18 +167,10 @@ func (m Model) cmdRows() int {
 	return 3 // border_top + input + border_bottom
 }
 
-// inlineRows returns the number of rows consumed by the inline answer banner (0 or 2).
-func (m Model) inlineRows() int {
-	if m.inlineAnswer == "" {
-		return 0
-	}
-	return 2
-}
-
 func (m Model) onResize(w, h int) Model {
 	m.width = w
 	m.height = h
-	lay := computeLayout(w, h, m.cmdRows(), m.inlineRows(), m.sidebarOpen, m.cfg.SidebarWidth)
+	lay := computeLayout(w, h, m.cmdRows(), m.sidebarOpen, m.cfg.SidebarWidth)
 
 	m.logs.SetSize(lay.logsWidth, lay.paneHeight)
 
@@ -329,12 +321,6 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.help = false
 			return m, nil
 		}
-		if m.inlineAnswer != "" {
-			m.inlineAnswer = ""
-			m.inlineQuestion = ""
-			m = m.onResize(m.width, m.height)
-			return m, nil
-		}
 		if m.searchRe != nil && !m.sidebarOpen {
 			m.clearSearch()
 			return m, nil
@@ -345,20 +331,6 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case keyTab:
-		if m.inlineAnswer != "" {
-			// Promote the inline Q&A pair into the chat sidebar.
-			m.chatMsgs = append(m.chatMsgs,
-				agent.Message{Role: "user", Content: m.inlineQuestion},
-				agent.Message{Role: "assistant", Content: m.inlineAnswer},
-			)
-			m.inlineAnswer = ""
-			m.inlineQuestion = ""
-			m.sidebarOpen = true
-			m.focus = focusChat
-			m = m.onResize(m.width, m.height)
-			m.refreshConvoContent()
-			return m, m.input.Focus()
-		}
 		if m.sidebarOpen {
 			m.focus = focusChat
 			cmd := m.input.Focus()
@@ -460,8 +432,6 @@ func (m Model) statusLine(lay layout) string {
 	switch {
 	case m.cmdActive:
 		right = styleHelp.Render(" enter:run  esc:cancel ")
-	case m.inlineAnswer != "":
-		right = styleHelp.Render(" tab:open in chat  esc:dismiss ")
 	case len(m.filterRules) > 0 && m.filterEnabled:
 		visible := len(m.filterIndices)
 		total := m.buf.Len()
