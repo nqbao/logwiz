@@ -63,7 +63,7 @@ Unprefixed palette input (no `:` or `/` prefix) is routed through a short-lived 
 
 `pick_tool` actions: `grep`, `clear_grep`, `jump`, `highlight`, `clear_highlight`, `set_model`, `clear_chat`, `quit`, `answer`, `reject`.
 
-The `answer` action closes the palette and displays a short inline banner (≤2 lines) above the status bar. `tab` promotes the Q&A pair into the chat sidebar; `esc` dismisses it.
+The `answer` action keeps the palette open, clears the input, and displays the response as a dim info line inside the palette.
 
 Inspection tool details:
 - `find(pattern, flags)` — returns count, first/last line, up to 10 samples

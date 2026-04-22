@@ -10,11 +10,12 @@
   `--multiline-pattern <regex>` override; auto-detect or default off.
   50-line stack trace → 1 buffer slot.
 
-- **Inline AI answers**: One-shot query commands ("explain this", "summarize last
-  50 lines", "what's the error rate?") render a 1-2 line response in the status
-  bar instead of requiring full chat mode. Uses the same agent call with a
-  system prompt constraint ("answer in 1-2 lines max"). Response fades after ~5s.
-  If the user wants to dig deeper, they can open full chat manually.
+- **Command box context carry-over**: When the user submits a command box query
+  and gets an inline answer, subsequent command box input should be able to
+  reference the previous Q&A (e.g. "why?" or "show me the lines"). The cmd agent
+  would receive a short conversation history (last question + answer) as context,
+  so follow-up queries feel conversational without requiring the user to open the
+  full chat sidebar.
 
 ---
 

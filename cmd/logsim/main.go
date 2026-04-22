@@ -189,7 +189,7 @@ func buildEntries(names []string) ([]entry, error) {
 	for _, name := range names {
 		preset, ok := presetMap[name]
 		if !ok {
-			return nil, fmt.Errorf("unknown preset %q (use -list to see available)", name)
+			return nil, fmt.Errorf("unknown preset %q\navailable presets: %s", name, strings.Join(presetOrder, ", "))
 		}
 		var sum float64
 		for _, ref := range preset.Templates {
