@@ -6,12 +6,14 @@ import "strings"
 // highlighter can colour them. Non-JSON lines are passed through as-is.
 type JSONParser struct{}
 
-func (JSONParser) Parse(raw string) LogMessage {
+func (JSONParser) Parse(raw string) []LogMessage {
 	if looksLikeJSON(raw) {
-		return LogMessage{Raw: raw, Format: "json"}
+		return []LogMessage{{Raw: raw, Format: "json"}}
 	}
-	return LogMessage{Raw: raw}
+	return []LogMessage{{Raw: raw}}
 }
+
+func (JSONParser) Flush() []LogMessage { return nil }
 
 // looksLikeJSON is a cheap byte-level heuristic: a line is treated as JSON
 // if its first non-whitespace character is '{' or '['. Full validation is

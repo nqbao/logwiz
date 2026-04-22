@@ -25,10 +25,20 @@ func TestAttrPresent(t *testing.T) {
 func TestPassthroughParser(t *testing.T) {
 	var p Parser = PassthroughParser{}
 	got := p.Parse("some raw line")
-	if got.Raw != "some raw line" {
-		t.Errorf("Raw = %q, want %q", got.Raw, "some raw line")
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1", len(got))
 	}
-	if got.Attributes != nil {
-		t.Errorf("Attributes = %v, want nil", got.Attributes)
+	if got[0].Raw != "some raw line" {
+		t.Errorf("Raw = %q, want %q", got[0].Raw, "some raw line")
+	}
+	if got[0].Attributes != nil {
+		t.Errorf("Attributes = %v, want nil", got[0].Attributes)
+	}
+}
+
+func TestPassthroughParserFlush(t *testing.T) {
+	var p Parser = PassthroughParser{}
+	if got := p.Flush(); got != nil {
+		t.Errorf("Flush = %v, want nil", got)
 	}
 }

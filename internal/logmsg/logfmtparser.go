@@ -11,13 +11,15 @@ import (
 // prose, are passed through as-is.
 type LogfmtParser struct{}
 
-func (LogfmtParser) Parse(raw string) LogMessage {
+func (LogfmtParser) Parse(raw string) []LogMessage {
 	attrs, ok := parseLogfmt(raw)
 	if !ok {
-		return LogMessage{Raw: raw}
+		return []LogMessage{{Raw: raw}}
 	}
-	return LogMessage{Raw: raw, Format: "logfmt", Attributes: attrs}
+	return []LogMessage{{Raw: raw, Format: "logfmt", Attributes: attrs}}
 }
+
+func (LogfmtParser) Flush() []LogMessage { return nil }
 
 // parseLogfmt returns a key→value map for raw if it is a valid logfmt record
 // with at least two pairs and no unparseable prose. Returns false otherwise.
