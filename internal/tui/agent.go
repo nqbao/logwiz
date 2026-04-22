@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -66,6 +67,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 	// Inspection tools: read-only, feed result back, keep looping.
 	switch call.Name {
 	case "find", "count", "tail", "read":
+		slog.Debug("cmd agent tool", "tool", call.Name, "args", call.Arguments)
 		result, info := runCmdInspection(m, call)
 		toolMsg := agent.Message{
 			Role:       "tool",
@@ -84,6 +86,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 	}
 
 	// Commit tool: dispatch action and close the loop.
+	slog.Debug("cmd agent tool", "tool", call.Name, "args", call.Arguments)
 	m.cmdAgent = nil
 	if call.Name != "pick_tool" {
 		return agentCmdErr(m, fmt.Sprintf("unknown agent tool: %s", call.Name))
