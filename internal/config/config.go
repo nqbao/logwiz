@@ -214,8 +214,7 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		"Enable pretty mode: render json/logfmt lines as \"time LEVEL message key=val …\" (toggle with P inside the viewer, persist with :config pretty on/off)")
 	fs.StringVar(&cfg.LogFile, "log-file", "",
 		"Write internal debug logs to `file`")
-	fs.IntVar(&cfg.CmdHistoryTurns, "cmd-history-turns", defaultCmdHistoryTurns,
-		"Maximum palette Q&A pairs carried across invocations for follow-up questions")
+	cfg.CmdHistoryTurns = defaultCmdHistoryTurns
 	fs.IntVar(&cfg.ThinkingBudget, "thinking-budget", defaultThinkingBudget,
 		"Token budget for extended thinking (Anthropic models only); 0 disables, minimum 1024 when enabled")
 	fs.StringVar(&cfg.ReasoningEffort, "reasoning-effort", defaultReasoningEffort,
