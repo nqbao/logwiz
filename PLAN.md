@@ -36,6 +36,11 @@
   Possible approaches: (1) context file (`.logwiz/context.md`) loaded on startup,
   (2) `--context` flag for ad-hoc sessions, (3) in-chat "remember" command that
   persists to the context file.
+- Skills: user-authored markdown snippets in `.logwiz/skills/*.md` that the agent
+  can load on demand. On startup, skill names/descriptions are auto-discovered and
+  injected into the agent context so the LLM knows what's available. A `load_skill(name)`
+  inspection tool lets the agent fetch the full content of a relevant skill during
+  the inspect phase, without stuffing all skills into every prompt.
 - Full log line detail view: expand a line (e.g. Enter key) to show a vertical
   key-value table of all parsed fields, full message, and multi-line stack traces
   without terminal width truncation.
