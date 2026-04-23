@@ -20,6 +20,8 @@ type AgentDoneMsg = agent.DoneMsg
 type AgentErrMsg = agent.ErrMsg
 
 // buildAgentCmdContext returns a sampled-lines block for the agent system prompt.
+// Samples are spread evenly across the buffer for format awareness only — they
+// are not comprehensive and not necessarily recent.
 func buildAgentCmdContext(m Model) string {
 	n := m.buf.Len()
 	if n == 0 {
@@ -35,7 +37,7 @@ func buildAgentCmdContext(m Model) string {
 		lines = append(lines, m.redactor.Redact(m.buf.Line(i).Raw))
 	}
 	var b strings.Builder
-	b.WriteString("Log sample (for format awareness):\n```\n")
+	b.WriteString("Log format samples (NOT comprehensive, NOT necessarily recent — use inspection tools for actual content):\n```\n")
 	for _, l := range lines {
 		b.WriteString(l)
 		b.WriteByte('\n')
@@ -45,10 +47,11 @@ func buildAgentCmdContext(m Model) string {
 }
 
 // startAgentCmd creates a short-lived cmd agent and fires its first Step.
-// Context is rebuilt fresh each invocation.
+// Prior palette Q&A (m.cmdHistory) is threaded in for conversational follow-ups.
 func startAgentCmd(m Model, raw string) (Model, tea.Cmd) {
 	ctx := buildAgentCmdContext(m)
-	msgs := agent.BuildCmdPrompt(raw, ctx)
+	msgs := agent.BuildCmdPrompt(raw, ctx, m.cmdHistory)
+	m.cmdPending = raw
 	m.cmdAgent = agent.NewCmdAgent(m.chatClient, m.ctx, msgs)
 	m.cmdToolBudget = MaxCmdToolTurns
 	return m, tea.Batch(m.cmdAgent.Step(), spinnerCmd())
@@ -330,10 +333,23 @@ func agentCmdErr(m Model, msg string) (Model, tea.Cmd) {
 }
 
 // agentKeepPalette keeps the palette open after a successful agent command,
-// clears the input, and shows an informational summary.
+// clears the input, shows an informational summary, and records the Q&A pair
+// in cmdHistory for conversational follow-ups.
 func agentKeepPalette(m Model, info string) Model {
 	m.cmdInfo = info
 	m.cmdErr = ""
+	if m.cmdPending != "" {
+		m.cmdHistory = append(m.cmdHistory,
+			agent.Message{Role: "user", Content: m.cmdPending},
+			agent.Message{Role: "assistant", Content: info},
+		)
+		// Trim oldest pairs to stay within MaxCmdHistoryTurns.
+		max := MaxCmdHistoryTurns * 2
+		if len(m.cmdHistory) > max {
+			m.cmdHistory = m.cmdHistory[len(m.cmdHistory)-max:]
+		}
+		m.cmdPending = ""
+	}
 	m.cmdInput.SetValue("")
 	return m
 }

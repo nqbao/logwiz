@@ -354,5 +354,7 @@ func clearChat(m Model) Model {
 	m.sessionSample = nil
 	m.chatAgent = nil
 	m.cmdAgent = nil
+	m.cmdHistory = nil
+	m.cmdPending = ""
 	return m
 }
