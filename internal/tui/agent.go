@@ -11,6 +11,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/nqbao/logwiz/internal/agent"
+	"github.com/nqbao/logwiz/internal/buffer"
+	"github.com/nqbao/logwiz/internal/logmsg"
+	"github.com/nqbao/logwiz/internal/redact"
 )
 
 // Type aliases so update.go and tests don't need to import agent directly.
@@ -19,27 +22,38 @@ type AgentStepMsg = agent.StepMsg
 type AgentDoneMsg = agent.DoneMsg
 type AgentErrMsg = agent.ErrMsg
 
-// buildAgentCmdContext returns a sampled-lines block for the agent system prompt.
-// Samples are spread evenly across the buffer for format awareness only — they
-// are not comprehensive and not necessarily recent.
-func buildAgentCmdContext(m Model) string {
-	n := m.buf.Len()
+// cmdSampleSize caps the number of log lines captured for the agent system prompt.
+const cmdSampleSize = 10
+
+// captureCmdSample picks up to cmdSampleSize lines spread evenly across the buffer
+// and returns deep copies so the result is safe to retain past ring-buffer eviction.
+// Returns nil if the buffer is empty.
+func captureCmdSample(buf *buffer.Buffer) []logmsg.LogMessage {
+	n := buf.Len()
 	if n == 0 {
-		return ""
+		return nil
 	}
-	const sampleSize = 10
-	step := n / sampleSize
+	step := n / cmdSampleSize
 	if step < 1 {
 		step = 1
 	}
-	var lines []string
-	for i := 0; i < n && len(lines) < sampleSize; i += step {
-		lines = append(lines, m.redactor.Redact(m.buf.Line(i).Raw))
+	sample := make([]logmsg.LogMessage, 0, cmdSampleSize)
+	for i := 0; i < n && len(sample) < cmdSampleSize; i += step {
+		sample = append(sample, buf.Line(i).Copy())
+	}
+	return sample
+}
+
+// formatCmdSample renders the captured sample into the format-awareness block
+// included in the agent system prompt. Redaction is applied at render time.
+func formatCmdSample(sample []logmsg.LogMessage, r *redact.Redactor) string {
+	if len(sample) == 0 {
+		return ""
 	}
 	var b strings.Builder
 	b.WriteString("Log format samples (NOT comprehensive, NOT necessarily recent — use inspection tools for actual content):\n```\n")
-	for _, l := range lines {
-		b.WriteString(l)
+	for _, lm := range sample {
+		b.WriteString(r.Redact(lm.Raw))
 		b.WriteByte('\n')
 	}
 	b.WriteString("```")
@@ -48,8 +62,13 @@ func buildAgentCmdContext(m Model) string {
 
 // startAgentCmd creates a short-lived cmd agent and fires its first Step.
 // Prior palette Q&A (m.cmdHistory) is threaded in for conversational follow-ups.
+// The log sample is captured once on first use and reused for the run so the
+// system-prompt prefix stays stable across turns (helps prompt caching).
 func startAgentCmd(m Model, raw string) (Model, tea.Cmd) {
-	ctx := buildAgentCmdContext(m)
+	if m.cmdSample == nil {
+		m.cmdSample = captureCmdSample(m.buf)
+	}
+	ctx := formatCmdSample(m.cmdSample, m.redactor)
 	msgs := agent.BuildCmdPrompt(raw, ctx, m.cmdHistory)
 	m.cmdPending = raw
 	m.cmdAgent = agent.NewCmdAgent(m.chatClient, m.ctx, msgs)

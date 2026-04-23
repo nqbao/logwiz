@@ -20,6 +20,7 @@ import (
 	"github.com/nqbao/logwiz/internal/buffer"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/highlight"
+	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/redact"
 	"github.com/nqbao/logwiz/internal/tools"
 )
@@ -124,6 +125,12 @@ type Model struct {
 	// Palette carry-over: bounded Q&A history across invocations (reset on Escape / :clear chat).
 	cmdHistory []agent.Message // alternating user/assistant pairs
 	cmdPending string          // raw input for the in-flight palette turn
+
+	// cmdSample is a one-shot log snapshot captured on first palette agent use,
+	// stored as copies so it's independent of ring-buffer eviction. Kept for
+	// the lifetime of the run so the system prompt stays stable across turns
+	// (enables provider-side prompt caching on the prefix).
+	cmdSample []logmsg.LogMessage
 
 	hintIdx int // cycles through inputHints
 
