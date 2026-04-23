@@ -264,6 +264,8 @@ func configGetDisplay(cfg config.Config, key string) (string, bool) {
 			return "on", true
 		}
 		return "off", true
+	case "cmd-history-turns":
+		return strconv.Itoa(cfg.CmdHistoryTurns), true
 	}
 	return "", false
 }

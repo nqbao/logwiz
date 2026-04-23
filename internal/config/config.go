@@ -17,13 +17,14 @@ import (
 
 // Defaults.
 const (
-	DefaultBaseURL      = "https://api.openai.com/v1"
-	DefaultModel        = "gpt-4o-mini"
-	DefaultMaxLines     = 50000
-	DefaultContextLines = 10
-	DefaultSidebarWidth = 50
-	DefaultSystemPrompt = "You are logwiz, an assistant analyzing terminal logs. You have access to tools: tail(n), read(start, n), count_regex(pattern, case_insensitive, since_line), search_regex(pattern, max, case_insensitive, since_line). Use count_regex first to assess scale cheaply, then search_regex to fetch matching lines. Use them to fetch the log data you need — do not guess. Indexes are absolute line numbers in the current buffer (0 = oldest). Cite line numbers when giving findings. Keep answers concise."
-	DefaultFormat       = "auto"
+	DefaultBaseURL          = "https://api.openai.com/v1"
+	DefaultModel            = "gpt-4o-mini"
+	DefaultMaxLines         = 50000
+	DefaultContextLines     = 10
+	DefaultSidebarWidth     = 50
+	DefaultCmdHistoryTurns  = 20
+	DefaultSystemPrompt     = "You are logwiz, an assistant analyzing terminal logs. You have access to tools: tail(n), read(start, n), count_regex(pattern, case_insensitive, since_line), search_regex(pattern, max, case_insensitive, since_line). Use count_regex first to assess scale cheaply, then search_regex to fetch matching lines. Use them to fetch the log data you need — do not guess. Indexes are absolute line numbers in the current buffer (0 = oldest). Cite line numbers when giving findings. Keep answers concise."
+	DefaultFormat           = "auto"
 )
 
 // Env var names.
@@ -70,6 +71,10 @@ type Config struct {
 	// The display layer is never affected.
 	RedactPatterns []string
 
+	// CmdHistoryTurns is the maximum number of palette Q&A pairs carried
+	// across invocations for conversational follow-ups.
+	CmdHistoryTurns int
+
 	// ThinkingBudget is the token budget for extended thinking (Anthropic
 	// models only). 0 disables thinking; values >= 1024 enable it.
 	ThinkingBudget int
@@ -94,6 +99,7 @@ type fileConfig struct {
 	ContextLines   *int     `json:"context_lines,omitempty"`
 	SystemPrompt   string   `json:"system_prompt,omitempty"`
 	RedactPatterns []string `json:"redact_patterns,omitempty"`
+	CmdHistoryTurns int    `json:"cmd_history_turns,omitempty"`
 	ThinkingBudget  int    `json:"thinking_budget,omitempty"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	Pretty          bool   `json:"pretty,omitempty"`
@@ -172,6 +178,10 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	if fc.SystemPrompt != "" {
 		defaultSystemPrompt = fc.SystemPrompt
 	}
+	defaultCmdHistoryTurns := DefaultCmdHistoryTurns
+	if fc.CmdHistoryTurns > 0 {
+		defaultCmdHistoryTurns = fc.CmdHistoryTurns
+	}
 	defaultThinkingBudget := fc.ThinkingBudget
 	defaultReasoningEffort := fc.ReasoningEffort
 	defaultPretty := fc.Pretty
@@ -204,6 +214,8 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		"Enable pretty mode: render json/logfmt lines as \"time LEVEL message key=val …\" (toggle with P inside the viewer, persist with :config pretty on/off)")
 	fs.StringVar(&cfg.LogFile, "log-file", "",
 		"Write internal debug logs to `file`")
+	fs.IntVar(&cfg.CmdHistoryTurns, "cmd-history-turns", defaultCmdHistoryTurns,
+		"Maximum palette Q&A pairs carried across invocations for follow-up questions")
 	fs.IntVar(&cfg.ThinkingBudget, "thinking-budget", defaultThinkingBudget,
 		"Token budget for extended thinking (Anthropic models only); 0 disables, minimum 1024 when enabled")
 	fs.StringVar(&cfg.ReasoningEffort, "reasoning-effort", defaultReasoningEffort,
@@ -349,6 +361,12 @@ func ApplyKey(cfg *Config, key, value string) error {
 		default:
 			return fmt.Errorf(`pretty must be "on" or "off"`)
 		}
+	case "cmd-history-turns":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 {
+			return fmt.Errorf("cmd-history-turns must be an integer >= 1")
+		}
+		cfg.CmdHistoryTurns = n
 	default:
 		return fmt.Errorf("unknown config key %q (valid: %s)", key, strings.Join(ConfigurableKeys, ", "))
 	}
@@ -394,6 +412,9 @@ func SaveKey(key, value string) error {
 		}
 	case "pretty":
 		fc.Pretty = strings.ToLower(value) == "on" || strings.ToLower(value) == "true" || value == "1"
+	case "cmd-history-turns":
+		n, _ := strconv.Atoi(value)
+		fc.CmdHistoryTurns = n
 	default:
 		return fmt.Errorf("unknown key %q", key)
 	}

@@ -343,8 +343,8 @@ func agentKeepPalette(m Model, info string) Model {
 			agent.Message{Role: "user", Content: m.cmdPending},
 			agent.Message{Role: "assistant", Content: info},
 		)
-		// Trim oldest pairs to stay within MaxCmdHistoryTurns.
-		max := MaxCmdHistoryTurns * 2
+		// Trim oldest pairs to stay within the configured limit.
+		max := m.cfg.CmdHistoryTurns * 2
 		if len(m.cmdHistory) > max {
 			m.cmdHistory = m.cmdHistory[len(m.cmdHistory)-max:]
 		}
