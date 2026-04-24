@@ -94,14 +94,15 @@ func main() {
 		var ticker *time.Ticker
 		if phRate > 0 {
 			ticker = time.NewTicker(time.Duration(float64(time.Second) / phRate))
-			defer ticker.Stop()
 		}
 
 		phStart := time.Now()
-		phLineCount := 0
 
 		for {
 			if maxLines > 0 && seq >= maxLines {
+				if ticker != nil {
+					ticker.Stop()
+				}
 				return
 			}
 			if ph.Duration > 0 && time.Since(phStart) >= ph.Duration {
@@ -113,27 +114,26 @@ func main() {
 			}
 
 			td := pickEntry(rng, entries)
-			emitted := emitTemplate(td, seq)
+			emitted := emitTemplate(rng, td, seq)
 			seq += emitted
-			phLineCount += emitted
+		}
 
-			if ph.Duration == 0 && maxLines == 0 {
-				// infinite phase, infinite lines — just keep going
-			}
+		if ticker != nil {
+			ticker.Stop()
 		}
 	}
 }
 
-func emitTemplate(td templateDef, seq int) int {
+func emitTemplate(rng *rand.Rand, td templateDef, seq int) int {
 	if len(td.Lines) > 0 {
 		for _, line := range td.Lines {
-			fmt.Println(expand(line, seq))
+			fmt.Println(expand(rng, line, seq))
 			seq++
 		}
 		os.Stdout.Sync()
 		return len(td.Lines)
 	}
-	fmt.Println(expand(td.Line, seq))
+	fmt.Println(expand(rng, td.Line, seq))
 	os.Stdout.Sync()
 	return 1
 }
@@ -171,7 +171,7 @@ func pickEntry(rng *rand.Rand, entries []entry) templateDef {
 	return entries[len(entries)-1].td
 }
 
-func expand(tmpl string, seq int) string {
+func expand(rng *rand.Rand, tmpl string, seq int) string {
 	now := time.Now()
 	return varRe.ReplaceAllStringFunc(tmpl, func(m string) string {
 		inner := m[1 : len(m)-1]
@@ -182,22 +182,22 @@ func expand(tmpl string, seq int) string {
 			return strconv.Itoa(seq)
 		case inner == "ip":
 			return fmt.Sprintf("%d.%d.%d.%d",
-				rand.Intn(256), rand.Intn(256), rand.Intn(256), rand.Intn(256))
+				rng.Intn(256), rng.Intn(256), rng.Intn(256), rng.Intn(256))
 		case inner == "cr":
 			return "\r"
 		case inner == "nl":
 			return "\n"
 		case strings.HasPrefix(inner, "rand:"):
-			return expandRand(inner[5:])
+			return expandRand(rng, inner[5:])
 		case strings.HasPrefix(inner, "choice:"):
-			return expandChoice(inner[7:])
+			return expandChoice(rng, inner[7:])
 		default:
 			return m
 		}
 	})
 }
 
-func expandRand(s string) string {
+func expandRand(rng *rand.Rand, s string) string {
 	parts := strings.SplitN(s, "-", 2)
 	if len(parts) != 2 {
 		return "{" + s + "}"
@@ -207,12 +207,12 @@ func expandRand(s string) string {
 	if errLo != nil || errHi != nil || hi < lo {
 		return "{rand:" + s + "}"
 	}
-	return strconv.Itoa(lo + rand.Intn(hi-lo+1))
+	return strconv.Itoa(lo + rng.Intn(hi-lo+1))
 }
 
-func expandChoice(s string) string {
+func expandChoice(rng *rand.Rand, s string) string {
 	choices := strings.Split(s, ",")
-	return choices[rand.Intn(len(choices))]
+	return choices[rng.Intn(len(choices))]
 }
 
 func mergeRegistries(base, override *registry) *registry {

@@ -19,7 +19,7 @@
         "runtime stack:",
         "runtime.throw({0x{rand:100000-999999}, 0x{rand:10-20}})",
         "\t/usr/local/go/src/runtime/panic.go:{rand:900-1100} +0x{rand:50-200}",
-        "runtime.(*mcache).allocLarge({choice:0xc0{rand:100-999}0, 0xc0{rand:100-999}0}, 0x{rand:100000-999999}, 0x0)",
+        "runtime.(*mcache).allocLarge(0xc0{rand:100-999}{rand:100-999}, 0x{rand:100000-999999}, 0x0)",
         "\t/usr/local/go/src/runtime/mcache.go:{rand:50-100} +0x{rand:50-200}",
         "main.{choice:processBatch,buildIndex,loadDataset}(...)",
         "\t/app/{choice:indexer,processor,loader}.go:{rand:50-200} +0x{rand:100-999}"
@@ -52,7 +52,7 @@
       {"name": "migration-log", "lines": [
         "{ts} INFO  running migration {rand:1-50}: {choice:add_index_to_orders,create_users_table,alter_inventory_add_column,drop_deprecated_sessions}",
         "{ts} INFO  migration {rand:1-50} applied in {rand:50-2000}ms",
-        "{ts} INFO  {rand:1-50}/{rand:1-50} migrations applied successfully"
+        "{ts} INFO  {rand:30-50}/{rand:30-50} migrations applied successfully"
       ]}
     ]
   },
