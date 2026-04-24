@@ -57,7 +57,7 @@ func parseJSON(raw string) (LogMessage, bool) {
 			msg.Time = jsonValToStr(val)
 			seenTime = true
 		case !seenLevel && containsStr(LevelKeys, keyLower):
-			msg.Level = jsonValToStr(val)
+			msg.Level = NormalizeLevel(jsonValToStr(val))
 			seenLevel = true
 		case !seenMsg && containsStr(MessageKeys, keyLower):
 			msg.Message = jsonValToStr(val)

@@ -15,8 +15,8 @@ func TestLogfmtParser_ThreePairs(t *testing.T) {
 	if m.Time != "2026-04-21" {
 		t.Errorf("Time = %q, want \"2026-04-21\"", m.Time)
 	}
-	if m.Level != "info" {
-		t.Errorf("Level = %q, want \"info\"", m.Level)
+	if m.Level != "INFO " {
+		t.Errorf("Level = %q, want \"INFO \"", m.Level)
 	}
 	if m.Message != "hello world" {
 		t.Errorf("Message = %q, want \"hello world\"", m.Message)
@@ -99,8 +99,8 @@ func TestLogfmtParser_EmptyNotDetected(t *testing.T) {
 func TestLogfmtParser_AttrCanonicalLookup(t *testing.T) {
 	p := LogfmtParser{}
 	got := p.Parse("level=error msg=down")
-	if got[0].Attr("level") != "error" {
-		t.Errorf("Attr(level) = %q, want \"error\"", got[0].Attr("level"))
+	if got[0].Attr("level") != "ERROR" {
+		t.Errorf("Attr(level) = %q, want \"ERROR\"", got[0].Attr("level"))
 	}
 	if got[0].Attr("msg") != "down" {
 		t.Errorf("Attr(msg) = %q, want \"down\"", got[0].Attr("msg"))
@@ -114,8 +114,8 @@ func TestLogfmtParser_FieldAliases(t *testing.T) {
 	if m.Time != "2026-04-21" {
 		t.Errorf("Time = %q", m.Time)
 	}
-	if m.Level != "warning" {
-		t.Errorf("Level = %q, want \"warning\"", m.Level)
+	if m.Level != "WARN " {
+		t.Errorf("Level = %q, want \"WARN \"", m.Level)
 	}
 	if m.Message != "nope" {
 		t.Errorf("Message = %q", m.Message)

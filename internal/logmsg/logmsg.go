@@ -25,8 +25,9 @@ type MsgID struct {
 // ("json", "logfmt", "" = passthrough).
 //
 // Time, Level, and Message hold the canonical fields extracted at parse
-// time (empty string = absent). Values are stored raw; renderers are
-// responsible for normalization (e.g. NormalizeLevel). Extra holds the
+// time (empty string = absent). Level is stored normalized (5-char
+// uppercase, e.g. "INFO ", "ERROR"). Time and Message are stored raw;
+// renderers are responsible for time normalization. Extra holds the
 // remaining non-canonical key=value pairs.
 type LogMessage struct {
 	ID     MsgID

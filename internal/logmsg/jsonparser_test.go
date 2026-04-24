@@ -77,8 +77,8 @@ func TestJSONParser_CanonicalFields(t *testing.T) {
 	if m.Time != "2026-04-21T14:02:31Z" {
 		t.Errorf("Time = %q, want RFC3339 raw", m.Time)
 	}
-	if m.Level != "info" {
-		t.Errorf("Level = %q, want raw \"info\"", m.Level)
+	if m.Level != "INFO " {
+		t.Errorf("Level = %q, want \"INFO \"", m.Level)
 	}
 	if m.Message != "req done" {
 		t.Errorf("Message = %q, want \"req done\"", m.Message)
@@ -101,8 +101,8 @@ func TestJSONParser_FieldAliases(t *testing.T) {
 	if m.Time == "" {
 		t.Error("@timestamp should populate Time")
 	}
-	if m.Level != "warning" {
-		t.Errorf("Level = %q, want \"warning\"", m.Level)
+	if m.Level != "WARN " {
+		t.Errorf("Level = %q, want \"WARN \"", m.Level)
 	}
 	if m.Message != "down" {
 		t.Errorf("Message = %q, want \"down\"", m.Message)

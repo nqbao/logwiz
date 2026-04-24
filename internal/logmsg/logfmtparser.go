@@ -54,7 +54,7 @@ func parseLogfmt(raw string) (LogMessage, bool) {
 			msg.Time = val
 			seenTime = true
 		case !seenLevel && containsStr(LevelKeys, keyLower):
-			msg.Level = val
+			msg.Level = NormalizeLevel(val)
 			seenLevel = true
 		case !seenMsg && containsStr(MessageKeys, keyLower):
 			msg.Message = val

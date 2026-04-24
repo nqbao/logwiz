@@ -25,8 +25,7 @@ func renderPrettyFields(m logmsg.LogMessage) string {
 		parts = append(parts, stylePrettyTime.Render(m.Time))
 	}
 	if m.Level != "" {
-		level := logmsg.NormalizeLevel(m.Level)
-		parts = append(parts, prettyLevelStyle(ls, level).Render(level))
+		parts = append(parts, prettyLevelStyle(ls, m.Level).Render(m.Level))
 	}
 	if m.Message != "" {
 		parts = append(parts, m.Message)

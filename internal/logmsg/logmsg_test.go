@@ -15,7 +15,7 @@ func TestAttrEmpty(t *testing.T) {
 func TestAttrCanonicalFields(t *testing.T) {
 	m := LogMessage{
 		Time:    "2026-04-16",
-		Level:   "INFO",
+		Level:   "INFO ",
 		Message: "hello",
 	}
 	cases := map[string]string{
@@ -23,10 +23,10 @@ func TestAttrCanonicalFields(t *testing.T) {
 		"ts":         "2026-04-16",
 		"@timestamp": "2026-04-16",
 		"timestamp":  "2026-04-16",
-		"TS":         "2026-04-16", // case-insensitive
-		"level":      "INFO",
-		"lvl":        "INFO",
-		"severity":   "INFO",
+		"TS":         "2026-04-16",
+		"level":      "INFO ",
+		"lvl":        "INFO ",
+		"severity":   "INFO ",
 		"msg":        "hello",
 		"message":    "hello",
 	}
