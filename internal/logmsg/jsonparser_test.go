@@ -22,8 +22,8 @@ func TestJSONParser_DetectsArray(t *testing.T) {
 	if got[0].Format != "json" {
 		t.Errorf("Format = %q, want \"json\"", got[0].Format)
 	}
-	if got[0].Attrs.Len() != 0 {
-		t.Errorf("Attrs.Len() = %d, want 0 for top-level array", got[0].Attrs.Len())
+	if got[0].Extra.Len() != 0 {
+		t.Errorf("Extra.Len() = %d, want 0 for top-level array", got[0].Extra.Len())
 	}
 }
 
@@ -83,14 +83,14 @@ func TestJSONParser_CanonicalFields(t *testing.T) {
 	if m.Message != "req done" {
 		t.Errorf("Message = %q, want \"req done\"", m.Message)
 	}
-	if m.Attrs.Get("user") != "bob" {
-		t.Errorf("Attrs[user] = %q, want \"bob\"", m.Attrs.Get("user"))
+	if m.Extra.Get("user") != "bob" {
+		t.Errorf("Extra[user] = %q, want \"bob\"", m.Extra.Get("user"))
 	}
-	if m.Attrs.Get("latency_ms") != "12" {
-		t.Errorf("Attrs[latency_ms] = %q, want \"12\"", m.Attrs.Get("latency_ms"))
+	if m.Extra.Get("latency_ms") != "12" {
+		t.Errorf("Extra[latency_ms] = %q, want \"12\"", m.Extra.Get("latency_ms"))
 	}
-	if m.Attrs.Len() != 2 {
-		t.Errorf("Attrs.Len() = %d, want 2", m.Attrs.Len())
+	if m.Extra.Len() != 2 {
+		t.Errorf("Extra.Len() = %d, want 2", m.Extra.Len())
 	}
 }
 
@@ -109,15 +109,15 @@ func TestJSONParser_FieldAliases(t *testing.T) {
 	}
 }
 
-func TestJSONParser_NestedObjectInAttrs(t *testing.T) {
+func TestJSONParser_NestedObjectInExtra(t *testing.T) {
 	p := JSONParser{}
 	got := p.Parse(`{"msg":"ok","meta":{"region":"us-east"}}`)
 	m := got[0]
 	if m.Message != "ok" {
 		t.Errorf("Message = %q, want \"ok\"", m.Message)
 	}
-	if m.Attrs.Get("meta") != `{"region":"us-east"}` {
-		t.Errorf("Attrs[meta] = %q, want JSON-encoded nested object", m.Attrs.Get("meta"))
+	if m.Extra.Get("meta") != `{"region":"us-east"}` {
+		t.Errorf("Extra[meta] = %q, want JSON-encoded nested object", m.Extra.Get("meta"))
 	}
 }
 
@@ -125,17 +125,17 @@ func TestJSONParser_BoolAndNullScalars(t *testing.T) {
 	p := JSONParser{}
 	got := p.Parse(`{"a":true,"b":false,"c":null,"d":1}`)
 	m := got[0]
-	if m.Attrs.Get("a") != "true" {
-		t.Errorf("Attrs[a] = %q, want \"true\"", m.Attrs.Get("a"))
+	if m.Extra.Get("a") != "true" {
+		t.Errorf("Extra[a] = %q, want \"true\"", m.Extra.Get("a"))
 	}
-	if m.Attrs.Get("b") != "false" {
-		t.Errorf("Attrs[b] = %q, want \"false\"", m.Attrs.Get("b"))
+	if m.Extra.Get("b") != "false" {
+		t.Errorf("Extra[b] = %q, want \"false\"", m.Extra.Get("b"))
 	}
-	if m.Attrs.Get("c") != "null" {
-		t.Errorf("Attrs[c] = %q, want \"null\"", m.Attrs.Get("c"))
+	if m.Extra.Get("c") != "null" {
+		t.Errorf("Extra[c] = %q, want \"null\"", m.Extra.Get("c"))
 	}
-	if m.Attrs.Get("d") != "1" {
-		t.Errorf("Attrs[d] = %q, want \"1\"", m.Attrs.Get("d"))
+	if m.Extra.Get("d") != "1" {
+		t.Errorf("Extra[d] = %q, want \"1\"", m.Extra.Get("d"))
 	}
 }
 
@@ -145,7 +145,7 @@ func TestJSONParser_MalformedJSONKeepsFormat(t *testing.T) {
 	if got[0].Format != "json" {
 		t.Errorf("Format = %q, want \"json\"", got[0].Format)
 	}
-	if got[0].Attrs.Len() != 0 {
-		t.Errorf("Attrs.Len() = %d, want 0 for malformed JSON", got[0].Attrs.Len())
+	if got[0].Extra.Len() != 0 {
+		t.Errorf("Extra.Len() = %d, want 0 for malformed JSON", got[0].Extra.Len())
 	}
 }

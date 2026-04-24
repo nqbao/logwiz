@@ -158,14 +158,14 @@ func TestEmptyBuffer(t *testing.T) {
 	}
 }
 
-func TestAttributesRoundTrip(t *testing.T) {
+func TestExtraRoundTrip(t *testing.T) {
 	b := New(3)
 	msg := logmsg.LogMessage{
 		Raw:   "raw line",
 		Time:  "2026-04-16",
 		Level: "INFO",
 	}
-	msg.Attrs.Set("user", "bob")
+	msg.Extra.Set("user", "bob")
 	b.Append(msg)
 
 	got := b.Line(0)

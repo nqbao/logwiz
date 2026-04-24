@@ -33,7 +33,7 @@ func JSONRenderer(msg logmsg.LogMessage) string {
 // style. Falls back to JSONRenderer when the message has no parsed
 // canonical fields (malformed JSON, top-level array).
 func PrettyJSONRenderer(msg logmsg.LogMessage) string {
-	if msg.Time == "" && msg.Level == "" && msg.Message == "" && msg.Attrs.Len() == 0 {
+	if msg.Time == "" && msg.Level == "" && msg.Message == "" && msg.Extra.Len() == 0 {
 		return JSONRenderer(msg)
 	}
 	return renderPrettyFields(msg)

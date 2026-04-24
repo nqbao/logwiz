@@ -26,7 +26,7 @@ type MsgID struct {
 //
 // Time, Level, and Message hold the canonical fields extracted at parse
 // time (empty string = absent). Values are stored raw; renderers are
-// responsible for normalization (e.g. NormalizeLevel). Attrs holds the
+// responsible for normalization (e.g. NormalizeLevel). Extra holds the
 // remaining non-canonical key=value pairs.
 type LogMessage struct {
 	ID     MsgID
@@ -37,12 +37,12 @@ type LogMessage struct {
 	Level   string
 	Message string
 
-	Attrs Attrs
+	Extra Extra
 }
 
 // Canonical field aliases. First match wins at parse time,
 // case-insensitive. Exported so renderers can skip these keys when
-// iterating Attrs.
+// iterating Extra.
 var (
 	TimeKeys    = []string{"time", "ts", "@timestamp", "timestamp"}
 	LevelKeys   = []string{"level", "lvl", "severity"}
@@ -51,7 +51,7 @@ var (
 
 // Attr returns the value for key. Canonical aliases (time/ts/@timestamp,
 // level/lvl/severity, msg/message) resolve to the corresponding Time,
-// Level, or Message field; all other keys are looked up in Attrs.
+// Level, or Message field; all other keys are looked up in Extra.
 // Returns "" if the key is absent.
 func (m LogMessage) Attr(key string) string {
 	k := strings.ToLower(key)
@@ -64,7 +64,7 @@ func (m LogMessage) Attr(key string) string {
 	if containsStr(MessageKeys, k) {
 		return m.Message
 	}
-	return m.Attrs.Get(key)
+	return m.Extra.Get(key)
 }
 
 // Parser converts a raw log line into zero or more LogMessages.
@@ -80,7 +80,7 @@ type Parser interface {
 type PassthroughParser struct{}
 
 // Parse returns a single-element slice containing a LogMessage whose Raw
-// is the input line and whose Attrs is empty.
+// is the input line and whose Extra is empty.
 func (PassthroughParser) Parse(raw string) []LogMessage {
 	return []LogMessage{{Raw: raw}}
 }

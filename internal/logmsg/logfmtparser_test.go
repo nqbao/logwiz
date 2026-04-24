@@ -21,24 +21,24 @@ func TestLogfmtParser_ThreePairs(t *testing.T) {
 	if m.Message != "hello world" {
 		t.Errorf("Message = %q, want \"hello world\"", m.Message)
 	}
-	if m.Attrs.Len() != 0 {
-		t.Errorf("Attrs.Len() = %d, want 0 (all three canonical)", m.Attrs.Len())
+	if m.Extra.Len() != 0 {
+		t.Errorf("Extra.Len() = %d, want 0 (all three canonical)", m.Extra.Len())
 	}
 }
 
-func TestLogfmtParser_NonCanonicalGoToAttrs(t *testing.T) {
+func TestLogfmtParser_NonCanonicalGoToExtra(t *testing.T) {
 	p := LogfmtParser{}
 	got := p.Parse("a=1 b=2 c=3")
 	m := got[0]
 	if m.Format != "logfmt" {
 		t.Errorf("Format = %q, want \"logfmt\"", m.Format)
 	}
-	if m.Attrs.Get("a") != "1" || m.Attrs.Get("b") != "2" || m.Attrs.Get("c") != "3" {
+	if m.Extra.Get("a") != "1" || m.Extra.Get("b") != "2" || m.Extra.Get("c") != "3" {
 		t.Errorf("unexpected attrs: a=%q b=%q c=%q",
-			m.Attrs.Get("a"), m.Attrs.Get("b"), m.Attrs.Get("c"))
+			m.Extra.Get("a"), m.Extra.Get("b"), m.Extra.Get("c"))
 	}
-	if m.Attrs.Len() != 3 {
-		t.Errorf("Attrs.Len() = %d, want 3", m.Attrs.Len())
+	if m.Extra.Len() != 3 {
+		t.Errorf("Extra.Len() = %d, want 3", m.Extra.Len())
 	}
 }
 
@@ -57,8 +57,8 @@ func TestLogfmtParser_QuotedValueUnescaped(t *testing.T) {
 	if m.Format != "logfmt" {
 		t.Fatalf("Format = %q, want \"logfmt\"", m.Format)
 	}
-	if m.Attrs.Get("key") != `with "quotes" inside` {
-		t.Errorf("Attrs[key] = %q, want %q", m.Attrs.Get("key"), `with "quotes" inside`)
+	if m.Extra.Get("key") != `with "quotes" inside` {
+		t.Errorf("Extra[key] = %q, want %q", m.Extra.Get("key"), `with "quotes" inside`)
 	}
 }
 

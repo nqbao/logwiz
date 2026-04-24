@@ -193,7 +193,7 @@ type stubParser struct{}
 
 func (stubParser) Parse(raw string) []logmsg.LogMessage {
 	m := logmsg.LogMessage{Raw: raw}
-	m.Attrs.Set("tag", "stubbed")
+	m.Extra.Set("tag", "stubbed")
 	return []logmsg.LogMessage{m}
 }
 
@@ -365,7 +365,7 @@ func TestPumpFlushesParserOnEOF(t *testing.T) {
 		var out []logmsg.LogMessage
 		for _, s := range buf {
 			m := logmsg.LogMessage{Raw: s}
-			m.Attrs.Set("tag", "flushed")
+			m.Extra.Set("tag", "flushed")
 			out = append(out, m)
 		}
 		buf = buf[:0]

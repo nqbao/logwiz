@@ -6,7 +6,7 @@ import (
 )
 
 // JSONParser detects JSON-formatted lines and extracts canonical fields
-// (time/level/message) plus the remaining top-level keys into Attrs.
+// (time/level/message) plus the remaining top-level keys into Extra.
 // Non-JSON lines are passed through as-is.
 type JSONParser struct{}
 
@@ -26,7 +26,7 @@ func (JSONParser) Parse(raw string) []LogMessage {
 func (JSONParser) Flush() []LogMessage { return nil }
 
 // parseJSON streams top-level keys from a JSON object and splits them
-// into canonical fields (Time/Level/Message) and remaining Attrs.
+// into canonical fields (Time/Level/Message) and remaining Extra.
 // Returns false for non-object JSON or parse errors.
 func parseJSON(raw string) (LogMessage, bool) {
 	dec := json.NewDecoder(strings.NewReader(raw))
@@ -63,7 +63,7 @@ func parseJSON(raw string) (LogMessage, bool) {
 			msg.Message = jsonValToStr(val)
 			seenMsg = true
 		default:
-			msg.Attrs.Set(key, jsonValToStr(val))
+			msg.Extra.Set(key, jsonValToStr(val))
 		}
 	}
 	return msg, true

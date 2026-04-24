@@ -129,7 +129,7 @@ func LogfmtRenderer(msg logmsg.LogMessage) string {
 // layout (time level message key=val …), coloured via the active chroma
 // style. Falls back to LogfmtRenderer when no canonical fields were parsed.
 func PrettyLogfmtRenderer(msg logmsg.LogMessage) string {
-	if msg.Time == "" && msg.Level == "" && msg.Message == "" && msg.Attrs.Len() == 0 {
+	if msg.Time == "" && msg.Level == "" && msg.Message == "" && msg.Extra.Len() == 0 {
 		return LogfmtRenderer(msg)
 	}
 	return renderPrettyFields(msg)

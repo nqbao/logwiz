@@ -31,7 +31,7 @@ func renderPrettyFields(m logmsg.LogMessage) string {
 	if m.Message != "" {
 		parts = append(parts, m.Message)
 	}
-	m.Attrs.Range(func(k, v string) bool {
+	m.Extra.Range(func(k, v string) bool {
 		parts = append(parts, ls.key.Render(k)+ls.eq.Render("=")+ls.str.Render(renderAttrValue(v)))
 		return true
 	})

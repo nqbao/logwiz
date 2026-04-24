@@ -37,9 +37,9 @@ func TestAttrCanonicalFields(t *testing.T) {
 	}
 }
 
-func TestAttrFallsBackToAttrs(t *testing.T) {
+func TestAttrFallsBackToExtra(t *testing.T) {
 	m := LogMessage{}
-	m.Attrs.Set("user", "bob")
+	m.Extra.Set("user", "bob")
 	if got := m.Attr("user"); got != "bob" {
 		t.Errorf("Attr(user) = %q, want \"bob\"", got)
 	}
@@ -57,8 +57,8 @@ func TestPassthroughParser(t *testing.T) {
 	if got[0].Raw != "some raw line" {
 		t.Errorf("Raw = %q, want %q", got[0].Raw, "some raw line")
 	}
-	if got[0].Attrs.Len() != 0 {
-		t.Errorf("Attrs.Len() = %d, want 0", got[0].Attrs.Len())
+	if got[0].Extra.Len() != 0 {
+		t.Errorf("Extra.Len() = %d, want 0", got[0].Extra.Len())
 	}
 	if got[0].Time != "" || got[0].Level != "" || got[0].Message != "" {
 		t.Errorf("canonical fields should be empty, got Time=%q Level=%q Message=%q",

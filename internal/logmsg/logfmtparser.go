@@ -7,7 +7,7 @@ import (
 )
 
 // LogfmtParser detects logfmt-formatted lines and parses their key=value
-// pairs, splitting into canonical Time/Level/Message fields plus Attrs
+// pairs, splitting into canonical Time/Level/Message fields plus Extra
 // for the rest. Lines with fewer than two valid pairs, or any
 // unparseable prose, are passed through as-is.
 type LogfmtParser struct{}
@@ -60,7 +60,7 @@ func parseLogfmt(raw string) (LogMessage, bool) {
 			msg.Message = val
 			seenMsg = true
 		default:
-			msg.Attrs.Set(key, val)
+			msg.Extra.Set(key, val)
 		}
 	}
 	if dec.Err() != nil || total < 2 {
