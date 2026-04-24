@@ -11,27 +11,30 @@ import (
 // stylePrettyTime is the dim colour used for the timestamp column in pretty mode.
 var stylePrettyTime = lfr.NewStyle().Foreground(lipgloss.Color("244"))
 
-// renderPrettyFields converts a Fields struct into a single-line coloured string:
+// renderPrettyFields renders a parsed LogMessage as a single-line coloured string:
 //
 //	HH:MM:SS.mmm LEVEL message key=val key=val …
 //
-// Colours are derived from the active chroma style via getLogfmtStyles.
-func renderPrettyFields(f logmsg.Fields) string {
+// Canonical fields come first; remaining attributes are iterated in sorted
+// key order for stable rendering across similar lines.
+func renderPrettyFields(m logmsg.LogMessage) string {
 	ls := getLogfmtStyles()
 	var parts []string
 
-	if f.Time != "" {
-		parts = append(parts, stylePrettyTime.Render(f.Time))
+	if m.Time != "" {
+		parts = append(parts, stylePrettyTime.Render(m.Time))
 	}
-	if f.Level != "" {
-		parts = append(parts, prettyLevelStyle(ls, f.Level).Render(f.Level))
+	if m.Level != "" {
+		level := logmsg.NormalizeLevel(m.Level)
+		parts = append(parts, prettyLevelStyle(ls, level).Render(level))
 	}
-	if f.Message != "" {
-		parts = append(parts, f.Message)
+	if m.Message != "" {
+		parts = append(parts, m.Message)
 	}
-	for _, kv := range f.Rest {
-		parts = append(parts, ls.key.Render(kv.Key)+ls.eq.Render("=")+ls.str.Render(kv.Value))
-	}
+	m.Attrs.Range(func(k, v string) bool {
+		parts = append(parts, ls.key.Render(k)+ls.eq.Render("=")+ls.str.Render(logmsg.QuoteIfNeeded(v)))
+		return true
+	})
 
 	return strings.Join(parts, " ")
 }

@@ -5,58 +5,74 @@ import (
 	"strings"
 )
 
-// JSONParser detects JSON-formatted lines and tags them so the syntax
-// highlighter can colour them. Non-JSON lines are passed through as-is.
-// For valid JSON objects, top-level keys are also parsed into Attributes.
+// JSONParser detects JSON-formatted lines and extracts canonical fields
+// (time/level/message) plus the remaining top-level keys into Attrs.
+// Non-JSON lines are passed through as-is.
 type JSONParser struct{}
 
 func (JSONParser) Parse(raw string) []LogMessage {
 	if !looksLikeJSON(raw) {
 		return []LogMessage{{Raw: raw}}
 	}
-	attrs, ok := parseJSONAttrs(raw)
+	msg, ok := parseJSON(raw)
 	if !ok {
-		// Malformed or non-object JSON (e.g. top-level array): keep the format
-		// hint for the highlighter but leave attributes nil.
+		// Malformed or non-object JSON (e.g. top-level array): keep the
+		// format hint for the highlighter but leave fields empty.
 		return []LogMessage{{Raw: raw, Format: "json"}}
 	}
-	return []LogMessage{{Raw: raw, Format: "json", Attributes: attrs}}
+	return []LogMessage{msg}
 }
 
 func (JSONParser) Flush() []LogMessage { return nil }
 
-// parseJSONAttrs streams top-level keys from a JSON object and returns them
-// as a flat map[string]string. Nested objects and arrays are stored as their
-// JSON encoding. Returns false for non-object JSON or parse errors.
-func parseJSONAttrs(raw string) (map[string]string, bool) {
+// parseJSON streams top-level keys from a JSON object and splits them
+// into canonical fields (Time/Level/Message) and remaining Attrs.
+// Returns false for non-object JSON or parse errors.
+func parseJSON(raw string) (LogMessage, bool) {
 	dec := json.NewDecoder(strings.NewReader(raw))
 	tok, err := dec.Token()
 	if err != nil || tok != json.Delim('{') {
-		return nil, false
+		return LogMessage{}, false
 	}
-	attrs := make(map[string]string)
+
+	msg := LogMessage{Raw: raw, Format: "json"}
+	seenTime, seenLevel, seenMsg := false, false, false
+
 	for dec.More() {
 		keyTok, err := dec.Token()
 		if err != nil {
-			return nil, false
+			return LogMessage{}, false
 		}
 		key, ok := keyTok.(string)
 		if !ok {
-			return nil, false
+			return LogMessage{}, false
 		}
 		var val any
 		if err := dec.Decode(&val); err != nil {
-			return nil, false
+			return LogMessage{}, false
 		}
-		attrs[key] = jsonValToStr(val)
+		keyLower := strings.ToLower(key)
+		switch {
+		case !seenTime && containsStr(TimeKeys, keyLower):
+			msg.Time = jsonValToStr(val)
+			seenTime = true
+		case !seenLevel && containsStr(LevelKeys, keyLower):
+			msg.Level = jsonValToStr(val)
+			seenLevel = true
+		case !seenMsg && containsStr(MessageKeys, keyLower):
+			msg.Message = jsonValToStr(val)
+			seenMsg = true
+		default:
+			msg.Attrs.Set(key, jsonValToStr(val))
+		}
 	}
-	return attrs, true
+	return msg, true
 }
 
 // looksLikeJSON is a cheap byte-level heuristic: a line is treated as JSON
 // if its first non-whitespace character is '{' or '['. Full validation is
-// intentionally deferred to the renderer so malformed input degrades
-// gracefully (chroma emits the raw text on tokenise errors).
+// intentionally deferred to parseJSON so malformed input still gets the
+// format tag for graceful highlighter fallback.
 func looksLikeJSON(s string) bool {
 	t := strings.TrimSpace(s)
 	if len(t) == 0 {

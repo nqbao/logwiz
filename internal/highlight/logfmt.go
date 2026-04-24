@@ -93,9 +93,11 @@ func buildLogfmtStyles() logfmtStyles {
 }
 
 // LogfmtRenderer colourises a logfmt line using colours derived from the
-// active chroma theme (see SetActiveStyle). Falls back to raw text when the
-// line has fewer than two key=value pairs or cannot be decoded.
-func LogfmtRenderer(text string) string {
+// active chroma theme (see SetActiveStyle). Renders key=value pairs in the
+// original input order by re-scanning msg.Raw. Falls back to the raw text
+// when the line has fewer than two key=value pairs or cannot be decoded.
+func LogfmtRenderer(msg logmsg.LogMessage) string {
+	text := msg.Raw
 	if strings.Count(text, "=") < 2 {
 		return text
 	}
@@ -123,15 +125,14 @@ func LogfmtRenderer(text string) string {
 	return sb.String()
 }
 
-// PrettyLogfmtRenderer parses raw as a logfmt line and renders it in
-// humanlog-style layout (time level message key=val …), coloured via the
-// active chroma style. Falls back to LogfmtRenderer on parse errors.
-func PrettyLogfmtRenderer(raw string) string {
-	f, ok := logmsg.ExtractFromLogfmt(raw)
-	if !ok {
-		return LogfmtRenderer(raw)
+// PrettyLogfmtRenderer renders a parsed logfmt message in humanlog-style
+// layout (time level message key=val …), coloured via the active chroma
+// style. Falls back to LogfmtRenderer when no canonical fields were parsed.
+func PrettyLogfmtRenderer(msg logmsg.LogMessage) string {
+	if msg.Time == "" && msg.Level == "" && msg.Message == "" && msg.Attrs.Len() == 0 {
+		return LogfmtRenderer(msg)
 	}
-	return renderPrettyFields(f)
+	return renderPrettyFields(msg)
 }
 
 func lfRenderValue(ls logfmtStyles, key, val string) string {

@@ -8,31 +8,37 @@ func TestLogfmtParser_ThreePairs(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("len = %d, want 1", len(got))
 	}
-	if got[0].Format != "logfmt" {
-		t.Fatalf("Format = %q, want \"logfmt\"", got[0].Format)
+	m := got[0]
+	if m.Format != "logfmt" {
+		t.Fatalf("Format = %q, want \"logfmt\"", m.Format)
 	}
-	if len(got[0].Attributes) != 3 {
-		t.Fatalf("len(Attributes) = %d, want 3", len(got[0].Attributes))
+	if m.Time != "2026-04-21" {
+		t.Errorf("Time = %q, want \"2026-04-21\"", m.Time)
 	}
-	if got[0].Attr("ts") != "2026-04-21" {
-		t.Errorf("ts = %q, want \"2026-04-21\"", got[0].Attr("ts"))
+	if m.Level != "info" {
+		t.Errorf("Level = %q, want \"info\"", m.Level)
 	}
-	if got[0].Attr("level") != "info" {
-		t.Errorf("level = %q, want \"info\"", got[0].Attr("level"))
+	if m.Message != "hello world" {
+		t.Errorf("Message = %q, want \"hello world\"", m.Message)
 	}
-	if got[0].Attr("msg") != "hello world" {
-		t.Errorf("msg = %q, want \"hello world\"", got[0].Attr("msg"))
+	if m.Attrs.Len() != 0 {
+		t.Errorf("Attrs.Len() = %d, want 0 (all three canonical)", m.Attrs.Len())
 	}
 }
 
-func TestLogfmtParser_MinimalTwoPairs(t *testing.T) {
+func TestLogfmtParser_NonCanonicalGoToAttrs(t *testing.T) {
 	p := LogfmtParser{}
 	got := p.Parse("a=1 b=2 c=3")
-	if got[0].Format != "logfmt" {
-		t.Errorf("Format = %q, want \"logfmt\"", got[0].Format)
+	m := got[0]
+	if m.Format != "logfmt" {
+		t.Errorf("Format = %q, want \"logfmt\"", m.Format)
 	}
-	if got[0].Attr("a") != "1" || got[0].Attr("b") != "2" || got[0].Attr("c") != "3" {
-		t.Errorf("unexpected attributes: %v", got[0].Attributes)
+	if m.Attrs.Get("a") != "1" || m.Attrs.Get("b") != "2" || m.Attrs.Get("c") != "3" {
+		t.Errorf("unexpected attrs: a=%q b=%q c=%q",
+			m.Attrs.Get("a"), m.Attrs.Get("b"), m.Attrs.Get("c"))
+	}
+	if m.Attrs.Len() != 3 {
+		t.Errorf("Attrs.Len() = %d, want 3", m.Attrs.Len())
 	}
 }
 
@@ -47,11 +53,12 @@ func TestLogfmtParser_SinglePairNotDetected(t *testing.T) {
 func TestLogfmtParser_QuotedValueUnescaped(t *testing.T) {
 	p := LogfmtParser{}
 	got := p.Parse(`a=1 key="with \"quotes\" inside"`)
-	if got[0].Format != "logfmt" {
-		t.Fatalf("Format = %q, want \"logfmt\"", got[0].Format)
+	m := got[0]
+	if m.Format != "logfmt" {
+		t.Fatalf("Format = %q, want \"logfmt\"", m.Format)
 	}
-	if got[0].Attr("key") != `with "quotes" inside` {
-		t.Errorf("key = %q, want %q", got[0].Attr("key"), `with "quotes" inside`)
+	if m.Attrs.Get("key") != `with "quotes" inside` {
+		t.Errorf("Attrs[key] = %q, want %q", m.Attrs.Get("key"), `with "quotes" inside`)
 	}
 }
 
@@ -89,11 +96,29 @@ func TestLogfmtParser_EmptyNotDetected(t *testing.T) {
 	}
 }
 
-func TestLogfmtParser_AttrRoundTrip(t *testing.T) {
+func TestLogfmtParser_AttrCanonicalLookup(t *testing.T) {
 	p := LogfmtParser{}
 	got := p.Parse("level=error msg=down")
 	if got[0].Attr("level") != "error" {
 		t.Errorf("Attr(level) = %q, want \"error\"", got[0].Attr("level"))
+	}
+	if got[0].Attr("msg") != "down" {
+		t.Errorf("Attr(msg) = %q, want \"down\"", got[0].Attr("msg"))
+	}
+}
+
+func TestLogfmtParser_FieldAliases(t *testing.T) {
+	p := LogfmtParser{}
+	got := p.Parse(`ts=2026-04-21 severity=warning message="nope"`)
+	m := got[0]
+	if m.Time != "2026-04-21" {
+		t.Errorf("Time = %q", m.Time)
+	}
+	if m.Level != "warning" {
+		t.Errorf("Level = %q, want \"warning\"", m.Level)
+	}
+	if m.Message != "nope" {
+		t.Errorf("Message = %q", m.Message)
 	}
 }
 

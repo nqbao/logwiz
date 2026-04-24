@@ -7,16 +7,16 @@ import (
 	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
-// noopRenderer returns the input unchanged; used to test cache logic without
+// noopRenderer returns Raw unchanged; used to test cache logic without
 // touching chroma.
-func noopRenderer(text string) string { return text }
+func noopRenderer(m logmsg.LogMessage) string { return m.Raw }
 
 // countRenderer wraps a counter so tests can assert cache hit/miss behaviour.
 type countRenderer struct{ calls int }
 
-func (c *countRenderer) render(text string) string {
+func (c *countRenderer) render(m logmsg.LogMessage) string {
 	c.calls++
-	return "rendered:" + text
+	return "rendered:" + m.Raw
 }
 
 func msg(id uint64, raw, format string) logmsg.LogMessage {
@@ -27,7 +27,6 @@ func msg(id uint64, raw, format string) logmsg.LogMessage {
 
 func TestNew_EmptyHandlersAndCache(t *testing.T) {
 	h := New()
-	// Display on a plain message should return Raw.
 	m := msg(0, "hello", "")
 	if got := h.Display(m); got != "hello" {
 		t.Errorf("Display = %q, want %q", got, "hello")
@@ -114,11 +113,10 @@ func TestClear_DropsAllEntries(t *testing.T) {
 // --- JSONRenderer (smoke test) ---
 
 func TestJSONRenderer_ProducesANSI(t *testing.T) {
-	out := JSONRenderer(`{"level":"info","msg":"hello"}`)
+	out := JSONRenderer(msg(0, `{"level":"info","msg":"hello"}`, "json"))
 	if !strings.Contains(out, "\x1b[") {
 		t.Error("JSONRenderer should produce ANSI escape codes for valid JSON")
 	}
-	// The raw key/value text should still appear somewhere in the output.
 	if !strings.Contains(out, "level") {
 		t.Error("JSONRenderer output missing 'level' key")
 	}
@@ -127,13 +125,13 @@ func TestJSONRenderer_ProducesANSI(t *testing.T) {
 func TestJSONRenderer_FallbackOnEmpty(t *testing.T) {
 	// Empty string: chroma may emit an empty render or the original; either
 	// way it must not panic.
-	_ = JSONRenderer("")
+	_ = JSONRenderer(msg(0, "", "json"))
 }
 
 // --- LogfmtRenderer ---
 
 func TestLogfmtRenderer_ProducesANSI(t *testing.T) {
-	out := LogfmtRenderer("level=info msg=hello retries=3")
+	out := LogfmtRenderer(msg(0, "level=info msg=hello retries=3", "logfmt"))
 	if !strings.Contains(out, "\x1b[") {
 		t.Error("LogfmtRenderer should produce ANSI escape codes")
 	}
@@ -143,8 +141,7 @@ func TestLogfmtRenderer_ProducesANSI(t *testing.T) {
 }
 
 func TestLogfmtRenderer_LevelError_IsRed(t *testing.T) {
-	out := LogfmtRenderer("level=error msg=down")
-	// ANSI color 203 bold: contains the bold+color sequence
+	out := LogfmtRenderer(msg(0, "level=error msg=down", "logfmt"))
 	if !strings.Contains(out, "\x1b[") {
 		t.Error("expected ANSI codes in output")
 	}
@@ -154,7 +151,7 @@ func TestLogfmtRenderer_LevelError_IsRed(t *testing.T) {
 }
 
 func TestLogfmtRenderer_NumericValue_IsYellow(t *testing.T) {
-	out := LogfmtRenderer("a=1 retries=3")
+	out := LogfmtRenderer(msg(0, "a=1 retries=3", "logfmt"))
 	if !strings.Contains(out, "\x1b[") {
 		t.Error("expected ANSI codes for numeric value")
 	}
@@ -165,12 +162,12 @@ func TestLogfmtRenderer_NumericValue_IsYellow(t *testing.T) {
 
 func TestLogfmtRenderer_NoSpans_ReturnsUnchanged(t *testing.T) {
 	in := "plain prose with no equals signs"
-	out := LogfmtRenderer(in)
+	out := LogfmtRenderer(msg(0, in, "logfmt"))
 	if out != in {
 		t.Errorf("LogfmtRenderer(%q) = %q, want unchanged", in, out)
 	}
 }
 
 func TestLogfmtRenderer_EmptyInput(t *testing.T) {
-	_ = LogfmtRenderer("") // must not panic
+	_ = LogfmtRenderer(msg(0, "", "logfmt")) // must not panic
 }

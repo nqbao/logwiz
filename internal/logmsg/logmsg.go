@@ -1,10 +1,9 @@
 // Package logmsg defines the structured log line type used throughout
 // logwiz, plus the Parser interface that turns a raw line into a
 // LogMessage.
-//
-// Today only PassthroughParser ships; future parsers (regex, JSON,
-// logfmt) will live in this package and populate Attributes.
 package logmsg
+
+import "strings"
 
 // MsgID is the stable identity of a LogMessage. It survives ring-buffer
 // eviction (the message is gone but its ID is never reused) which makes
@@ -18,27 +17,54 @@ type MsgID struct {
 }
 
 // LogMessage is a single log line, optionally enriched with parsed
-// attributes (timestamp, level, source, etc.).
+// canonical fields and attributes.
 //
 // ID is assigned by the buffer on Append; parsers leave it zero.
 // Raw is the original line text after carriage-return sanitization
-// (see source.lastCRSegment). Attributes is nil for unparsed messages
-// — callers should use Attr to read individual keys safely.
-// Format is a hint to the syntax highlighter ("json", "" = passthrough).
+// (see source.lastCRSegment). Format is a hint to the syntax highlighter
+// ("json", "logfmt", "" = passthrough).
+//
+// Time, Level, and Message hold the canonical fields extracted at parse
+// time (empty string = absent). Values are stored raw; renderers are
+// responsible for normalization (e.g. NormalizeLevel). Attrs holds the
+// remaining non-canonical key=value pairs.
 type LogMessage struct {
-	ID         MsgID
-	Raw        string
-	Format     string // "json", "" = passthrough
-	Attributes map[string]string
+	ID     MsgID
+	Raw    string
+	Format string
+
+	Time    string
+	Level   string
+	Message string
+
+	Attrs Attrs
 }
 
-// Attr returns the attribute for key, or "" if the map is nil or the
-// key is absent.
+// Canonical field aliases. First match wins at parse time,
+// case-insensitive. Exported so renderers can skip these keys when
+// iterating Attrs.
+var (
+	TimeKeys    = []string{"time", "ts", "@timestamp", "timestamp"}
+	LevelKeys   = []string{"level", "lvl", "severity"}
+	MessageKeys = []string{"msg", "message"}
+)
+
+// Attr returns the value for key. Canonical aliases (time/ts/@timestamp,
+// level/lvl/severity, msg/message) resolve to the corresponding Time,
+// Level, or Message field; all other keys are looked up in Attrs.
+// Returns "" if the key is absent.
 func (m LogMessage) Attr(key string) string {
-	if m.Attributes == nil {
-		return ""
+	k := strings.ToLower(key)
+	if containsStr(TimeKeys, k) {
+		return m.Time
 	}
-	return m.Attributes[key]
+	if containsStr(LevelKeys, k) {
+		return m.Level
+	}
+	if containsStr(MessageKeys, k) {
+		return m.Message
+	}
+	return m.Attrs.Get(key)
 }
 
 // Parser converts a raw log line into zero or more LogMessages.
@@ -54,7 +80,7 @@ type Parser interface {
 type PassthroughParser struct{}
 
 // Parse returns a single-element slice containing a LogMessage whose Raw
-// is the input line and whose Attributes is nil.
+// is the input line and whose Attrs is empty.
 func (PassthroughParser) Parse(raw string) []LogMessage {
 	return []LogMessage{{Raw: raw}}
 }

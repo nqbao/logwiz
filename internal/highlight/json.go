@@ -9,32 +9,32 @@ import (
 	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
-// JSONRenderer colourises a JSON string using the active chroma style (see
-// SetActiveStyle) and truecolour ANSI escape sequences. Falls back to the raw
-// text on any error.
-func JSONRenderer(text string) string {
+// JSONRenderer colourises a JSON line using the active chroma style (see
+// SetActiveStyle) and truecolour ANSI escape sequences. Falls back to the
+// raw text on any error.
+func JSONRenderer(msg logmsg.LogMessage) string {
 	lexer := lexers.Get("json")
 	if lexer == nil {
-		return text
+		return msg.Raw
 	}
-	iter, err := lexer.Tokenise(nil, text)
+	iter, err := lexer.Tokenise(nil, msg.Raw)
 	if err != nil {
-		return text
+		return msg.Raw
 	}
 	var sb strings.Builder
 	if err := formatters.TTY16m.Format(&sb, GetActiveStyle(), iter); err != nil {
-		return text
+		return msg.Raw
 	}
 	return sb.String()
 }
 
-// PrettyJSONRenderer parses raw as a JSON object and renders it in
-// humanlog-style layout (time level message key=val …), coloured via the
-// active chroma style. Falls back to JSONRenderer on parse errors.
-func PrettyJSONRenderer(raw string) string {
-	f, ok := logmsg.ExtractFromJSON(raw)
-	if !ok {
-		return JSONRenderer(raw)
+// PrettyJSONRenderer renders a parsed JSON log message in humanlog-style
+// layout (time level message key=val …), coloured via the active chroma
+// style. Falls back to JSONRenderer when the message has no parsed
+// canonical fields (malformed JSON, top-level array).
+func PrettyJSONRenderer(msg logmsg.LogMessage) string {
+	if msg.Time == "" && msg.Level == "" && msg.Message == "" && msg.Attrs.Len() == 0 {
+		return JSONRenderer(msg)
 	}
-	return renderPrettyFields(f)
+	return renderPrettyFields(msg)
 }
