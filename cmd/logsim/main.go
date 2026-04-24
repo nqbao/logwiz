@@ -13,6 +13,11 @@ import (
 
 var varRe = regexp.MustCompile(`\{[a-zA-Z][^}]*\}`)
 
+func randomUUID(rng *rand.Rand) string {
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		rng.Uint32(), rng.Uint32()&0xffff, (rng.Uint32()&0x0fff)|0x4000, (rng.Uint32()&0x3fff)|0x8000, rng.Uint64()&0xffffffffffff)
+}
+
 func main() {
 	scenarioName := flag.String("scenario", "webapp", "scenario name (app or app-scenario, e.g. webapp, webapp-incident, nginx)")
 	rate := flag.Float64("rate", 10, "lines per second for static scenarios (0 = burst)")
@@ -31,7 +36,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		flag.PrintDefaults()
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Template variables: {ts} {seq} {ip} {rand:N-M} {choice:a,b,c} {cr}")
+		fmt.Fprintln(os.Stderr, "Template variables: {ts} {seq} {ip} {uuid} {rand:N-M} {choice:a,b,c} {cr}")
 	}
 	flag.Parse()
 
@@ -183,6 +188,8 @@ func expand(rng *rand.Rand, tmpl string, seq int) string {
 		case inner == "ip":
 			return fmt.Sprintf("%d.%d.%d.%d",
 				rng.Intn(256), rng.Intn(256), rng.Intn(256), rng.Intn(256))
+		case inner == "uuid":
+			return randomUUID(rng)
 		case inner == "cr":
 			return "\r"
 		case inner == "nl":

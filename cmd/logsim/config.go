@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-//go:embed builtins.json
+//go:embed scenarios/builtins.json
 var builtinsData []byte
 
 type rawConfig struct {
