@@ -1,11 +1,16 @@
 package highlight
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/nqbao/logwiz/internal/logmsg"
 )
+
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+
+func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
 // jsonMsg builds a LogMessage by running raw through JSONParser.
 func jsonMsg(raw string) logmsg.LogMessage {
@@ -61,6 +66,21 @@ func TestPrettyJSONRenderer_NestedField(t *testing.T) {
 	}
 	if !strings.Contains(out, "region") {
 		t.Error("PrettyJSONRenderer output should contain nested content")
+	}
+	if strings.Contains(out, `\"region\"`) {
+		t.Error("PrettyJSONRenderer should not double-escape nested JSON")
+	}
+	strip := stripANSI(out)
+	if strings.Contains(strip, `"{`) || strings.Contains(strip, `}"`) {
+		t.Errorf("PrettyJSONRenderer should not quote-wrap nested JSON, got: %s", strip)
+	}
+}
+
+func TestPrettyJSONRenderer_NestedArray(t *testing.T) {
+	raw := `{"msg":"ok","tags":["a","b"]}`
+	out := PrettyJSONRenderer(jsonMsg(raw))
+	if strings.Contains(out, `\"a\"`) {
+		t.Error("PrettyJSONRenderer should not double-escape nested JSON array")
 	}
 }
 

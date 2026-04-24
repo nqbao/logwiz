@@ -32,11 +32,21 @@ func renderPrettyFields(m logmsg.LogMessage) string {
 		parts = append(parts, m.Message)
 	}
 	m.Attrs.Range(func(k, v string) bool {
-		parts = append(parts, ls.key.Render(k)+ls.eq.Render("=")+ls.str.Render(logmsg.QuoteIfNeeded(v)))
+		parts = append(parts, ls.key.Render(k)+ls.eq.Render("=")+ls.str.Render(renderAttrValue(v)))
 		return true
 	})
 
 	return strings.Join(parts, " ")
+}
+
+// renderAttrValue returns the display form of an attribute value. JSON
+// objects/arrays are self-delimiting and rendered as-is; everything else
+// goes through QuoteIfNeeded.
+func renderAttrValue(v string) string {
+	if len(v) >= 2 && ((v[0] == '{' && v[len(v)-1] == '}') || (v[0] == '[' && v[len(v)-1] == ']')) {
+		return v
+	}
+	return logmsg.QuoteIfNeeded(v)
 }
 
 // prettyLevelStyle selects the logfmt level colour matching the 5-char level token.
