@@ -158,12 +158,14 @@ func TestEmptyBuffer(t *testing.T) {
 	}
 }
 
-func TestAttributesRoundTrip(t *testing.T) {
+func TestExtraRoundTrip(t *testing.T) {
 	b := New(3)
 	msg := logmsg.LogMessage{
-		Raw:        "raw line",
-		Attributes: map[string]string{"level": "INFO", "ts": "2026-04-16"},
+		Raw:   "raw line",
+		Time:  "2026-04-16",
+		Level: "INFO",
 	}
+	msg.Extra.Set("user", "bob")
 	b.Append(msg)
 
 	got := b.Line(0)
@@ -175,6 +177,9 @@ func TestAttributesRoundTrip(t *testing.T) {
 	}
 	if got.Attr("ts") != "2026-04-16" {
 		t.Errorf("Attr(ts) = %q, want 2026-04-16", got.Attr("ts"))
+	}
+	if got.Attr("user") != "bob" {
+		t.Errorf("Attr(user) = %q, want bob", got.Attr("user"))
 	}
 }
 

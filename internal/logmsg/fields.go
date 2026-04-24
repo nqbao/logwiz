@@ -7,28 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/go-logfmt/logfmt"
 )
-
-// canonical field alias lists; first match wins, case-insensitive.
-var (
-	tsKeys    = []string{"time", "ts", "@timestamp", "timestamp"}
-	levelKeys = []string{"level", "lvl", "severity"}
-	msgKeys   = []string{"msg", "message"}
-)
-
-// KV is a single ordered key-value pair from a structured log line.
-type KV struct{ Key, Value string }
-
-// Fields holds the canonical columns extracted from a structured log line.
-// Empty strings indicate absent fields; Rest preserves input key order.
-type Fields struct {
-	Time    string // raw timestamp value from the log line, or "" if absent
-	Level   string // 5-char padded uppercase ("INFO ", "WARN ", "ERROR", "DEBUG", "TRACE", "FATAL")
-	Message string
-	Rest    []KV
-}
 
 // NormalizeTime parses RFC3339, epoch-sec, or epoch-ms timestamps and returns
 // YYYY-MM-DD HH:MM:SS.mmm (UTC). Returns s unchanged when no format matches.
@@ -54,9 +33,10 @@ func NormalizeTime(s string) string {
 	return s
 }
 
-// normalizeLevel maps any level string to a 5-char uppercase form.
-// Aliases: warning→WARN, err→ERROR, panic→FATAL.
-func normalizeLevel(s string) string {
+// NormalizeLevel maps any level string to a 5-char uppercase form.
+// Aliases: warning→WARN, err→ERROR, panic→FATAL. Unknown values are
+// uppercased and padded/truncated to 5 chars.
+func NormalizeLevel(s string) string {
 	switch strings.ToUpper(s) {
 	case "TRACE":
 		return "TRACE"
@@ -79,92 +59,7 @@ func normalizeLevel(s string) string {
 	}
 }
 
-// ExtractFromJSON parses raw as a JSON object and extracts canonical fields
-// in key-declaration order via token streaming. Returns (Fields{}, false)
-// when raw is not a valid JSON object.
-func ExtractFromJSON(raw string) (Fields, bool) {
-	dec := json.NewDecoder(strings.NewReader(raw))
-	tok, err := dec.Token()
-	if err != nil {
-		return Fields{}, false
-	}
-	if tok != json.Delim('{') {
-		return Fields{}, false
-	}
-
-	var f Fields
-	seenTS, seenLevel, seenMsg := false, false, false
-
-	for dec.More() {
-		keyTok, err := dec.Token()
-		if err != nil {
-			return Fields{}, false
-		}
-		key, ok := keyTok.(string)
-		if !ok {
-			return Fields{}, false
-		}
-		var val any
-		if err := dec.Decode(&val); err != nil {
-			return Fields{}, false
-		}
-		keyLower := strings.ToLower(key)
-		switch {
-		case !seenTS && containsStr(tsKeys, keyLower):
-			f.Time = jsonValToStr(val)
-			seenTS = true
-		case !seenLevel && containsStr(levelKeys, keyLower):
-			f.Level = normalizeLevel(jsonValToStr(val))
-			seenLevel = true
-		case !seenMsg && containsStr(msgKeys, keyLower):
-			f.Message = jsonValToStr(val)
-			seenMsg = true
-		default:
-			f.Rest = append(f.Rest, KV{Key: key, Value: formatJSONVal(val)})
-		}
-	}
-	return f, true
-}
-
-// ExtractFromLogfmt parses raw as a logfmt line and extracts canonical fields
-// in key-declaration order. Returns (Fields{}, false) for lines with fewer
-// than two key=value pairs or parse errors.
-func ExtractFromLogfmt(raw string) (Fields, bool) {
-	if strings.Count(raw, "=") < 2 {
-		return Fields{}, false
-	}
-	dec := logfmt.NewDecoder(strings.NewReader(raw))
-	if !dec.ScanRecord() {
-		return Fields{}, false
-	}
-
-	var f Fields
-	seenTS, seenLevel, seenMsg := false, false, false
-
-	for dec.ScanKeyval() {
-		key := string(dec.Key())
-		val := string(dec.Value())
-		keyLower := strings.ToLower(key)
-		switch {
-		case !seenTS && containsStr(tsKeys, keyLower):
-			f.Time = val
-			seenTS = true
-		case !seenLevel && containsStr(levelKeys, keyLower):
-			f.Level = normalizeLevel(val)
-			seenLevel = true
-		case !seenMsg && containsStr(msgKeys, keyLower):
-			f.Message = val
-			seenMsg = true
-		default:
-			f.Rest = append(f.Rest, KV{Key: key, Value: quoteIfNeeded(val)})
-		}
-	}
-	if dec.Err() != nil {
-		return Fields{}, false
-	}
-	return f, true
-}
-
+// containsStr reports whether list contains s.
 func containsStr(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
@@ -198,23 +93,9 @@ func jsonValToStr(v any) string {
 	}
 }
 
-// formatJSONVal formats a JSON value for display in a k=v pair. Strings are
-// quoted if they contain special chars; non-scalars are rendered as inline JSON.
-func formatJSONVal(v any) string {
-	switch v.(type) {
-	case string:
-		return quoteIfNeeded(v.(string))
-	case float64, bool, nil:
-		return jsonValToStr(v)
-	default:
-		b, _ := json.Marshal(v)
-		return string(b)
-	}
-}
-
-// quoteIfNeeded wraps s in double quotes when it is empty or contains
-// characters that would be ambiguous in a k=v context.
-func quoteIfNeeded(s string) string {
+// QuoteIfNeeded wraps s in double quotes when it is empty or contains
+// characters that would be ambiguous in a k=v rendering context.
+func QuoteIfNeeded(s string) string {
 	if s == "" || strings.ContainsAny(s, " =\"'\t\n\r") {
 		return strconv.Quote(s)
 	}

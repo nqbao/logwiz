@@ -17,7 +17,7 @@ func TestAutoParser_DetectsLogfmt(t *testing.T) {
 		t.Errorf("Format = %q, want \"logfmt\"", got[0].Format)
 	}
 	if got[0].Attr("a") != "1" || got[0].Attr("b") != "2" {
-		t.Errorf("unexpected attributes: %v", got[0].Attributes)
+		t.Errorf("unexpected attrs: a=%q b=%q", got[0].Attr("a"), got[0].Attr("b"))
 	}
 }
 

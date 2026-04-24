@@ -64,176 +64,32 @@ func TestNormalizeLevel_Aliases(t *testing.T) {
 		{"trace", "TRACE"},
 	}
 	for _, tc := range cases {
-		if got := normalizeLevel(tc.in); got != tc.want {
-			t.Errorf("normalizeLevel(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := NormalizeLevel(tc.in); got != tc.want {
+			t.Errorf("NormalizeLevel(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }
 
 func TestNormalizeLevel_Padding(t *testing.T) {
-	// Short unknown level should be padded to 5 chars.
-	got := normalizeLevel("ok")
+	got := NormalizeLevel("ok")
 	if len(got) != 5 {
-		t.Errorf("normalizeLevel(\"ok\") len = %d, want 5; got %q", len(got), got)
+		t.Errorf("NormalizeLevel(\"ok\") len = %d, want 5; got %q", len(got), got)
 	}
 }
 
-func TestExtractFromJSON_Full(t *testing.T) {
-	raw := `{"ts":"2026-04-21T14:02:31Z","level":"info","msg":"req done","user":"bob","latency_ms":12}`
-	f, ok := ExtractFromJSON(raw)
-	if !ok {
-		t.Fatal("ExtractFromJSON returned false for valid JSON")
-	}
-	if f.Time == "" {
-		t.Error("Time should be set")
-	}
-	if f.Level != "INFO " {
-		t.Errorf("Level = %q, want \"INFO \"", f.Level)
-	}
-	if f.Message != "req done" {
-		t.Errorf("Message = %q, want \"req done\"", f.Message)
-	}
-	if len(f.Rest) != 2 {
-		t.Fatalf("len(Rest) = %d, want 2", len(f.Rest))
-	}
-	if f.Rest[0].Key != "user" || f.Rest[0].Value != "bob" {
-		t.Errorf("Rest[0] = %+v, want {user bob}", f.Rest[0])
-	}
-	if f.Rest[1].Key != "latency_ms" || f.Rest[1].Value != "12" {
-		t.Errorf("Rest[1] = %+v, want {latency_ms 12}", f.Rest[1])
-	}
-}
-
-func TestExtractFromJSON_MissingTimestamp(t *testing.T) {
-	raw := `{"level":"warn","msg":"degraded"}`
-	f, ok := ExtractFromJSON(raw)
-	if !ok {
-		t.Fatal("ExtractFromJSON returned false")
-	}
-	if f.Time != "" {
-		t.Errorf("Time = %q, want empty (no ts field)", f.Time)
-	}
-	if f.Level != "WARN " {
-		t.Errorf("Level = %q, want \"WARN \"", f.Level)
-	}
-}
-
-func TestExtractFromJSON_MissingLevel(t *testing.T) {
-	raw := `{"ts":"2026-04-21T14:02:31Z","msg":"hello"}`
-	f, ok := ExtractFromJSON(raw)
-	if !ok {
-		t.Fatal("ExtractFromJSON returned false")
-	}
-	if f.Level != "" {
-		t.Errorf("Level = %q, want empty (no level field)", f.Level)
-	}
-	if f.Message != "hello" {
-		t.Errorf("Message = %q, want \"hello\"", f.Message)
-	}
-}
-
-func TestExtractFromJSON_NestedObject(t *testing.T) {
-	raw := `{"msg":"ok","meta":{"region":"us-east"}}`
-	f, ok := ExtractFromJSON(raw)
-	if !ok {
-		t.Fatal("ExtractFromJSON returned false")
-	}
-	if len(f.Rest) != 1 {
-		t.Fatalf("len(Rest) = %d, want 1", len(f.Rest))
-	}
-	if f.Rest[0].Key != "meta" {
-		t.Errorf("Rest[0].Key = %q, want \"meta\"", f.Rest[0].Key)
-	}
-	// Value should be the inline JSON of the nested object.
-	if f.Rest[0].Value == "" {
-		t.Error("nested value should not be empty")
-	}
-}
-
-func TestExtractFromJSON_NotJSON(t *testing.T) {
-	_, ok := ExtractFromJSON("not json at all")
-	if ok {
-		t.Error("ExtractFromJSON should return false for non-JSON input")
-	}
-}
-
-func TestExtractFromJSON_JSONArray(t *testing.T) {
-	_, ok := ExtractFromJSON(`["a","b"]`)
-	if ok {
-		t.Error("ExtractFromJSON should return false for JSON arrays")
-	}
-}
-
-func TestExtractFromJSON_LevelAliasAtTimestamp(t *testing.T) {
-	// @timestamp alias
-	raw := `{"@timestamp":"2026-04-21T14:02:31Z","severity":"warning","message":"down"}`
-	f, ok := ExtractFromJSON(raw)
-	if !ok {
-		t.Fatal("ExtractFromJSON returned false")
-	}
-	if f.Time == "" {
-		t.Error("@timestamp should be recognised as time alias")
-	}
-	if f.Level != "WARN " {
-		t.Errorf("Level = %q, want \"WARN \" for severity=warning", f.Level)
-	}
-	if f.Message != "down" {
-		t.Errorf("Message = %q, want \"down\" for message alias", f.Message)
-	}
-}
-
-func TestExtractFromLogfmt_Full(t *testing.T) {
-	raw := `ts=2026-04-21T14:02:31Z level=info msg="req done" user=bob latency_ms=12`
-	f, ok := ExtractFromLogfmt(raw)
-	if !ok {
-		t.Fatal("ExtractFromLogfmt returned false")
-	}
-	if f.Time == "" {
-		t.Error("Time should be set")
-	}
-	if f.Level != "INFO " {
-		t.Errorf("Level = %q, want \"INFO \"", f.Level)
-	}
-	if f.Message != "req done" {
-		t.Errorf("Message = %q, want \"req done\"", f.Message)
-	}
-	if len(f.Rest) != 2 {
-		t.Fatalf("len(Rest) = %d, want 2", len(f.Rest))
-	}
-	if f.Rest[0].Key != "user" {
-		t.Errorf("Rest[0].Key = %q, want \"user\"", f.Rest[0].Key)
-	}
-}
-
-func TestExtractFromLogfmt_LevelAliases(t *testing.T) {
-	cases := []struct{ raw, wantLevel string }{
-		{`level=warning msg=x ts=1`, "WARN "},
-		{`level=err msg=x ts=1`, "ERROR"},
-		{`lvl=panic msg=x ts=1`, "FATAL"},
-		{`severity=debug msg=x ts=1`, "DEBUG"},
+func TestQuoteIfNeeded(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", `""`},
+		{"simple", "simple"},
+		{"123", "123"},
+		{"has space", `"has space"`},
+		{"has=equals", `"has=equals"`},
+		{"has\"quote", `"has\"quote"`},
+		{"has'apostrophe", `"has'apostrophe"`},
 	}
 	for _, tc := range cases {
-		f, ok := ExtractFromLogfmt(tc.raw)
-		if !ok {
-			t.Errorf("ExtractFromLogfmt(%q) returned false", tc.raw)
-			continue
+		if got := QuoteIfNeeded(tc.in); got != tc.want {
+			t.Errorf("QuoteIfNeeded(%q) = %q, want %q", tc.in, got, tc.want)
 		}
-		if f.Level != tc.wantLevel {
-			t.Errorf("ExtractFromLogfmt(%q).Level = %q, want %q", tc.raw, f.Level, tc.wantLevel)
-		}
-	}
-}
-
-func TestExtractFromLogfmt_TooFewPairs(t *testing.T) {
-	_, ok := ExtractFromLogfmt("level=error")
-	if ok {
-		t.Error("ExtractFromLogfmt should return false for fewer than two pairs")
-	}
-}
-
-func TestExtractFromLogfmt_PlainText(t *testing.T) {
-	_, ok := ExtractFromLogfmt("2026-04-21 INFO server started")
-	if ok {
-		t.Error("ExtractFromLogfmt should return false for plain text")
 	}
 }

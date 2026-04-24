@@ -4,8 +4,10 @@ package highlight
 
 import "github.com/nqbao/logwiz/internal/logmsg"
 
-// SpanRenderer colourises a raw log line and returns the ANSI-escaped string.
-type SpanRenderer func(text string) string
+// SpanRenderer colourises a parsed log message and returns the ANSI-escaped
+// string. Renderers may read msg.Raw for token-level passes (chroma, logfmt)
+// or the canonical fields (Time/Level/Message/Extra) for pretty layouts.
+type SpanRenderer func(msg logmsg.LogMessage) string
 
 // Highlighter dispatches to the registered SpanRenderer for a message's
 // Format and caches results by MsgID. The cache must be pruned via Evict
@@ -45,9 +47,11 @@ func (h *Highlighter) Display(msg logmsg.LogMessage) string {
 	if msg.Format != "" {
 		if fn, ok := h.handlers[msg.Format]; ok {
 			if len(msg.Raw) > maxHighlightLen {
-				result = fn(msg.Raw[:maxHighlightLen]) + msg.Raw[maxHighlightLen:]
+				truncated := msg
+				truncated.Raw = msg.Raw[:maxHighlightLen]
+				result = fn(truncated) + msg.Raw[maxHighlightLen:]
 			} else {
-				result = fn(msg.Raw)
+				result = fn(msg)
 			}
 		} else {
 			result = msg.Raw

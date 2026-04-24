@@ -192,10 +192,9 @@ func TestPumpBatchesLines(t *testing.T) {
 type stubParser struct{}
 
 func (stubParser) Parse(raw string) []logmsg.LogMessage {
-	return []logmsg.LogMessage{{
-		Raw:        raw,
-		Attributes: map[string]string{"tag": "stubbed"},
-	}}
+	m := logmsg.LogMessage{Raw: raw}
+	m.Extra.Set("tag", "stubbed")
+	return []logmsg.LogMessage{m}
 }
 
 func (stubParser) Flush() []logmsg.LogMessage { return nil }
@@ -365,7 +364,9 @@ func TestPumpFlushesParserOnEOF(t *testing.T) {
 	}, flush: func() []logmsg.LogMessage {
 		var out []logmsg.LogMessage
 		for _, s := range buf {
-			out = append(out, logmsg.LogMessage{Raw: s, Attributes: map[string]string{"tag": "flushed"}})
+			m := logmsg.LogMessage{Raw: s}
+			m.Extra.Set("tag", "flushed")
+			out = append(out, m)
 		}
 		buf = buf[:0]
 		return out
