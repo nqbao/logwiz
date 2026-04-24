@@ -1,4 +1,5 @@
 {
+  "_comment": "Derived from https://github.com/nailo2c/deeplog/blob/master/example/data/OpenStack/openstack_abnormal.log",
   "common": {
     "templates": []
   },
