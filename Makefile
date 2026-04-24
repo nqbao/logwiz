@@ -6,7 +6,6 @@ SIM_CMD := ./cmd/logsim
 .PHONY: build build-sim test clean
 
 build:
-	go test ./cmd/logsim/...
 	go build -o $(BIN) $(CMD)
 
 build-sim:
