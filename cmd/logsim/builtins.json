@@ -1,176 +1,464 @@
 {
-  "templates": [
-    {"name": "web-get-ok",      "template": "{ip} - - [{ts}] \"GET /api/v1/{choice:users,orders,items,events} HTTP/1.1\" 200 {rand:100-8000}"},
-    {"name": "web-get-cached",  "template": "{ip} - - [{ts}] \"GET /static/{choice:app.js,app.css,logo.png,font.woff2} HTTP/1.1\" 304 0"},
-    {"name": "web-get-static",  "template": "{ip} - - [{ts}] \"GET /static/{choice:app.js,app.css,logo.png} HTTP/1.1\" 200 {rand:5000-80000}"},
-    {"name": "web-post-ok",     "template": "{ip} - - [{ts}] \"POST /api/v1/{choice:users,orders,sessions} HTTP/1.1\" {choice:200,201} {rand:200-1000}"},
-    {"name": "web-post-unauth", "template": "{ip} - - [{ts}] \"POST /api/v1/sessions HTTP/1.1\" 401 45"},
-    {"name": "web-post-bad",    "template": "{ip} - - [{ts}] \"POST /api/v1/{choice:users,orders} HTTP/1.1\" 400 {rand:50-300}"},
-    {"name": "web-notfound",    "template": "{ip} - - [{ts}] \"GET /{choice:admin,wp-login,phpmyadmin,.env} HTTP/1.1\" 404 12"},
-    {"name": "web-error",       "template": "{ip} - - [{ts}] \"GET /api/v1/{choice:users,orders} HTTP/1.1\" 500 {rand:100-500}"},
-    {"name": "web-healthz",     "template": "127.0.0.1 - - [{ts}] \"GET /healthz HTTP/1.1\" 200 4"},
+  "common": {
+    "templates": [
+      {"name": "spin-build",      "template": "building... {rand:1-33}%{cr}building... {rand:34-66}%{cr}building... {rand:67-99}%{cr}building... done"},
+      {"name": "spin-download",   "template": "downloading ({rand:1-50}/{rand:51-100}){cr}downloading ({rand:51-99}/{rand:51-100}){cr}download complete"},
+      {"name": "spin-compile",    "template": "compiling {rand:100-300} files...{cr}compiled in {rand:1-9}.{rand:0-9}s"},
 
-    {"name": "log-info-complete",  "template": "{ts} INFO  processed batch of {rand:10-200} items in {rand:10-500}ms"},
-    {"name": "log-info-retry",     "template": "{ts} INFO  retrying in {rand:1-30}s (attempt {rand:1-5}/5)"},
-    {"name": "log-info-connected", "template": "{ts} INFO  connected to {choice:db,cache,queue} at localhost:{rand:5432-6380}"},
-    {"name": "log-debug-cache",    "template": "{ts} DEBUG cache {choice:hit,hit,hit,miss} key={rand:1-9999}"},
-    {"name": "log-debug-query",    "template": "{ts} DEBUG query took {rand:1-80}ms rows={rand:0-5000}"},
-    {"name": "log-warn-queue",     "template": "{ts} WARN  queue depth {rand:80-200} exceeds threshold"},
-    {"name": "log-warn-memory",    "template": "{ts} WARN  high memory usage: {rand:75-95}%"},
-    {"name": "log-error-conn",     "template": "{ts} ERROR {choice:connection refused,timeout,unexpected EOF,context deadline exceeded}: worker {rand:1-8}"},
-    {"name": "log-error-upstream", "template": "{ts} ERROR failed to reach upstream after {rand:2-5} retries"},
-
-    {"name": "json-request",   "template": "{\"time\":\"{ts}\",\"level\":\"info\",\"msg\":\"request\",\"ms\":{rand:1-500},\"status\":{choice:200,200,200,201,204},\"path\":\"/api/v1/{choice:users,orders,items}\"}"},
-    {"name": "json-cache",     "template": "{\"time\":\"{ts}\",\"level\":\"debug\",\"msg\":\"cache {choice:hit,hit,miss}\",\"key\":\"{rand:1-9999}\",\"ttl\":{rand:60-3600}}"},
-    {"name": "json-slowquery", "template": "{\"time\":\"{ts}\",\"level\":\"warn\",\"msg\":\"slow query\",\"ms\":{rand:200-2000},\"table\":\"{choice:users,orders,events}\"}"},
-    {"name": "json-error",     "template": "{\"time\":\"{ts}\",\"level\":\"error\",\"msg\":\"handler failed\",\"error\":\"{choice:timeout,nil pointer dereference,EOF}\",\"path\":\"/api/v1/items/{rand:1-999}\"}"},
-    {"name": "json-worker",    "template": "{\"time\":\"{ts}\",\"level\":\"info\",\"msg\":\"worker heartbeat\",\"id\":{rand:1-8},\"queue\":{rand:0-200}}"},
-
-    {"name": "spin-build",    "template": "building... {rand:1-33}%{cr}building... {rand:34-66}%{cr}building... {rand:67-99}%{cr}building... done"},
-    {"name": "spin-download", "template": "downloading ({rand:1-50}/{rand:51-100}){cr}downloading ({rand:51-99}/{rand:51-100}){cr}download complete"},
-    {"name": "spin-compile",  "template": "compiling {rand:100-300} files...{cr}compiled in {rand:1-9}.{rand:0-9}s"},
-
-    {"name": "crash-startup",   "template": "{ts} INFO  application started, serving on :8080"},
-    {"name": "crash-request",   "template": "{ts} DEBUG received {choice:GET,POST,PUT} /{choice:users,orders,items}"},
-    {"name": "crash-panic",     "template": "panic: runtime error: {choice:index out of range,nil pointer dereference,interface conversion failed}"},
-    {"name": "crash-goroutine", "template": "goroutine {rand:1-20} [running]:"},
-    {"name": "crash-frame-fn",  "template": "main.{choice:handler,processItems,run,serve}(...)"},
-    {"name": "crash-frame-loc", "template": "\t/app/{choice:main,handler,server}.go:{rand:20-120} +0x{rand:100-999}"},
-    {"name": "crash-stdlib",    "template": "net/http.(*ServeMux).ServeHTTP(...)"},
-    {"name": "crash-exit",      "template": "exit status 2"},
-
-    {"name": "pyecom-cart-add",        "template": "{ts} DEBUG cart.item_added     user_id={rand:1-5000} sku={choice:SKU-001,SKU-042,SKU-107,SKU-203,SKU-388} qty={rand:1-5} price={rand:5-299}.{rand:10-99}"},
-    {"name": "pyecom-inventory-check", "template": "{ts} DEBUG inventory.check     sku={choice:SKU-001,SKU-042,SKU-107,SKU-203,SKU-388} stock={rand:0-500}"},
-    {"name": "pyecom-order-created",   "template": "{ts} INFO  order.created       order_id={rand:10000-99999} user_id={rand:1-5000} items={rand:1-8} total={rand:10-499}.{rand:10-99}"},
-    {"name": "pyecom-payment-ok",      "template": "{ts} INFO  payment.charged     order_id={rand:10000-99999} provider={choice:stripe,paypal,braintree} amount={rand:10-499}.{rand:10-99} duration_ms={rand:80-600}"},
-    {"name": "pyecom-order-fulfilled", "template": "{ts} INFO  order.fulfilled     order_id={rand:10000-99999} warehouse={choice:US-EAST,US-WEST,EU-CENTRAL} items={rand:1-8}"},
-    {"name": "pyecom-order-shipped",   "template": "{ts} INFO  shipment.dispatched order_id={rand:10000-99999} carrier={choice:fedex,ups,usps,dhl} tracking={rand:100000000-999999999}"},
-    {"name": "pyecom-payment-failed",  "template": "{ts} WARNING payment.failed    order_id={rand:10000-99999} provider={choice:stripe,paypal} reason={choice:insufficient_funds,card_declined,fraud_detected}"},
-    {"name": "pyecom-stock-low",       "template": "{ts} WARNING inventory.low     sku={choice:SKU-001,SKU-042,SKU-107} stock={rand:1-10} threshold=20"},
-    {"name": "pyecom-exception", "template": "Traceback (most recent call last):{nl}  File \"/app/{choice:orders/views,payments/processor,cart/models,inventory/tasks}.py\", line {rand:20-200}, in {choice:process_order,handle_payment,checkout,reserve_stock}{nl}    {choice:result = gateway.charge(order),order.save(),cart.checkout(),inventory.reserve(sku)}{nl}{choice:stripe.error.CardError,django.db.OperationalError,requests.exceptions.Timeout,KeyError,ValueError}: {choice:Your card was declined.,no such table: orders_orderitem,Read timed out. (connect timeout=5),'product_id',invalid literal for int() with base 10}"},
-
-    {"name": "goweb-req-ok",      "template": "ts=\"{ts}\" level=info msg=request method={choice:GET,GET,GET,POST,PUT} path=/api/v1/{choice:users,orders,items,events} status=200 duration={rand:1-150}ms bytes={rand:100-8000}"},
-    {"name": "goweb-req-slow",    "template": "ts=\"{ts}\" level=warn msg=slow_request method=GET path=/api/v1/{choice:users,orders,items} status=200 duration={rand:500-3000}ms bytes={rand:100-8000}"},
-    {"name": "goweb-req-error",   "template": "ts=\"{ts}\" level=error msg=handler_failed method={choice:GET,POST} path=/api/v1/{choice:users,orders,items} status=500 error={choice:timeout,db_unavailable,nil_pointer}"},
-    {"name": "goweb-req-unauth",  "template": "ts=\"{ts}\" level=warn msg=unauthorized method=POST path=/api/v1/{choice:admin,tokens,users} status=401 ip={ip}"},
-    {"name": "goweb-db-query",    "template": "ts=\"{ts}\" level=debug msg=db_query table={choice:users,orders,items,events} duration={rand:1-80}ms rows={rand:0-500}"},
-    {"name": "goweb-db-slow",     "template": "ts=\"{ts}\" level=warn msg=slow_query table={choice:users,orders,items} duration={rand:200-2000}ms threshold=100ms rows={rand:0-500}"},
-    {"name": "goweb-db-error",    "template": "ts=\"{ts}\" level=error msg=db_error table={choice:users,orders} error={choice:deadlock,conn_reset,too_many_connections} retries={rand:1-5}"},
-    {"name": "goweb-cache-hit",   "template": "ts=\"{ts}\" level=debug msg=cache_hit key={choice:user,session,order}:{rand:1-9999} ttl={rand:60-3600}"},
-    {"name": "goweb-cache-miss",  "template": "ts=\"{ts}\" level=debug msg=cache_miss key={choice:user,session,order}:{rand:1-9999}"},
-    {"name": "goweb-worker-ok",   "template": "ts=\"{ts}\" level=info msg=job_complete worker={rand:1-8} job={choice:email,notify,export,import} duration={rand:50-5000}ms"},
-    {"name": "goweb-worker-fail", "template": "ts=\"{ts}\" level=error msg=job_failed worker={rand:1-8} job={choice:email,notify,export} error={choice:timeout,panic_recovered,queue_full} retries={rand:1-5}"},
-    {"name": "goweb-gc",          "template": "ts=\"{ts}\" level=debug msg=gc_pause duration={rand:1-30}ms heap_mb={rand:50-512} goroutines={rand:10-200}"}
-  ],
-  "presets": [
-    {
-      "name": "web-access",
+      {"name": "crash-panic-stack", "lines": [
+        "panic: runtime error: {choice:index out of range,nil pointer dereference,invalid memory address,nil pointer dereference}",
+        "goroutine {rand:1-20} [running]:",
+        "main.{choice:handleRequest,processItems,serveHTTP,runWorker}(...)",
+        "\t/app/{choice:handler,server,worker,main}.go:{rand:20-120} +0x{rand:100-999}",
+        "{choice:net/http.serverHandler.ServeHTTP(...),net/http.HandlerFunc.ServeHTTP(...),github.com/gin-gonic/gin.(*Engine).ServeHTTP(...)}",
+        "\t{choice:net/http/server.go,net/http/server.go,vendor/github.com/gin-gonic/gin/routir.go}:{rand:1800-2100} +0x{rand:100-999}",
+        "exit status 2"
+      ]},
+      {"name": "crash-oom-stack", "lines": [
+        "fatal error: runtime: out of memory",
+        "runtime stack:",
+        "runtime.throw({0x{rand:100000-999999}, 0x{rand:10-20}})",
+        "\t/usr/local/go/src/runtime/panic.go:{rand:900-1100} +0x{rand:50-200}",
+        "runtime.(*mcache).allocLarge({choice:0xc0{rand:100-999}0, 0xc0{rand:100-999}0}, 0x{rand:100000-999999}, 0x0)",
+        "\t/usr/local/go/src/runtime/mcache.go:{rand:50-100} +0x{rand:50-200}",
+        "main.{choice:processBatch,buildIndex,loadDataset}(...)",
+        "\t/app/{choice:indexer,processor,loader}.go:{rand:50-200} +0x{rand:100-999}"
+      ]},
+      {"name": "crash-panic-short", "lines": [
+        "panic: {choice:assignment to entry in nil map,index out of range,closing already closed channel}",
+        "goroutine {rand:1-20} [running]:",
+        "main.{choice:process,run,handle}(...)",
+        "\t/app/{choice:main,handler}.go:{rand:20-120} +0x{rand:100-999}"
+      ]},
+      {"name": "py-traceback", "lines": [
+        "Traceback (most recent call last):",
+        "  File \"/app/{choice:orders/views,payments/processor,cart/models,inventory/tasks}.py\", line {rand:20-200}, in {choice:process_order,handle_payment,checkout,reserve_stock}",
+        "    {choice:result = gateway.charge(order),order.save(),cart.checkout(),inventory.reserve(sku)}",
+        "{choice:stripe.error.CardError,django.db.OperationalError,requests.exceptions.Timeout,KeyError,ValueError}: {choice:Your card was declined.,no such table: orders_orderitem,Read timed out. (connect timeout=5),'product_id',invalid literal for int() with base 10}"
+      ]},
+      {"name": "deploy-build-log", "lines": [
+        "{ts} INFO  build started: commit {choice:abc1234,def5678,ghi9012} branch={choice:main,release,v2.3-hotfix}",
+        "{ts} INFO  running tests...",
+        "{ts} INFO  {rand:42-380} tests passed, 0 failed ({rand:1-12}s)",
+        "{ts} INFO  building docker image {choice:api-gateway,worker,scheduler}:{choice:latest,v2.3.1,v2.4.0-rc1}",
+        "{ts} INFO  push complete: {rand:50-300}MB in {rand:3-30}s"
+      ]},
+      {"name": "k8s-pod-crashloop", "lines": [
+        "{ts} WARN  pod {choice:api-gateway,worker,scheduler}-{rand:1-5}{choice:cb8x4,7k2m9,9n3pq} in namespace {choice:production,staging,default}",
+        "{ts} WARN  container {choice:app,sidecar,init-config} exited with code {choice:1,2,137,139}",
+        "{ts} WARN  restartCount={rand:1-15} lastState=Terminated reason={choice:Error,OOMKilled,DeadlineExceeded}",
+        "{ts} INFO  back-off restarting container"
+      ]},
+      {"name": "migration-log", "lines": [
+        "{ts} INFO  running migration {rand:1-50}: {choice:add_index_to_orders,create_users_table,alter_inventory_add_column,drop_deprecated_sessions}",
+        "{ts} INFO  migration {rand:1-50} applied in {rand:50-2000}ms",
+        "{ts} INFO  {rand:1-50}/{rand:1-50} migrations applied successfully"
+      ]}
+    ]
+  },
+  "apps": {
+    "webapp": {
       "templates": [
-        {"name": "web-get-ok",      "weight": 60},
-        {"name": "web-get-cached",  "weight": 15},
-        {"name": "web-get-static",  "weight": 10},
-        {"name": "web-post-ok",     "weight": 7},
-        {"name": "web-post-unauth", "weight": 3},
-        {"name": "web-post-bad",    "weight": 2},
-        {"name": "web-notfound",    "weight": 2},
-        {"name": "web-error",       "weight": 0.5},
-        {"name": "web-healthz",     "weight": 0.5}
-      ]
+        {"name": "req-ok",      "template": "ts=\"{ts}\" level=info msg=request method={choice:GET,GET,GET,POST,PUT} path=/api/v1/{choice:users,orders,items,events} status=200 duration={rand:1-150}ms bytes={rand:100-8000}"},
+        {"name": "req-slow",    "template": "ts=\"{ts}\" level=warn msg=slow_request method=GET path=/api/v1/{choice:users,orders,items} status=200 duration={rand:500-3000}ms bytes={rand:100-8000}"},
+        {"name": "req-error",   "template": "ts=\"{ts}\" level=error msg=handler_failed method={choice:GET,POST} path=/api/v1/{choice:users,orders,items} status=500 error={choice:timeout,db_unavailable,nil_pointer}"},
+        {"name": "req-unauth",  "template": "ts=\"{ts}\" level=warn msg=unauthorized method=POST path=/api/v1/{choice:admin,tokens,users} status=401 ip={ip}"},
+        {"name": "db-query",    "template": "ts=\"{ts}\" level=debug msg=db_query table={choice:users,orders,items,events} duration={rand:1-80}ms rows={rand:0-500}"},
+        {"name": "db-slow",     "template": "ts=\"{ts}\" level=warn msg=slow_query table={choice:users,orders,items} duration={rand:200-2000}ms threshold=100ms rows={rand:0-500}"},
+        {"name": "db-error",    "template": "ts=\"{ts}\" level=error msg=db_error table={choice:users,orders} error={choice:deadlock,conn_reset,too_many_connections} retries={rand:1-5}"},
+        {"name": "cache-hit",   "template": "ts=\"{ts}\" level=debug msg=cache_hit key={choice:user,session,order}:{rand:1-9999} ttl={rand:60-3600}"},
+        {"name": "cache-miss",  "template": "ts=\"{ts}\" level=debug msg=cache_miss key={choice:user,session,order}:{rand:1-9999}"},
+        {"name": "worker-ok",   "template": "ts=\"{ts}\" level=info msg=job_complete worker={rand:1-8} job={choice:email,notify,export,import} duration={rand:50-5000}ms"},
+        {"name": "worker-fail", "template": "ts=\"{ts}\" level=error msg=job_failed worker={rand:1-8} job={choice:email,notify,export} error={choice:timeout,panic_recovered,queue_full} retries={rand:1-5}"},
+        {"name": "gc-pause",    "template": "ts=\"{ts}\" level=debug msg=gc_pause duration={rand:1-30}ms heap_mb={rand:50-512} goroutines={rand:10-200}"},
+        {"name": "conn-ok",     "template": "ts=\"{ts}\" level=info msg=connected target={choice:db,cache,queue} addr={choice:localhost:5432,localhost:6379,localhost:5672}"},
+        {"name": "conn-fail",   "template": "ts=\"{ts}\" level=error msg=connection_failed target={choice:db,cache,queue} error={choice:connection refused,timeout,EOF} attempt={rand:1-10}"},
+        {"name": "conn-retry",  "template": "ts=\"{ts}\" level=warn msg=retrying target={choice:db,cache,queue} attempt={rand:1-5}/5 backoff={rand:100-5000}ms"},
+        {"name": "oom-warn",    "template": "ts=\"{ts}\" level=warn msg=high_memory usage={rand:75-95}% heap_mb={rand:400-1024} goroutines={rand:100-500}"},
+        {"name": "health-ok",   "template": "ts=\"{ts}\" level=info msg=health_check status=ok uptime={rand:60-86400}s"},
+        {"name": "health-fail", "template": "ts=\"{ts}\" level=error msg=health_check status=failing checks={choice:db,cache,queue}_unavailable uptime={rand:5-300}s"},
+        {"name": "startup-msg", "template": "ts=\"{ts}\" level=info msg=server_started addr=:8080 version={choice:v2.3.0,v2.3.1,v2.4.0-rc1}"}
+      ],
+      "scenarios": {
+        "default": {
+          "templates": [
+            {"name": "req-ok",     "weight": 50},
+            {"name": "db-query",   "weight": 20},
+            {"name": "cache-hit",  "weight": 8},
+            {"name": "cache-miss", "weight": 3},
+            {"name": "req-slow",   "weight": 5},
+            {"name": "req-unauth", "weight": 2},
+            {"name": "worker-ok",  "weight": 3},
+            {"name": "gc-pause",   "weight": 0.5},
+            {"name": "health-ok",  "weight": 0.5}
+          ]
+        },
+        "incident": {
+          "phases": [
+            {
+              "name": "healthy",
+              "duration": "15s",
+              "rate": 10,
+              "templates": [
+                {"name": "req-ok",    "weight": 55},
+                {"name": "db-query",  "weight": 20},
+                {"name": "cache-hit", "weight": 10},
+                {"name": "health-ok", "weight": 2},
+                {"name": "gc-pause",  "weight": 1}
+              ]
+            },
+            {
+              "name": "slow-burn",
+              "duration": "20s",
+              "rate": 12,
+              "templates": [
+                {"name": "req-ok",     "weight": 40},
+                {"name": "req-slow",   "weight": 15},
+                {"name": "db-query",   "weight": 15},
+                {"name": "db-slow",    "weight": 8},
+                {"name": "cache-miss", "weight": 8},
+                {"name": "conn-retry", "weight": 5},
+                {"name": "oom-warn",   "weight": 3},
+                {"name": "gc-pause",   "weight": 2}
+              ]
+            },
+            {
+              "name": "cascade",
+              "duration": "25s",
+              "rate": 25,
+              "templates": [
+                {"name": "req-error",       "weight": 25},
+                {"name": "db-error",         "weight": 15},
+                {"name": "db-slow",          "weight": 10},
+                {"name": "worker-fail",      "weight": 10},
+                {"name": "conn-fail",        "weight": 10},
+                {"name": "oom-warn",         "weight": 8},
+                {"name": "crash-panic-stack","weight": 5},
+                {"name": "crash-oom-stack",  "weight": 3},
+                {"name": "health-fail",      "weight": 5},
+                {"name": "req-slow",         "weight": 5},
+                {"name": "req-ok",           "weight": 4}
+              ]
+            },
+            {
+              "name": "recovery",
+              "duration": "20s",
+              "rate": 12,
+              "templates": [
+                {"name": "conn-ok",      "weight": 10},
+                {"name": "req-ok",        "weight": 30},
+                {"name": "req-slow",      "weight": 10},
+                {"name": "db-query",      "weight": 15},
+                {"name": "cache-miss",    "weight": 10},
+                {"name": "db-error",      "weight": 5},
+                {"name": "conn-retry",    "weight": 5},
+                {"name": "worker-ok",     "weight": 5},
+                {"name": "health-ok",     "weight": 5},
+                {"name": "req-error",     "weight": 3},
+                {"name": "oom-warn",      "weight": 2}
+              ]
+            },
+            {
+              "name": "stable",
+              "duration": "0s",
+              "rate": 10,
+              "templates": [
+                {"name": "req-ok",     "weight": 50},
+                {"name": "db-query",   "weight": 20},
+                {"name": "cache-hit",  "weight": 8},
+                {"name": "cache-miss", "weight": 3},
+                {"name": "req-slow",   "weight": 5},
+                {"name": "worker-ok",  "weight": 3},
+                {"name": "gc-pause",   "weight": 0.5},
+                {"name": "health-ok",  "weight": 0.5}
+              ]
+            }
+          ]
+        },
+        "deploy": {
+          "phases": [
+            {
+              "name": "running",
+              "duration": "12s",
+              "rate": 10,
+              "templates": [
+                {"name": "req-ok",     "weight": 50},
+                {"name": "db-query",   "weight": 20},
+                {"name": "cache-hit",  "weight": 8},
+                {"name": "worker-ok",  "weight": 3},
+                {"name": "health-ok",  "weight": 2}
+              ]
+            },
+            {
+              "name": "build",
+              "duration": "10s",
+              "rate": 3,
+              "templates": [
+                {"name": "spin-build",      "weight": 30},
+                {"name": "deploy-build-log", "weight": 40},
+                {"name": "req-ok",           "weight": 20},
+                {"name": "health-ok",        "weight": 10}
+              ]
+            },
+            {
+              "name": "rollout",
+              "duration": "18s",
+              "rate": 12,
+              "templates": [
+                {"name": "req-ok",        "weight": 25},
+                {"name": "req-error",     "weight": 15},
+                {"name": "db-error",      "weight": 8},
+                {"name": "conn-fail",     "weight": 8},
+                {"name": "conn-ok",       "weight": 8},
+                {"name": "health-fail",   "weight": 5},
+                {"name": "health-ok",     "weight": 5},
+                {"name": "migration-log", "weight": 5},
+                {"name": "db-slow",       "weight": 5},
+                {"name": "req-slow",      "weight": 5},
+                {"name": "startup-msg",   "weight": 3},
+                {"name": "k8s-pod-crashloop","weight": 3}
+              ]
+            },
+            {
+              "name": "stable",
+              "duration": "0s",
+              "rate": 10,
+              "templates": [
+                {"name": "req-ok",     "weight": 50},
+                {"name": "db-query",   "weight": 20},
+                {"name": "cache-hit",  "weight": 8},
+                {"name": "worker-ok",  "weight": 3},
+                {"name": "health-ok",  "weight": 2}
+              ]
+            }
+          ]
+        },
+        "startup": {
+          "phases": [
+            {
+              "name": "bootstrap",
+              "duration": "8s",
+              "rate": 5,
+              "templates": [
+                {"name": "conn-fail",   "weight": 30},
+                {"name": "conn-retry",  "weight": 25},
+                {"name": "migration-log","weight": 15},
+                {"name": "conn-ok",     "weight": 15},
+                {"name": "db-error",    "weight": 10},
+                {"name": "health-fail", "weight": 5}
+              ]
+            },
+            {
+              "name": "warmup",
+              "duration": "12s",
+              "rate": 8,
+              "templates": [
+                {"name": "conn-ok",      "weight": 10},
+                {"name": "startup-msg",  "weight": 5},
+                {"name": "req-ok",        "weight": 30},
+                {"name": "cache-miss",    "weight": 20},
+                {"name": "db-query",      "weight": 15},
+                {"name": "db-slow",       "weight": 5},
+                {"name": "health-ok",     "weight": 5},
+                {"name": "req-slow",      "weight": 5},
+                {"name": "req-error",     "weight": 3}
+              ]
+            },
+            {
+              "name": "serving",
+              "duration": "0s",
+              "rate": 10,
+              "templates": [
+                {"name": "req-ok",     "weight": 50},
+                {"name": "db-query",   "weight": 20},
+                {"name": "cache-hit",  "weight": 8},
+                {"name": "cache-miss", "weight": 3},
+                {"name": "req-slow",   "weight": 5},
+                {"name": "worker-ok",  "weight": 3},
+                {"name": "gc-pause",   "weight": 0.5},
+                {"name": "health-ok",  "weight": 0.5}
+              ]
+            }
+          ]
+        },
+        "traffic-spike": {
+          "phases": [
+            {
+              "name": "normal",
+              "duration": "15s",
+              "rate": 10,
+              "templates": [
+                {"name": "req-ok",     "weight": 55},
+                {"name": "db-query",   "weight": 20},
+                {"name": "cache-hit",  "weight": 10},
+                {"name": "health-ok",  "weight": 2},
+                {"name": "gc-pause",   "weight": 1}
+              ]
+            },
+            {
+              "name": "ramp",
+              "duration": "10s",
+              "rate": 35,
+              "templates": [
+                {"name": "req-ok",     "weight": 50},
+                {"name": "req-slow",   "weight": 12},
+                {"name": "db-query",   "weight": 15},
+                {"name": "cache-miss", "weight": 8},
+                {"name": "db-slow",    "weight": 5},
+                {"name": "gc-pause",   "weight": 3}
+              ]
+            },
+            {
+              "name": "peak",
+              "duration": "15s",
+              "rate": 50,
+              "templates": [
+                {"name": "req-ok",      "weight": 30},
+                {"name": "req-slow",    "weight": 18},
+                {"name": "req-error",   "weight": 12},
+                {"name": "db-slow",     "weight": 12},
+                {"name": "db-error",    "weight": 8},
+                {"name": "worker-fail", "weight": 5},
+                {"name": "cache-miss",  "weight": 5},
+                {"name": "oom-warn",    "weight": 3},
+                {"name": "db-query",    "weight": 3},
+                {"name": "gc-pause",    "weight": 2}
+              ]
+            },
+            {
+              "name": "cooldown",
+              "duration": "15s",
+              "rate": 18,
+              "templates": [
+                {"name": "req-ok",     "weight": 45},
+                {"name": "req-slow",   "weight": 10},
+                {"name": "db-query",   "weight": 18},
+                {"name": "cache-miss", "weight": 8},
+                {"name": "req-error",  "weight": 5},
+                {"name": "db-slow",    "weight": 3},
+                {"name": "worker-ok",  "weight": 3},
+                {"name": "health-ok",  "weight": 3},
+                {"name": "gc-pause",   "weight": 2}
+              ]
+            },
+            {
+              "name": "normal",
+              "duration": "0s",
+              "rate": 10,
+              "templates": [
+                {"name": "req-ok",     "weight": 55},
+                {"name": "db-query",   "weight": 20},
+                {"name": "cache-hit",  "weight": 10},
+                {"name": "health-ok",  "weight": 2},
+                {"name": "gc-pause",   "weight": 1}
+              ]
+            }
+          ]
+        }
+      }
     },
-    {
-      "name": "errors",
+    "nginx": {
       "templates": [
-        {"name": "log-info-complete",  "weight": 20},
-        {"name": "log-info-retry",     "weight": 5},
-        {"name": "log-info-connected", "weight": 5},
-        {"name": "log-debug-cache",    "weight": 25},
-        {"name": "log-debug-query",    "weight": 20},
-        {"name": "log-warn-queue",     "weight": 10},
-        {"name": "log-warn-memory",    "weight": 5},
-        {"name": "log-error-conn",     "weight": 7},
-        {"name": "log-error-upstream", "weight": 3}
-      ]
+        {"name": "get-ok",      "template": "{ip} - - [{ts}] \"GET /api/v1/{choice:users,orders,items,events} HTTP/1.1\" 200 {rand:100-8000}"},
+        {"name": "get-cached",  "template": "{ip} - - [{ts}] \"GET /static/{choice:app.js,app.css,logo.png,font.woff2} HTTP/1.1\" 304 0"},
+        {"name": "get-static",  "template": "{ip} - - [{ts}] \"GET /static/{choice:app.js,app.css,logo.png} HTTP/1.1\" 200 {rand:5000-80000}"},
+        {"name": "post-ok",     "template": "{ip} - - [{ts}] \"POST /api/v1/{choice:users,orders,sessions} HTTP/1.1\" {choice:200,201} {rand:200-1000}"},
+        {"name": "post-unauth", "template": "{ip} - - [{ts}] \"POST /api/v1/sessions HTTP/1.1\" 401 45"},
+        {"name": "post-bad",    "template": "{ip} - - [{ts}] \"POST /api/v1/{choice:users,orders} HTTP/1.1\" 400 {rand:50-300}"},
+        {"name": "notfound",    "template": "{ip} - - [{ts}] \"GET /{choice:admin,wp-login,phpmyadmin,.env} HTTP/1.1\" 404 12"},
+        {"name": "error-500",   "template": "{ip} - - [{ts}] \"GET /api/v1/{choice:users,orders} HTTP/1.1\" 500 {rand:100-500}"},
+        {"name": "healthz",     "template": "127.0.0.1 - - [{ts}] \"GET /healthz HTTP/1.1\" 200 4"}
+      ],
+      "scenarios": {
+        "default": {
+          "templates": [
+            {"name": "get-ok",      "weight": 60},
+            {"name": "get-cached",  "weight": 15},
+            {"name": "get-static",  "weight": 10},
+            {"name": "post-ok",     "weight": 7},
+            {"name": "post-unauth", "weight": 3},
+            {"name": "post-bad",    "weight": 2},
+            {"name": "notfound",    "weight": 2},
+            {"name": "error-500",   "weight": 0.5},
+            {"name": "healthz",     "weight": 0.5}
+          ]
+        }
+      }
     },
-    {
-      "name": "json",
+    "pyecom": {
       "templates": [
-        {"name": "json-request",   "weight": 60},
-        {"name": "json-cache",     "weight": 20},
-        {"name": "json-slowquery", "weight": 10},
-        {"name": "json-error",     "weight": 5},
-        {"name": "json-worker",    "weight": 5}
-      ]
+        {"name": "cart-add",        "template": "{ts} DEBUG cart.item_added     user_id={rand:1-5000} sku={choice:SKU-001,SKU-042,SKU-107,SKU-203,SKU-388} qty={rand:1-5} price={rand:5-299}.{rand:10-99}"},
+        {"name": "inventory-check", "template": "{ts} DEBUG inventory.check     sku={choice:SKU-001,SKU-042,SKU-107,SKU-203,SKU-388} stock={rand:0-500}"},
+        {"name": "order-created",   "template": "{ts} INFO  order.created       order_id={rand:10000-99999} user_id={rand:1-5000} items={rand:1-8} total={rand:10-499}.{rand:10-99}"},
+        {"name": "payment-ok",      "template": "{ts} INFO  payment.charged     order_id={rand:10000-99999} provider={choice:stripe,paypal,braintree} amount={rand:10-499}.{rand:10-99} duration_ms={rand:80-600}"},
+        {"name": "order-fulfilled", "template": "{ts} INFO  order.fulfilled     order_id={rand:10000-99999} warehouse={choice:US-EAST,US-WEST,EU-CENTRAL} items={rand:1-8}"},
+        {"name": "order-shipped",   "template": "{ts} INFO  shipment.dispatched order_id={rand:10000-99999} carrier={choice:fedex,ups,usps,dhl} tracking={rand:100000000-999999999}"},
+        {"name": "payment-failed",  "template": "{ts} WARNING payment.failed    order_id={rand:10000-99999} provider={choice:stripe,paypal} reason={choice:insufficient_funds,card_declined,fraud_detected}"},
+        {"name": "stock-low",       "template": "{ts} WARNING inventory.low     sku={choice:SKU-001,SKU-042,SKU-107} stock={rand:1-10} threshold=20"}
+      ],
+      "scenarios": {
+        "default": {
+          "templates": [
+            {"name": "cart-add",        "weight": 25},
+            {"name": "inventory-check", "weight": 20},
+            {"name": "order-created",   "weight": 15},
+            {"name": "payment-ok",      "weight": 10},
+            {"name": "order-fulfilled", "weight": 8},
+            {"name": "order-shipped",   "weight": 7},
+            {"name": "payment-failed",  "weight": 4},
+            {"name": "stock-low",       "weight": 3},
+            {"name": "py-traceback",    "weight": 3}
+          ]
+        }
+      }
     },
-    {
-      "name": "spinner",
+    "jsonlog": {
       "templates": [
-        {"name": "spin-build",    "weight": 33},
-        {"name": "spin-download", "weight": 33},
-        {"name": "spin-compile",  "weight": 34}
-      ]
+        {"name": "request",   "template": "{\"time\":\"{ts}\",\"level\":\"info\",\"msg\":\"request\",\"ms\":{rand:1-500},\"status\":{choice:200,200,200,201,204},\"path\":\"/api/v1/{choice:users,orders,items}\"}"},
+        {"name": "cache",     "template": "{\"time\":\"{ts}\",\"level\":\"debug\",\"msg\":\"cache {choice:hit,hit,miss}\",\"key\":\"{rand:1-9999}\",\"ttl\":{rand:60-3600}}"},
+        {"name": "slowquery", "template": "{\"time\":\"{ts}\",\"level\":\"warn\",\"msg\":\"slow query\",\"ms\":{rand:200-2000},\"table\":\"{choice:users,orders,events}\"}"},
+        {"name": "error",     "template": "{\"time\":\"{ts}\",\"level\":\"error\",\"msg\":\"handler failed\",\"error\":\"{choice:timeout,nil pointer dereference,EOF}\",\"path\":\"/api/v1/items/{rand:1-999}\"}"},
+        {"name": "worker",    "template": "{\"time\":\"{ts}\",\"level\":\"info\",\"msg\":\"worker heartbeat\",\"id\":{rand:1-8},\"queue\":{rand:0-200}}"}
+      ],
+      "scenarios": {
+        "default": {
+          "templates": [
+            {"name": "request",   "weight": 60},
+            {"name": "cache",     "weight": 20},
+            {"name": "slowquery", "weight": 10},
+            {"name": "error",     "weight": 5},
+            {"name": "worker",    "weight": 5}
+          ]
+        }
+      }
     },
-    {
-      "name": "crash",
+    "errors": {
       "templates": [
-        {"name": "crash-startup",   "weight": 20},
-        {"name": "crash-request",   "weight": 20},
-        {"name": "crash-panic",     "weight": 8},
-        {"name": "crash-goroutine", "weight": 7},
-        {"name": "crash-frame-fn",  "weight": 15},
-        {"name": "crash-frame-loc", "weight": 15},
-        {"name": "crash-stdlib",    "weight": 10},
-        {"name": "crash-exit",      "weight": 5}
-      ]
-    },
-    {
-      "name": "pyecom",
-      "templates": [
-        {"name": "pyecom-cart-add",        "weight": 25},
-        {"name": "pyecom-inventory-check", "weight": 20},
-        {"name": "pyecom-order-created",   "weight": 15},
-        {"name": "pyecom-payment-ok",      "weight": 10},
-        {"name": "pyecom-order-fulfilled", "weight": 8},
-        {"name": "pyecom-order-shipped",   "weight": 7},
-        {"name": "pyecom-payment-failed",  "weight": 4},
-        {"name": "pyecom-stock-low",       "weight": 3},
-        {"name": "pyecom-exception", "weight": 3}
-      ]
-    },
-    {
-      "name": "go-webapp",
-      "templates": [
-        {"name": "goweb-req-ok",      "weight": 50},
-        {"name": "goweb-req-slow",    "weight": 5},
-        {"name": "goweb-req-error",   "weight": 3},
-        {"name": "goweb-req-unauth",  "weight": 2},
-        {"name": "goweb-db-query",    "weight": 20},
-        {"name": "goweb-db-slow",     "weight": 4},
-        {"name": "goweb-db-error",    "weight": 1},
-        {"name": "goweb-cache-hit",   "weight": 8},
-        {"name": "goweb-cache-miss",  "weight": 3},
-        {"name": "goweb-worker-ok",   "weight": 3},
-        {"name": "goweb-worker-fail", "weight": 0.5},
-        {"name": "goweb-gc",          "weight": 0.5}
-      ]
-    },
-    {
-      "name": "mixed",
-      "templates": [
-        {"name": "json-request",      "weight": 20},
-        {"name": "json-cache",        "weight": 8},
-        {"name": "json-slowquery",    "weight": 4},
-        {"name": "json-error",        "weight": 2},
-        {"name": "goweb-req-ok",      "weight": 20},
-        {"name": "goweb-db-query",    "weight": 8},
-        {"name": "goweb-req-slow",    "weight": 3},
-        {"name": "goweb-req-error",   "weight": 2},
-        {"name": "log-info-complete", "weight": 10},
-        {"name": "log-debug-cache",   "weight": 8},
-        {"name": "log-warn-queue",    "weight": 5},
-        {"name": "log-error-conn",    "weight": 3},
-        {"name": "crash-panic",       "weight": 1},
-        {"name": "crash-goroutine",   "weight": 1}
-      ]
+        {"name": "info-complete",  "template": "{ts} INFO  processed batch of {rand:10-200} items in {rand:10-500}ms"},
+        {"name": "info-retry",    "template": "{ts} INFO  retrying in {rand:1-30}s (attempt {rand:1-5}/5)"},
+        {"name": "info-connected","template": "{ts} INFO  connected to {choice:db,cache,queue} at localhost:{rand:5432-6380}"},
+        {"name": "debug-cache",   "template": "{ts} DEBUG cache {choice:hit,hit,hit,miss} key={rand:1-9999}"},
+        {"name": "debug-query",  "template": "{ts} DEBUG query took {rand:1-80}ms rows={rand:0-5000}"},
+        {"name": "warn-queue",    "template": "{ts} WARN  queue depth {rand:80-200} exceeds threshold"},
+        {"name": "warn-memory",   "template": "{ts} WARN  high memory usage: {rand:75-95}%"},
+        {"name": "error-conn",   "template": "{ts} ERROR {choice:connection refused,timeout,unexpected EOF,context deadline exceeded}: worker {rand:1-8}"},
+        {"name": "error-upstream","template": "{ts} ERROR failed to reach upstream after {rand:2-5} retries"}
+      ],
+      "scenarios": {
+        "default": {
+          "templates": [
+            {"name": "info-complete",  "weight": 20},
+            {"name": "info-retry",     "weight": 5},
+            {"name": "info-connected", "weight": 5},
+            {"name": "debug-cache",    "weight": 25},
+            {"name": "debug-query",    "weight": 20},
+            {"name": "warn-queue",     "weight": 10},
+            {"name": "warn-memory",    "weight": 5},
+            {"name": "error-conn",     "weight": 7},
+            {"name": "error-upstream", "weight": 3}
+          ]
+        }
+      }
     }
-  ]
+  }
 }
