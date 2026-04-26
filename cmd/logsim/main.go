@@ -87,15 +87,6 @@ func main() {
 			phRate = 1
 		}
 
-		fmt.Printf("──── %s", ph.Name)
-		if ph.Duration > 0 {
-			fmt.Printf(" (%s)", ph.Duration)
-		} else {
-			fmt.Print(" (∞)")
-		}
-		fmt.Println(" ────")
-		os.Stdout.Sync()
-
 		var ticker *time.Ticker
 		if phRate > 0 {
 			ticker = time.NewTicker(time.Duration(float64(time.Second) / phRate))
