@@ -1,16 +1,56 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
 
+//go:embed scenarios/*.json
+var scenariosFS embed.FS
+
 //go:embed scenarios/builtins.json
 var builtinsData []byte
+
+func loadEmbeddedRegistry() (*registry, error) {
+	entries, err := scenariosFS.ReadDir("scenarios")
+	if err != nil {
+		return nil, fmt.Errorf("reading embedded scenarios: %w", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+
+	var reg *registry
+	for _, name := range names {
+		path := "scenarios/" + name
+		data, err := scenariosFS.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", path, err)
+		}
+		next, err := loadRegistry(data, name)
+		if err != nil {
+			return nil, err
+		}
+		if reg == nil {
+			reg = next
+		} else {
+			reg = mergeRegistries(reg, next)
+		}
+	}
+	if reg == nil {
+		return nil, fmt.Errorf("no embedded scenario files found")
+	}
+	return reg, nil
+}
 
 type rawConfig struct {
 	Common struct {

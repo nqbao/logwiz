@@ -40,7 +40,7 @@ func main() {
 	}
 	flag.Parse()
 
-	reg, err := loadRegistry(builtinsData, "builtins.json")
+	reg, err := loadEmbeddedRegistry()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "logsim:", err)
 		os.Exit(1)
