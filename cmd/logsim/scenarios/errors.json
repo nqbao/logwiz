@@ -1,0 +1,33 @@
+{
+  "common": {"templates": []},
+  "apps": {
+    "errors": {
+      "templates": [
+        {"name": "info-complete",   "template": "{ts} INFO  processed batch of {rand:10-200} items in {rand:10-500}ms"},
+        {"name": "info-retry",      "template": "{ts} INFO  retrying in {rand:1-30}s (attempt {rand:1-5}/5)"},
+        {"name": "info-connected",  "template": "{ts} INFO  connected to {choice:db,cache,queue} at localhost:{rand:5432-6380}"},
+        {"name": "debug-cache",     "template": "{ts} DEBUG cache {choice:hit,hit,hit,miss} key={rand:1-9999}"},
+        {"name": "debug-query",     "template": "{ts} DEBUG query took {rand:1-80}ms rows={rand:0-5000}"},
+        {"name": "warn-queue",      "template": "{ts} WARN  queue depth {rand:80-200} exceeds threshold"},
+        {"name": "warn-memory",     "template": "{ts} WARN  high memory usage: {rand:75-95}%"},
+        {"name": "error-conn",      "template": "{ts} ERROR {choice:connection refused,timeout,unexpected EOF,context deadline exceeded}: worker {rand:1-8}"},
+        {"name": "error-upstream",  "template": "{ts} ERROR failed to reach upstream after {rand:2-5} retries"}
+      ],
+      "scenarios": {
+        "default": {
+          "templates": [
+            {"name": "info-complete",  "weight": 20},
+            {"name": "info-retry",     "weight": 5},
+            {"name": "info-connected", "weight": 5},
+            {"name": "debug-cache",    "weight": 25},
+            {"name": "debug-query",    "weight": 20},
+            {"name": "warn-queue",     "weight": 10},
+            {"name": "warn-memory",    "weight": 5},
+            {"name": "error-conn",     "weight": 7},
+            {"name": "error-upstream", "weight": 3}
+          ]
+        }
+      }
+    }
+  }
+}

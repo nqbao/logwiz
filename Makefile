@@ -9,6 +9,7 @@ build:
 	go build -o $(BIN) $(CMD)
 
 build-sim:
+	go test ./cmd/logsim/...
 	go build -o $(SIM_BIN) $(SIM_CMD)
 
 test:

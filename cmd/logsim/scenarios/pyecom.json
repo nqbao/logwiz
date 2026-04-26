@@ -1,0 +1,32 @@
+{
+  "common": {"templates": []},
+  "apps": {
+    "pyecom": {
+      "templates": [
+        {"name": "cart-add",        "template": "{ts} DEBUG cart.item_added     user_id={rand:1-5000} sku={choice:SKU-001,SKU-042,SKU-107,SKU-203,SKU-388} qty={rand:1-5} price={rand:5-299}.{rand:10-99}"},
+        {"name": "inventory-check", "template": "{ts} DEBUG inventory.check     sku={choice:SKU-001,SKU-042,SKU-107,SKU-203,SKU-388} stock={rand:0-500}"},
+        {"name": "order-created",   "template": "{ts} INFO  order.created       order_id={rand:10000-99999} user_id={rand:1-5000} items={rand:1-8} total={rand:10-499}.{rand:10-99}"},
+        {"name": "payment-ok",      "template": "{ts} INFO  payment.charged     order_id={rand:10000-99999} provider={choice:stripe,paypal,braintree} amount={rand:10-499}.{rand:10-99} duration_ms={rand:80-600}"},
+        {"name": "order-fulfilled", "template": "{ts} INFO  order.fulfilled     order_id={rand:10000-99999} warehouse={choice:US-EAST,US-WEST,EU-CENTRAL} items={rand:1-8}"},
+        {"name": "order-shipped",   "template": "{ts} INFO  shipment.dispatched order_id={rand:10000-99999} carrier={choice:fedex,ups,usps,dhl} tracking={rand:100000000-999999999}"},
+        {"name": "payment-failed",  "template": "{ts} WARNING payment.failed    order_id={rand:10000-99999} provider={choice:stripe,paypal} reason={choice:insufficient_funds,card_declined,fraud_detected}"},
+        {"name": "stock-low",       "template": "{ts} WARNING inventory.low     sku={choice:SKU-001,SKU-042,SKU-107} stock={rand:1-10} threshold=20"}
+      ],
+      "scenarios": {
+        "default": {
+          "templates": [
+            {"name": "cart-add",        "weight": 25},
+            {"name": "inventory-check", "weight": 20},
+            {"name": "order-created",   "weight": 15},
+            {"name": "payment-ok",      "weight": 10},
+            {"name": "order-fulfilled", "weight": 8},
+            {"name": "order-shipped",   "weight": 7},
+            {"name": "payment-failed",  "weight": 4},
+            {"name": "stock-low",       "weight": 3},
+            {"name": "py-traceback",    "weight": 3}
+          ]
+        }
+      }
+    }
+  }
+}

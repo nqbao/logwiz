@@ -1,0 +1,25 @@
+{
+  "common": {"templates": []},
+  "apps": {
+    "jsonlog": {
+      "templates": [
+        {"name": "request",   "template": "{\"time\":\"{ts}\",\"level\":\"info\",\"msg\":\"request\",\"ms\":{rand:1-500},\"status\":{choice:200,200,200,201,204},\"path\":\"/api/v1/{choice:users,orders,items}\"}"},
+        {"name": "cache",     "template": "{\"time\":\"{ts}\",\"level\":\"debug\",\"msg\":\"cache {choice:hit,hit,miss}\",\"key\":\"{rand:1-9999}\",\"ttl\":{rand:60-3600}}"},
+        {"name": "slowquery", "template": "{\"time\":\"{ts}\",\"level\":\"warn\",\"msg\":\"slow query\",\"ms\":{rand:200-2000},\"table\":\"{choice:users,orders,events}\"}"},
+        {"name": "error",     "template": "{\"time\":\"{ts}\",\"level\":\"error\",\"msg\":\"handler failed\",\"error\":\"{choice:timeout,nil pointer dereference,EOF}\",\"path\":\"/api/v1/items/{rand:1-999}\"}"},
+        {"name": "worker",    "template": "{\"time\":\"{ts}\",\"level\":\"info\",\"msg\":\"worker heartbeat\",\"id\":{rand:1-8},\"queue\":{rand:0-200}}"}
+      ],
+      "scenarios": {
+        "default": {
+          "templates": [
+            {"name": "request",   "weight": 60},
+            {"name": "cache",     "weight": 20},
+            {"name": "slowquery", "weight": 10},
+            {"name": "error",     "weight": 5},
+            {"name": "worker",    "weight": 5}
+          ]
+        }
+      }
+    }
+  }
+}
