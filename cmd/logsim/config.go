@@ -13,9 +13,6 @@ import (
 //go:embed scenarios/*.json
 var scenariosFS embed.FS
 
-//go:embed scenarios/builtins.json
-var builtinsData []byte
-
 func loadEmbeddedRegistry() (*registry, error) {
 	entries, err := scenariosFS.ReadDir("scenarios")
 	if err != nil {

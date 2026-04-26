@@ -4,16 +4,16 @@ import (
 	"testing"
 )
 
-func TestBuiltinsValid(t *testing.T) {
-	reg, err := loadRegistry(builtinsData, "builtins.json")
+func TestScenariosValid(t *testing.T) {
+	reg, err := loadEmbeddedRegistry()
 	if err != nil {
-		t.Fatalf("builtins.json validation failed: %v", err)
+		t.Fatalf("loadEmbeddedRegistry failed: %v", err)
 	}
 	if len(reg.apps) == 0 {
-		t.Fatal("no apps defined in builtins.json")
+		t.Fatal("no apps defined in embedded scenarios")
 	}
 	if len(reg.commonTemplates) == 0 {
-		t.Fatal("no common templates defined in builtins.json")
+		t.Fatal("no common templates defined in embedded scenarios")
 	}
 	for appName, a := range reg.apps {
 		if len(a.Templates) == 0 && len(a.Scenarios) == 0 {
@@ -41,7 +41,7 @@ func TestBuiltinsValid(t *testing.T) {
 }
 
 func TestScenarioResolution(t *testing.T) {
-	reg, err := loadRegistry(builtinsData, "builtins.json")
+	reg, err := loadEmbeddedRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestScenarioResolution(t *testing.T) {
 }
 
 func TestListScenarios(t *testing.T) {
-	reg, err := loadRegistry(builtinsData, "builtins.json")
+	reg, err := loadEmbeddedRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestListScenarios(t *testing.T) {
 		seen[e.FullName] = true
 	}
 
-	for _, name := range []string{"webapp", "webapp-incident", "nginx", "pyecom"} {
+	for _, name := range []string{"webapp", "webapp-incident", "nginx", "pyecom", "openstack"} {
 		if !seen[name] {
 			t.Errorf("expected scenario %q not found in list", name)
 		}

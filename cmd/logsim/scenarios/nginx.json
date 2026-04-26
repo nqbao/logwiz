@@ -1,0 +1,33 @@
+{
+  "common": {"templates": []},
+  "apps": {
+    "nginx": {
+      "templates": [
+        {"name": "get-ok",      "template": "{ip} - - [{ts}] \"GET /api/v1/{choice:users,orders,items,events} HTTP/1.1\" 200 {rand:100-8000}"},
+        {"name": "get-cached",  "template": "{ip} - - [{ts}] \"GET /static/{choice:app.js,app.css,logo.png,font.woff2} HTTP/1.1\" 304 0"},
+        {"name": "get-static",  "template": "{ip} - - [{ts}] \"GET /static/{choice:app.js,app.css,logo.png} HTTP/1.1\" 200 {rand:5000-80000}"},
+        {"name": "post-ok",     "template": "{ip} - - [{ts}] \"POST /api/v1/{choice:users,orders,sessions} HTTP/1.1\" {choice:200,201} {rand:200-1000}"},
+        {"name": "post-unauth", "template": "{ip} - - [{ts}] \"POST /api/v1/sessions HTTP/1.1\" 401 45"},
+        {"name": "post-bad",    "template": "{ip} - - [{ts}] \"POST /api/v1/{choice:users,orders} HTTP/1.1\" 400 {rand:50-300}"},
+        {"name": "notfound",    "template": "{ip} - - [{ts}] \"GET /{choice:admin,wp-login,phpmyadmin,.env} HTTP/1.1\" 404 12"},
+        {"name": "error-500",   "template": "{ip} - - [{ts}] \"GET /api/v1/{choice:users,orders} HTTP/1.1\" 500 {rand:100-500}"},
+        {"name": "healthz",     "template": "127.0.0.1 - - [{ts}] \"GET /healthz HTTP/1.1\" 200 4"}
+      ],
+      "scenarios": {
+        "default": {
+          "templates": [
+            {"name": "get-ok",      "weight": 60},
+            {"name": "get-cached",  "weight": 15},
+            {"name": "get-static",  "weight": 10},
+            {"name": "post-ok",     "weight": 7},
+            {"name": "post-unauth", "weight": 3},
+            {"name": "post-bad",    "weight": 2},
+            {"name": "notfound",    "weight": 2},
+            {"name": "error-500",   "weight": 0.5},
+            {"name": "healthz",     "weight": 0.5}
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "common": {
+    "templates": [
+      {"name": "spin-build",      "template": "building... {rand:1-33}%{cr}building... {rand:34-66}%{cr}building... {rand:67-99}%{cr}building... done"},
+      {"name": "spin-download",   "template": "downloading ({rand:1-50}/{rand:51-100}){cr}downloading ({rand:51-99}/{rand:51-100}){cr}download complete"},
+      {"name": "spin-compile",    "template": "compiling {rand:100-300} files...{cr}compiled in {rand:1-9}.{rand:0-9}s"},
+
+      {"name": "crash-panic-stack", "lines": [
+        "panic: runtime error: {choice:index out of range,nil pointer dereference,invalid memory address,nil pointer dereference}",
+        "goroutine {rand:1-20} [running]:",
+        "main.{choice:handleRequest,processItems,serveHTTP,runWorker}(...)",
+        "\t/app/{choice:handler,server,worker,main}.go:{rand:20-120} +0x{rand:100-999}",
+        "{choice:net/http.serverHandler.ServeHTTP(...),net/http.HandlerFunc.ServeHTTP(...),github.com/gin-gonic/gin.(*Engine).ServeHTTP(...)}",
+        "\t{choice:net/http/server.go,net/http/server.go,vendor/github.com/gin-gonic/gin/routir.go}:{rand:1800-2100} +0x{rand:100-999}",
+        "exit status 2"
+      ]},
+      {"name": "crash-oom-stack", "lines": [
+        "fatal error: runtime: out of memory",
+        "runtime stack:",
+        "runtime.throw({0x{rand:100000-999999}, 0x{rand:10-20}})",
+        "\t/usr/local/go/src/runtime/panic.go:{rand:900-1100} +0x{rand:50-200}",
+        "runtime.(*mcache).allocLarge(0xc0{rand:100-999}{rand:100-999}, 0x{rand:100000-999999}, 0x0)",
+        "\t/usr/local/go/src/runtime/mcache.go:{rand:50-100} +0x{rand:50-200}",
+        "main.{choice:processBatch,buildIndex,loadDataset}(...)",
+        "\t/app/{choice:indexer,processor,loader}.go:{rand:50-200} +0x{rand:100-999}"
+      ]},
+      {"name": "crash-panic-short", "lines": [
+        "panic: {choice:assignment to entry in nil map,index out of range,closing already closed channel}",
+        "goroutine {rand:1-20} [running]:",
+        "main.{choice:process,run,handle}(...)",
+        "\t/app/{choice:main,handler}.go:{rand:20-120} +0x{rand:100-999}"
+      ]},
+      {"name": "py-traceback", "lines": [
+        "Traceback (most recent call last):",
+        "  File \"/app/{choice:orders/views,payments/processor,cart/models,inventory/tasks}.py\", line {rand:20-200}, in {choice:process_order,handle_payment,checkout,reserve_stock}",
+        "    {choice:result = gateway.charge(order),order.save(),cart.checkout(),inventory.reserve(sku)}",
+        "{choice:stripe.error.CardError,django.db.OperationalError,requests.exceptions.Timeout,KeyError,ValueError}: {choice:Your card was declined.,no such table: orders_orderitem,Read timed out. (connect timeout=5),'product_id',invalid literal for int() with base 10}"
+      ]},
+      {"name": "deploy-build-log", "lines": [
+        "{ts} INFO  build started: commit {choice:abc1234,def5678,ghi9012} branch={choice:main,release,v2.3-hotfix}",
+        "{ts} INFO  running tests...",
+        "{ts} INFO  {rand:42-380} tests passed, 0 failed ({rand:1-12}s)",
+        "{ts} INFO  building docker image {choice:api-gateway,worker,scheduler}:{choice:latest,v2.3.1,v2.4.0-rc1}",
+        "{ts} INFO  push complete: {rand:50-300}MB in {rand:3-30}s"
+      ]},
+      {"name": "k8s-pod-crashloop", "lines": [
+        "{ts} WARN  pod {choice:api-gateway,worker,scheduler}-{rand:1-5}{choice:cb8x4,7k2m9,9n3pq} in namespace {choice:production,staging,default}",
+        "{ts} WARN  container {choice:app,sidecar,init-config} exited with code {choice:1,2,137,139}",
+        "{ts} WARN  restartCount={rand:1-15} lastState=Terminated reason={choice:Error,OOMKilled,DeadlineExceeded}",
+        "{ts} INFO  back-off restarting container"
+      ]},
+      {"name": "migration-log", "lines": [
+        "{ts} INFO  running migration {rand:1-50}: {choice:add_index_to_orders,create_users_table,alter_inventory_add_column,drop_deprecated_sessions}",
+        "{ts} INFO  migration {rand:1-50} applied in {rand:50-2000}ms",
+        "{ts} INFO  {rand:30-50}/{rand:30-50} migrations applied successfully"
+      ]}
+    ]
+  },
+  "apps": {}
+}
