@@ -20,6 +20,7 @@ import (
 	"github.com/nqbao/logwiz/internal/buffer"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/highlight"
+	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/redact"
 	"github.com/nqbao/logwiz/internal/tools"
 )
@@ -44,6 +45,7 @@ const MaxToolTurns = 6
 
 // MaxCmdToolTurns is the maximum number of inspection round-trips for a palette command.
 const MaxCmdToolTurns = 4
+
 
 // turnActivity records status for one assistant turn (from user question to
 // final answer). It is displayed as a dim activity line in the sidebar.
@@ -116,9 +118,19 @@ type Model struct {
 	toolBudget   int         // remaining tool round-trips in current chat turn
 	spinnerTick  int
 
-	chatAgent    *Agent // non-nil while the chat agent loop is running
-	cmdAgent     *Agent // non-nil while a palette agent command is in flight
-	cmdToolBudget int   // remaining inspection round-trips for current palette command
+	chatAgent     *Agent // non-nil while the chat agent loop is running
+	cmdAgent      *Agent // non-nil while a palette agent command is in flight
+	cmdToolBudget int    // remaining inspection round-trips for current palette command
+
+	// Palette carry-over: bounded Q&A history across invocations (reset on Escape / :clear chat).
+	cmdHistory []agent.Message // alternating user/assistant pairs
+	cmdPending string          // raw input for the in-flight palette turn
+
+	// cmdSample is a one-shot log snapshot captured on first palette agent use,
+	// stored as copies so it's independent of ring-buffer eviction. Kept for
+	// the lifetime of the run so the system prompt stays stable across turns
+	// (enables provider-side prompt caching on the prefix).
+	cmdSample []logmsg.LogMessage
 
 	hintIdx int // cycles through inputHints
 

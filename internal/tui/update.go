@@ -219,6 +219,8 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cmdErr = ""
 			m.cmdInfo = ""
 			m.cmdAgent = nil
+			m.cmdHistory = nil
+			m.cmdPending = ""
 			m.cmdInput.Blur()
 			m = m.onResize(m.width, m.height)
 			return m, nil

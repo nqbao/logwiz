@@ -72,3 +72,31 @@ func TestPassthroughParserFlush(t *testing.T) {
 		t.Errorf("Flush = %v, want nil", got)
 	}
 }
+
+func TestCopyNilAttributes(t *testing.T) {
+	m := LogMessage{ID: MsgID{Line: 42}, Raw: "hello", Format: "json"}
+	c := m.Copy()
+	if c.ID != m.ID || c.Raw != m.Raw || c.Format != m.Format {
+		t.Errorf("scalar fields differ: got %+v, want %+v", c, m)
+	}
+	if c.Attributes != nil {
+		t.Errorf("Attributes = %v, want nil", c.Attributes)
+	}
+}
+
+func TestCopyDeepClonesAttributes(t *testing.T) {
+	m := LogMessage{
+		Raw:        "hi",
+		Attributes: map[string]string{"level": "INFO", "svc": "auth"},
+	}
+	c := m.Copy()
+	// Mutating the copy's map must not affect the source.
+	c.Attributes["level"] = "ERROR"
+	c.Attributes["new"] = "added"
+	if m.Attributes["level"] != "INFO" {
+		t.Errorf("source mutated: level = %q, want INFO", m.Attributes["level"])
+	}
+	if _, ok := m.Attributes["new"]; ok {
+		t.Errorf("source mutated: unexpected key 'new'")
+	}
+}

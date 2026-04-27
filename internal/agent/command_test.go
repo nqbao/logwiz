@@ -80,7 +80,7 @@ func TestCmdCommitToolDef_IsPickTool(t *testing.T) {
 }
 
 func TestBuildCmdPrompt_StructureAndContent(t *testing.T) {
-	msgs := BuildCmdPrompt("filter errors", "")
+	msgs := BuildCmdPrompt("filter errors", "", nil)
 	if len(msgs) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(msgs))
 	}
@@ -96,7 +96,7 @@ func TestBuildCmdPrompt_StructureAndContent(t *testing.T) {
 }
 
 func TestBuildCmdPrompt_SystemPromptHasRulesAndExamples(t *testing.T) {
-	msgs := BuildCmdPrompt("test", "")
+	msgs := BuildCmdPrompt("test", "", nil)
 	sys := msgs[0].Content
 	for _, want := range []string{"pick_tool", "find", "Rules", "inspect"} {
 		if !strings.Contains(strings.ToLower(sys), strings.ToLower(want)) {
@@ -110,17 +110,41 @@ func TestBuildCmdPrompt_SystemPromptHasRulesAndExamples(t *testing.T) {
 }
 
 func TestBuildCmdPrompt_IncludesLogContext(t *testing.T) {
-	ctx := "Log sample:\n```\nfoo bar\n```"
-	msgs := BuildCmdPrompt("q", ctx)
-	if !strings.Contains(msgs[0].Content, "Log sample") {
+	ctx := "Log format samples"
+	msgs := BuildCmdPrompt("q", ctx, nil)
+	if !strings.Contains(msgs[0].Content, "Log format samples") {
 		t.Error("system prompt should include the provided log context")
 	}
 }
 
 func TestBuildCmdPrompt_EmptyContextOmitted(t *testing.T) {
-	msgs := BuildCmdPrompt("q", "")
+	msgs := BuildCmdPrompt("q", "", nil)
 	// Should still be well-formed with no trailing whitespace issues.
 	if msgs[0].Content == "" {
 		t.Error("system prompt should not be empty")
+	}
+}
+
+func TestBuildCmdPrompt_WithHistory(t *testing.T) {
+	history := []Message{
+		{Role: "user", Content: "how many errors?"},
+		{Role: "assistant", Content: "37 of 500 lines match 'error'"},
+	}
+	msgs := BuildCmdPrompt("why?", "", history)
+	// system, prior user, prior assistant, new user
+	if len(msgs) != 4 {
+		t.Fatalf("expected 4 messages with history, got %d", len(msgs))
+	}
+	if msgs[0].Role != "system" {
+		t.Errorf("msgs[0].Role = %q, want system", msgs[0].Role)
+	}
+	if msgs[1].Role != "user" || msgs[1].Content != "how many errors?" {
+		t.Errorf("msgs[1] = {%q, %q}, want prior user turn", msgs[1].Role, msgs[1].Content)
+	}
+	if msgs[2].Role != "assistant" {
+		t.Errorf("msgs[2].Role = %q, want assistant", msgs[2].Role)
+	}
+	if msgs[3].Role != "user" || msgs[3].Content != "why?" {
+		t.Errorf("msgs[3] = {%q, %q}, want new user turn", msgs[3].Role, msgs[3].Content)
 	}
 }

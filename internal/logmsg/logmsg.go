@@ -68,6 +68,20 @@ func (m LogMessage) Attr(key string) string {
 	return m.Extra.Get(key)
 }
 
+// Copy returns a deep copy of m. The Attributes map is cloned so the
+// caller can safely retain the copy past a ring-buffer eviction (or
+// mutate Attributes) without affecting the source.
+func (m LogMessage) Copy() LogMessage {
+	c := m
+	if m.Attributes != nil {
+		c.Attributes = make(map[string]string, len(m.Attributes))
+		for k, v := range m.Attributes {
+			c.Attributes[k] = v
+		}
+	}
+	return c
+}
+
 // Parser converts a raw log line into zero or more LogMessages.
 // Multi-line parsers may buffer lines internally and emit 0, 1, or N
 // messages per call. Flush drains any buffered partial message.

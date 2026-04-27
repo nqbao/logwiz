@@ -264,6 +264,8 @@ func configGetDisplay(cfg config.Config, key string) (string, bool) {
 			return "on", true
 		}
 		return "off", true
+	case "cmd-history-turns":
+		return strconv.Itoa(cfg.CmdHistoryTurns), true
 	}
 	return "", false
 }
@@ -354,5 +356,7 @@ func clearChat(m Model) Model {
 	m.sessionSample = nil
 	m.chatAgent = nil
 	m.cmdAgent = nil
+	m.cmdHistory = nil
+	m.cmdPending = ""
 	return m
 }

@@ -104,7 +104,8 @@ func CmdCommitToolDef() ToolSpec {
 }
 
 // BuildCmdPrompt constructs the message list for an agent command routing call.
-func BuildCmdPrompt(question, logContext string) []Message {
+// history contains prior user/assistant pairs from this palette session (may be nil).
+func BuildCmdPrompt(question, logContext string, history []Message) []Message {
 	sys := `You are a log-viewer assistant. Translate the user's natural-language input into a logwiz action or answer.
 
 Role: Use inspection tools (find, count, tail, read) when you need to look at logs, then commit with pick_tool. Go straight to pick_tool when the request is unambiguous.
@@ -121,6 +122,8 @@ Rules:
 - Use highlight to colour-band matching lines without hiding others; use clear_highlight to remove all colour bands.
 - Unprefixed input may be an action or a question — decide from context.
 - Use pick_tool(action="reject") only for gibberish, out-of-scope requests, or when you cannot tell what the user wants.
+- If there is prior conversation history, use it for context when the user asks follow-up questions (e.g. "why?", "show me those lines").
+- Log format samples may be provided below. They are NOT comprehensive and NOT necessarily recent — do not answer questions from samples alone; always use inspection tools.
 
 Examples:
 
@@ -161,8 +164,8 @@ User: "what is the capital of France"
 	if logContext != "" {
 		sys += "\n\n" + logContext
 	}
-	return []Message{
-		{Role: "system", Content: sys},
-		{Role: "user", Content: question},
-	}
+	msgs := []Message{{Role: "system", Content: sys}}
+	msgs = append(msgs, history...)
+	msgs = append(msgs, Message{Role: "user", Content: question})
+	return msgs
 }
