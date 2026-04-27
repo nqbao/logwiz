@@ -27,16 +27,20 @@ type logfmtStyles struct {
 
 var (
 	lfCachedStyles logfmtStyles
-	lfStylesOnce   sync.Once
+	lfStylesOnce   *sync.Once
 	lfStylesMu     sync.RWMutex
 )
+
+func init() {
+	lfStylesOnce = &sync.Once{}
+}
 
 // invalidateLogfmtStyles is called by SetActiveStyle to force a rebuild on
 // the next render.
 func invalidateLogfmtStyles() {
 	lfStylesMu.Lock()
 	defer lfStylesMu.Unlock()
-	lfStylesOnce = sync.Once{} // reset so Do() fires again
+	lfStylesOnce = &sync.Once{} // reset so Do() fires again
 }
 
 func getLogfmtStyles() logfmtStyles {

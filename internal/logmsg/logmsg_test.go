@@ -73,30 +73,31 @@ func TestPassthroughParserFlush(t *testing.T) {
 	}
 }
 
-func TestCopyNilAttributes(t *testing.T) {
+func TestCopyNilExtra(t *testing.T) {
 	m := LogMessage{ID: MsgID{Line: 42}, Raw: "hello", Format: "json"}
 	c := m.Copy()
 	if c.ID != m.ID || c.Raw != m.Raw || c.Format != m.Format {
 		t.Errorf("scalar fields differ: got %+v, want %+v", c, m)
 	}
-	if c.Attributes != nil {
-		t.Errorf("Attributes = %v, want nil", c.Attributes)
+	if c.Extra.Len() != 0 {
+		t.Errorf("Extra.Len() = %d, want 0", c.Extra.Len())
 	}
 }
 
-func TestCopyDeepClonesAttributes(t *testing.T) {
-	m := LogMessage{
-		Raw:        "hi",
-		Attributes: map[string]string{"level": "INFO", "svc": "auth"},
-	}
+func TestCopyDeepClonesExtra(t *testing.T) {
+	m := LogMessage{Raw: "hi"}
+	m.Extra.Set("level", "INFO")
+	m.Extra.Set("svc", "auth")
+
 	c := m.Copy()
 	// Mutating the copy's map must not affect the source.
-	c.Attributes["level"] = "ERROR"
-	c.Attributes["new"] = "added"
-	if m.Attributes["level"] != "INFO" {
-		t.Errorf("source mutated: level = %q, want INFO", m.Attributes["level"])
+	c.Extra.Set("level", "ERROR")
+	c.Extra.Set("new", "added")
+
+	if m.Extra.Get("level") != "INFO" {
+		t.Errorf("source mutated: level = %q, want INFO", m.Extra.Get("level"))
 	}
-	if _, ok := m.Attributes["new"]; ok {
+	if m.Extra.Get("new") != "" {
 		t.Errorf("source mutated: unexpected key 'new'")
 	}
 }

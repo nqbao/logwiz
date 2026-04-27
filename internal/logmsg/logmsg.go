@@ -68,15 +68,15 @@ func (m LogMessage) Attr(key string) string {
 	return m.Extra.Get(key)
 }
 
-// Copy returns a deep copy of m. The Attributes map is cloned so the
+// Copy returns a deep copy of m. The Extra map is cloned so the
 // caller can safely retain the copy past a ring-buffer eviction (or
-// mutate Attributes) without affecting the source.
+// mutate Extra) without affecting the source.
 func (m LogMessage) Copy() LogMessage {
 	c := m
-	if m.Attributes != nil {
-		c.Attributes = make(map[string]string, len(m.Attributes))
-		for k, v := range m.Attributes {
-			c.Attributes[k] = v
+	if m.Extra.m != nil {
+		c.Extra.m = make(map[string]string, len(m.Extra.m))
+		for k, v := range m.Extra.m {
+			c.Extra.m[k] = v
 		}
 	}
 	return c

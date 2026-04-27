@@ -10,13 +10,6 @@
   `--multiline-pattern <regex>` override; auto-detect or default off.
   50-line stack trace → 1 buffer slot.
 
-- **Command box context carry-over**: When the user submits a command box query
-  and gets an inline answer, subsequent command box input should be able to
-  reference the previous Q&A (e.g. "why?" or "show me the lines"). The cmd agent
-  would receive a short conversation history (last question + answer) as context,
-  so follow-up queries feel conversational without requiring the user to open the
-  full chat sidebar.
-
 ---
 
 ## Deferred
