@@ -26,6 +26,11 @@ var (
 					Background(lipgloss.Color("22")).
 					Padding(0, 1)
 
+	styleStatusBadgeFollowing = lipgloss.NewStyle().
+					Foreground(lipgloss.Color("230")).
+					Background(lipgloss.Color("25")).
+					Padding(0, 1)
+
 	styleSidebarBorder = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("240"))
 

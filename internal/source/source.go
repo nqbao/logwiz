@@ -33,6 +33,17 @@ type EOFMsg struct{}
 // ErrMsg carries a read error from the source.
 type ErrMsg struct{ Err error }
 
+// FollowingMsg is sent by a File source once the initial read is done and
+// the watcher loop has started. The TUI uses it to flip the "following" badge.
+type FollowingMsg struct{}
+
+// FileFollower is implemented by *File and allows the TUI to toggle follow
+// at runtime without restarting the whole source.
+type FileFollower interface {
+	StopFollow()
+	StartFollow()
+}
+
 // Source is a reader that can be started and stopped. Start is
 // non-blocking: it spawns a goroutine that pushes messages to sender
 // until ctx is cancelled or the underlying reader ends.
@@ -40,20 +51,13 @@ type Source interface {
 	Start(ctx context.Context, sender Sender)
 }
 
-// pump reads lines from r, pushing NewLinesMsg batches and a final
-// EOFMsg / ErrMsg when the stream ends or ctx is cancelled.
+// pumpLines reads lines from r into sender as NewLinesMsg batches.
+// Returns the scanner error (nil on clean EOF). Does NOT send EOFMsg/ErrMsg.
+// Callers must check ctx.Err() after return to distinguish cancel from EOF.
 //
-// Lines are coalesced into batches to avoid O(n)-per-line work downstream
-// (each batch triggers exactly one UI refresh regardless of how many lines
-// it contains). A batch is flushed when it reaches maxBatch lines or when
-// flushDelay has elapsed since the first line in the current batch.
-//
-// Each raw line is run through parser before being added to the batch.
-// If parser is nil, logmsg.PassthroughParser is used.
-//
-// Callers that wrap os.Stdin or a file should pass the reader directly;
-// pump does its own buffering.
-func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser) {
+// Lines are coalesced into batches; a batch is flushed at maxBatch lines or
+// after flushDelay with no new lines. If parser is nil, PassthroughParser is used.
+func pumpLines(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser) error {
 	if parser == nil {
 		parser = logmsg.PassthroughParser{}
 	}
@@ -63,9 +67,9 @@ func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser)
 	scanner.Buffer(make([]byte, 64*1024), maxLine)
 
 	const (
-		maxBatch    = 100
-		flushDelay  = 10 * time.Millisecond
-		idleDelay   = 200 * time.Millisecond
+		maxBatch   = 100
+		flushDelay = 10 * time.Millisecond
+		idleDelay  = 200 * time.Millisecond
 	)
 	batch := make([]logmsg.LogMessage, 0, maxBatch)
 
@@ -106,7 +110,7 @@ func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser)
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
 			flush()
 		case <-idleTimer.C:
@@ -116,7 +120,7 @@ func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser)
 			if !ok {
 				batch = append(batch, parser.Flush()...)
 				flush()
-				goto done
+				return scanner.Err()
 			}
 			batch = append(batch, parser.Parse(lastCRSegment(line))...)
 			resetIdle()
@@ -125,12 +129,15 @@ func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser)
 			}
 		}
 	}
-done:
+}
 
+// pump calls pumpLines and sends a terminal EOFMsg or ErrMsg.
+func pump(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Parser) {
+	err := pumpLines(ctx, r, sender, parser)
 	if ctx.Err() != nil {
 		return
 	}
-	if err := scanner.Err(); err != nil {
+	if err != nil {
 		sender.Send(ErrMsg{Err: err})
 		return
 	}

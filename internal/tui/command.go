@@ -29,6 +29,7 @@ var cmdRegistry = map[string]cmdHandler{
 	"config":    cmdConfig,
 	"quit":      cmdQuit,
 	"pretty":    cmdPretty,
+	"follow":    cmdFollow,
 }
 
 // infoErr is returned by handlers that want to keep the palette open and
@@ -478,6 +479,35 @@ func cmdPretty(m Model, args string) (Model, tea.Cmd, error) {
 	}
 	applyPrettyMode(&m)
 	return m, nil, nil
+}
+
+// cmdFollow implements :follow [on|off|status].
+// Only available for file sources; no-op (with error) on stdin.
+func cmdFollow(m Model, args string) (Model, tea.Cmd, error) {
+	if m.sourceKind != SourceFile || m.fileFollow == nil {
+		return m, nil, fmt.Errorf(":follow is only available when reading a file")
+	}
+	switch strings.TrimSpace(args) {
+	case "on":
+		if m.following {
+			return m, nil, infoErr{"already following"}
+		}
+		m.fileFollow.StartFollow()
+		return m, nil, nil // palette closes; FollowingMsg will update badge
+	case "off":
+		if !m.following {
+			return m, nil, infoErr{"not following"}
+		}
+		m.fileFollow.StopFollow()
+		return m, nil, nil // palette closes; EOFMsg will update badge
+	case "status", "":
+		if m.following {
+			return m, nil, infoErr{"follow: on"}
+		}
+		return m, nil, infoErr{"follow: off"}
+	default:
+		return m, nil, fmt.Errorf("usage: follow [on|off|status]")
+	}
 }
 
 // clearChat resets conversation state. Used by both the keybinding and

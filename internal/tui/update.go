@@ -49,9 +49,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case source.FollowingMsg:
+		m.following = true
+		m.eof = false
+		return m, nil
+
 	case source.EOFMsg:
+		wasFollowing := m.following
 		m.eof = true
-		if m.sourceKind == SourceFile {
+		m.following = false
+		// Only jump to top on the initial one-shot read (never followed).
+		// When follow stops (user ran :follow off or ctx cancelled) we stay
+		// wherever the viewport is.
+		if m.sourceKind == SourceFile && !wasFollowing {
 			m.logs.autoScroll = false
 			m.logs.GotoTop()
 		}
@@ -437,9 +447,12 @@ func (m Model) statusLine(lay layout) string {
 	lines := m.buf.Len()
 
 	var badge string
-	if m.eof {
+	switch {
+	case m.following:
+		badge = styleStatusBadgeFollowing.Render("following")
+	case m.eof:
 		badge = styleStatusBadgeEOF.Render("eof")
-	} else {
+	default:
 		badge = styleStatusBadgeLive.Render("live")
 	}
 

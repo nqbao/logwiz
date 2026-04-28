@@ -202,6 +202,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  H             toggle highlights on / off",
 		"  p             toggle pretty mode (humanlog-style layout for json/logfmt)",
 		"  :pretty       toggle pretty mode  |  :pretty on / :pretty off",
+		"  :follow [on|off|status]   toggle file-follow (auto-enabled when reading a file)",
 		"  :config <key> [val]   show or set a config value (model, api-key, base-url, sidebar-width, context-lines, system-prompt)",
 		"  n / N         next / previous search match",
 		"  esc           close sidebar / cancel palette / clear filter / clear search",
