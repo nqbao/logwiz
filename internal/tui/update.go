@@ -117,7 +117,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case filterTickMsg:
 		if !hasTimeRules(m.filterRules) {
-			return m, nil // no time rules left; let the tick loop die
+			m.filterTickRunning = false // loop dies; cmdFilter may spawn a fresh one
+			return m, nil
 		}
 		applyFilters(&m)
 		return m, filterTickCmd()

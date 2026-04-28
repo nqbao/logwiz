@@ -764,3 +764,47 @@ func TestFilterTick_RespectsFilterPaused(t *testing.T) {
 		t.Errorf("filterIndices = %v, want [1] (maintained while paused)", mm.filterIndices)
 	}
 }
+
+func TestCmdFilter_TimeRule_SecondCallDoesNotSpawnExtraTick(t *testing.T) {
+	m := newTestModel(t)
+	now := time.Now()
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Time: now.UTC().Format(time.RFC3339)},
+	)
+
+	// First time rule: cmd should be non-nil (starts the tick loop).
+	m1, cmd1, err := cmdFilter(m, "ts>1h")
+	if err != nil {
+		t.Fatalf("first cmdFilter error: %v", err)
+	}
+	if cmd1 == nil {
+		t.Fatal("first time rule should return a non-nil tick cmd")
+	}
+	if !m1.filterTickRunning {
+		t.Error("filterTickRunning should be true after first time rule")
+	}
+
+	// Second time rule while the tick loop is still in flight: cmd must be nil.
+	_, cmd2, err := cmdFilter(m1, "ts<now")
+	if err != nil {
+		t.Fatalf("second cmdFilter error: %v", err)
+	}
+	if cmd2 != nil {
+		t.Error("second time rule should NOT spawn a parallel tick loop")
+	}
+}
+
+func TestFilterTick_ResetsRunningFlagWhenNoRules(t *testing.T) {
+	m := newTestModel(t)
+	m.filterTickRunning = true // simulate a tick loop in flight, no rules
+
+	m2, cmd := m.Update(filterTickMsg{})
+	mm := m2.(Model)
+
+	if cmd != nil {
+		t.Error("expected nil cmd when no time rules")
+	}
+	if mm.filterTickRunning {
+		t.Error("filterTickRunning should reset to false so a future :filter can restart the loop")
+	}
+}

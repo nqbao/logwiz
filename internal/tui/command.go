@@ -243,7 +243,12 @@ func cmdFilter(m Model, args string) (Model, tea.Cmd, error) {
 			return m, nil, err
 		}
 		addTimeCmpFilter(&m, key, &timeCmp{op: cmpOp, ref: ref})
-		return m, filterTickCmd(), nil
+		var tick tea.Cmd
+		if !m.filterTickRunning {
+			m.filterTickRunning = true
+			tick = filterTickCmd()
+		}
+		return m, tick, nil
 	}
 
 	var re *regexp.Regexp
