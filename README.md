@@ -1,10 +1,8 @@
 # logwiz
 
-A small Go TUI that behaves like `tee` with an integrated chat sidebar
-for asking questions about the current log buffer, backed by any
-OpenAI-compatible chat completions endpoint.
-
-See [PLAN.md](./PLAN.md) for the v1 design and post-v1 roadmap.
+A terminal log viewer with an integrated AI chat sidebar, backed by any
+OpenAI-compatible endpoint. Read from stdin or a file, search, filter,
+highlight, and ask questions about your logs.
 
 ## Install
 
@@ -13,57 +11,59 @@ go install github.com/nqbao/logwiz/cmd/logwiz@latest
 ```
 
 Or build from source:
-
 ```
-go build -o logwiz ./cmd/logwiz
+make build
 ```
 
 ## Usage
 
-Stream from a running command:
-
 ```
-some_command 2>&1 | logwiz
-```
-
-Read a file:
-
-```
-logwiz server.log
+some_command 2>&1 | logwiz          # stream from pipe
+logwiz server.log                   # read a file
+logwiz --version                    # print version
 ```
 
-## Keys
+## Commands & Keys
 
-| Key          | Action                                |
-| ------------ | ------------------------------------- |
-| `/`          | open chat sidebar and focus input     |
-| `esc`        | blur input; again closes sidebar      |
-| `tab`        | switch focus between logs and input   |
-| `enter`      | send the current chat message         |
-| `c`          | clear chat history                    |
-| `?`          | toggle help overlay                   |
-| `j`/`k`/pgup/pgdn | scroll the log pane              |
-| `q` / `ctrl+c` | quit                                |
+| Key | Action |
+| --- | ------ |
+| `/` | open command palette |
+| `:chat [q]` | open chat sidebar |
+| `:search` / `:grep` | regex search / filter |
+| `:hl` / `:nohl` | highlight / clear highlights |
+| `p` / `:pretty` | toggle pretty mode (humanlog-style) |
+| `w` | toggle line wrap |
+| `n` / `N` | next / prev search match |
+| `f` / `F` | pause / clear filter |
+| `H` | toggle highlights |
+| `c` | clear chat history |
+| `?` | toggle help overlay |
+| `tab` | switch focus |
+| `esc` | close sidebar / cancel palette |
+| `j` / `k` / pgup / pgdn | scroll logs |
+| `q` | quit |
+
+Unprefixed palette input runs through an AI agent — ask questions like
+"how many errors?" or "show me lines with timeout".
 
 ## Configuration
 
-Flags override env vars, which override defaults.
+Flags > env vars > `~/.logwiz/config.json` > defaults. Runtime config
+via `:config <key> [val]`.
 
-| Flag              | Env var            | Default                      |
-| ----------------- | ------------------ | ---------------------------- |
-| `--api-key`       | `OPENAI_API_KEY`   | —                            |
-| `--base-url`      | `OPENAI_BASE_URL`  | `https://api.openai.com/v1`  |
-| `--model`         | `OPENAI_MODEL`     | `gpt-4o-mini`                |
-| `--max-lines`     | —                  | `5000`                       |
-| `--context-lines` | —                  | `300`                        |
-| `--sidebar-width` | —                  | `50`                         |
-| `--system-prompt` | —                  | log-analysis default         |
-
-Any OpenAI-compatible server works — point `--base-url` at it (e.g.
-`http://localhost:11434/v1` for an Ollama OpenAI shim).
+| Flag | Env | Default |
+| --- | --- | --- |
+| `--api-key` | `OPENAI_API_KEY` | — |
+| `--base-url` | `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
+| `--model` | `OPENAI_MODEL` | `gpt-4o-mini` |
+| `--max-lines` | — | `50000` |
+| `--context-lines` | — | `10` |
+| `--sidebar-width` | — | `50` |
+| `--pretty` | — | `false` |
+| `--format` | — | `auto` |
 
 ## Tests
 
 ```
-go test ./...
+make test
 ```

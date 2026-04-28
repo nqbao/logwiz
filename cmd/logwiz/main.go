@@ -27,7 +27,17 @@ import (
 	"github.com/nqbao/logwiz/internal/tui"
 )
 
+// Version is set at build time via ldflags:
+//
+//	go build -ldflags "-X main.Version=$(VERSION)"
+var Version = "dev"
+
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Println("logwiz", Version)
+		return
+	}
+
 	// Capture the pipeline pgid before running so we can signal the whole
 	// group (start_api.sh, uvicorn, vite, etc.) when logwiz exits.
 	pgid, pgidErr := syscall.Getpgid(0)
