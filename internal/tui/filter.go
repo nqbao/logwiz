@@ -3,6 +3,7 @@ package tui
 import (
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/nqbao/logwiz/internal/logmsg"
 )
@@ -14,18 +15,52 @@ const (
 	filterExclude
 )
 
+// timeCmp holds a time comparison predicate for :filter ts>now-5m style rules.
+// ref is called at match time so relative offsets stay accurate.
+type timeCmp struct {
+	op  string        // ">", ">=", "<", "<="
+	ref func() time.Time
+}
+
 // filterRule is one include/exclude predicate in the active filter stack.
+// Exactly one of re or cmp is non-nil.
 // key is the attribute name for :filter (Grafana-style); empty means match
 // against the raw line (used by :grep).
 type filterRule struct {
 	key  string
-	re   *regexp.Regexp
+	re   *regexp.Regexp // nil for time comparison rules
+	cmp  *timeCmp       // nil for regex rules
 	mode filterMode
 }
 
 // passesFilters returns true when msg satisfies every rule (AND logic).
 func passesFilters(rules []filterRule, msg logmsg.LogMessage) bool {
 	for _, r := range rules {
+		if r.cmp != nil {
+			t, ok := logmsg.ParseTime(strings.TrimSpace(msg.Attr(r.key)))
+			if !ok {
+				return false
+			}
+			ref := r.cmp.ref()
+			var matched bool
+			switch r.cmp.op {
+			case ">":
+				matched = t.After(ref)
+			case ">=":
+				matched = !t.Before(ref)
+			case "<":
+				matched = t.Before(ref)
+			case "<=":
+				matched = !t.After(ref)
+			}
+			if r.mode == filterInclude && !matched {
+				return false
+			}
+			if r.mode == filterExclude && matched {
+				return false
+			}
+			continue
+		}
 		var target string
 		if r.key == "" {
 			target = msg.Raw
@@ -54,6 +89,13 @@ func addFilter(m *Model, re *regexp.Regexp, mode filterMode) {
 // addAttrFilter appends an attribute rule to the stack (:filter).
 func addAttrFilter(m *Model, key string, re *regexp.Regexp, mode filterMode) {
 	m.filterRules = append(m.filterRules, filterRule{key: key, re: re, mode: mode})
+	m.filterEnabled = true
+	applyFilters(m)
+}
+
+// addTimeCmpFilter appends a time comparison rule to the stack (:filter ts>now-5m).
+func addTimeCmpFilter(m *Model, key string, cmp *timeCmp) {
+	m.filterRules = append(m.filterRules, filterRule{key: key, cmp: cmp, mode: filterInclude})
 	m.filterEnabled = true
 	applyFilters(m)
 }

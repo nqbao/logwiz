@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
@@ -501,5 +503,185 @@ func TestCmdFilter_UnquotedValue(t *testing.T) {
 	}
 	if len(newM.filterIndices) != 1 || newM.filterIndices[0] != 0 {
 		t.Errorf("filterIndices = %v, want [0]", newM.filterIndices)
+	}
+}
+
+// --- time comparison rules ---
+
+func TestTimeCmp_GreaterThan_RecentLine(t *testing.T) {
+	m := newTestModel(t)
+	now := time.Now()
+	old := now.Add(-10 * time.Minute).UTC().Format(time.RFC3339)
+	recent := now.Add(-1 * time.Minute).UTC().Format(time.RFC3339)
+
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "old", Time: old},
+		logmsg.LogMessage{Raw: "recent", Time: recent},
+	)
+
+	ref := func() time.Time { return time.Now().Add(-5 * time.Minute) }
+	addTimeCmpFilter(&m, "ts", &timeCmp{op: ">", ref: ref})
+
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 1 {
+		t.Errorf("filterIndices = %v, want [1] (only recent line)", m.filterIndices)
+	}
+}
+
+func TestTimeCmp_LessThan_OldLine(t *testing.T) {
+	m := newTestModel(t)
+	now := time.Now()
+	old := now.Add(-10 * time.Minute).UTC().Format(time.RFC3339)
+	recent := now.Add(-1 * time.Minute).UTC().Format(time.RFC3339)
+
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "old", Time: old},
+		logmsg.LogMessage{Raw: "recent", Time: recent},
+	)
+
+	ref := func() time.Time { return time.Now().Add(-5 * time.Minute) }
+	addTimeCmpFilter(&m, "ts", &timeCmp{op: "<", ref: ref})
+
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 0 {
+		t.Errorf("filterIndices = %v, want [0] (only old line)", m.filterIndices)
+	}
+}
+
+func TestTimeCmp_MissingTimestamp_Excluded(t *testing.T) {
+	m := newTestModel(t)
+	recent := time.Now().Add(-1 * time.Minute).UTC().Format(time.RFC3339)
+
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "no-ts"},
+		logmsg.LogMessage{Raw: "has-ts", Time: recent},
+	)
+
+	ref := func() time.Time { return time.Now().Add(-5 * time.Minute) }
+	addTimeCmpFilter(&m, "ts", &timeCmp{op: ">", ref: ref})
+
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 1 {
+		t.Errorf("filterIndices = %v, want [1] (no-ts line excluded)", m.filterIndices)
+	}
+}
+
+func TestTimeCmp_EpochTimestamp(t *testing.T) {
+	m := newTestModel(t)
+	now := time.Now()
+	oldEpoch := fmt.Sprintf("%d", now.Add(-10*time.Minute).Unix())
+	recentEpoch := fmt.Sprintf("%d", now.Add(-1*time.Minute).Unix())
+
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "old", Time: oldEpoch},
+		logmsg.LogMessage{Raw: "recent", Time: recentEpoch},
+	)
+
+	ref := func() time.Time { return time.Now().Add(-5 * time.Minute) }
+	addTimeCmpFilter(&m, "ts", &timeCmp{op: ">", ref: ref})
+
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 1 {
+		t.Errorf("filterIndices = %v, want [1]", m.filterIndices)
+	}
+}
+
+// --- parseRHSTime ---
+
+func TestParseRHSTime_Now(t *testing.T) {
+	ref, err := parseRHSTime("now")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	diff := time.Since(ref())
+	if diff < -time.Second || diff > time.Second {
+		t.Errorf("parseRHSTime(now) returned time %v off from now", diff)
+	}
+}
+
+func TestParseRHSTime_RelativeOffset(t *testing.T) {
+	ref, err := parseRHSTime("now-5m")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	diff := time.Since(ref())
+	if diff < 4*time.Minute || diff > 6*time.Minute {
+		t.Errorf("parseRHSTime(now-5m) off by %v", diff-5*time.Minute)
+	}
+}
+
+func TestParseRHSTime_BareShorthand(t *testing.T) {
+	ref, err := parseRHSTime("30m")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	diff := time.Since(ref())
+	if diff < 29*time.Minute || diff > 31*time.Minute {
+		t.Errorf("parseRHSTime(30m) off by %v", diff-30*time.Minute)
+	}
+}
+
+func TestParseRHSTime_AbsoluteRFC3339(t *testing.T) {
+	ts := "2024-01-15T10:30:00Z"
+	ref, err := parseRHSTime(ts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want, _ := time.Parse(time.RFC3339, ts)
+	if !ref().Equal(want) {
+		t.Errorf("parseRHSTime(%q) = %v, want %v", ts, ref(), want)
+	}
+}
+
+func TestParseRHSTime_Invalid(t *testing.T) {
+	_, err := parseRHSTime("yesterday")
+	if err == nil {
+		t.Error("expected error for invalid time expression")
+	}
+}
+
+// --- cmdFilter time integration ---
+
+func TestCmdFilter_TimeGreaterThan(t *testing.T) {
+	m := newTestModel(t)
+	now := time.Now()
+	recent := now.Add(-1 * time.Minute).UTC().Format(time.RFC3339)
+	old := now.Add(-10 * time.Minute).UTC().Format(time.RFC3339)
+
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "old", Time: old},
+		logmsg.LogMessage{Raw: "recent", Time: recent},
+	)
+
+	newM, _, err := cmdFilter(m, "ts>now-5m")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(newM.filterIndices) != 1 || newM.filterIndices[0] != 1 {
+		t.Errorf("filterIndices = %v, want [1]", newM.filterIndices)
+	}
+}
+
+func TestCmdFilter_TimeShorthand(t *testing.T) {
+	m := newTestModel(t)
+	now := time.Now()
+	recent := now.Add(-1 * time.Minute).UTC().Format(time.RFC3339)
+	old := now.Add(-10 * time.Minute).UTC().Format(time.RFC3339)
+
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "old", Time: old},
+		logmsg.LogMessage{Raw: "recent", Time: recent},
+	)
+
+	newM, _, err := cmdFilter(m, "ts>5m")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(newM.filterIndices) != 1 || newM.filterIndices[0] != 1 {
+		t.Errorf("filterIndices = %v, want [1]", newM.filterIndices)
+	}
+}
+
+func TestCmdFilter_NonTimeKeyComparison_Error(t *testing.T) {
+	m := newTestModel(t)
+	_, _, err := cmdFilter(m, "status>200")
+	if err == nil {
+		t.Error("expected error for comparison on non-time key")
 	}
 }

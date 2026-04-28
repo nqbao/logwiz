@@ -192,6 +192,8 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  :filter key!=val          exclude by attribute",
 		"  :filter key=~re           filter by attribute regex",
 		"  :filter key!~re           exclude by attribute regex",
+		"  :filter ts>now-5m         relative time (last 5 min); also >=, <, <=",
+		"  :filter ts>1h             shorthand for ts>now-1h",
 		"  f             pause / resume active filter",
 		"  F             clear all filter rules",
 		"  :hl [-i] [-F] re    highlight matching lines in colour (stackable, does not hide)",
