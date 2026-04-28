@@ -95,11 +95,14 @@ type Model struct {
 	searchCursor  int
 
 	// Filter state (orthogonal to search: filter hides, search highlights).
-	// Each :grep / :grep -v appends a rule; all rules are ANDed together.
+	// Each :grep / :filter appends a rule; all rules are ANDed together.
 	// filterEnabled can be toggled with 'f' without losing the rules.
-	filterRules   []filterRule
-	filterIndices []int
-	filterEnabled bool
+	// filterTickRunning is true while a 1s reapply tick is in flight for time
+	// rules; prevents adding a second time rule from spawning a parallel loop.
+	filterRules       []filterRule
+	filterIndices     []int
+	filterEnabled     bool
+	filterTickRunning bool
 
 	// Highlight state: colours matching lines without hiding non-matching ones.
 	// Orthogonal to both filter and search; H toggles enabled without losing rules.

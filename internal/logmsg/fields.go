@@ -9,6 +9,26 @@ import (
 	"time"
 )
 
+// ParseTime attempts to parse s as RFC3339(Nano), epoch-ms, or epoch-s.
+// Returns the parsed time and true on success; zero time and false otherwise.
+func ParseTime(s string) (time.Time, bool) {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, true
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, true
+	}
+	if f, err := strconv.ParseFloat(s, 64); err == nil && f > 0 {
+		if f > 1e12 {
+			return time.UnixMilli(int64(f)), true
+		}
+		sec := int64(f)
+		nsec := int64((f - float64(sec)) * 1e9)
+		return time.Unix(sec, nsec), true
+	}
+	return time.Time{}, false
+}
+
 // NormalizeTime parses RFC3339, epoch-sec, or epoch-ms timestamps and returns
 // YYYY-MM-DD HH:MM:SS.mmm (UTC). Returns s unchanged when no format matches.
 func NormalizeTime(s string) string {

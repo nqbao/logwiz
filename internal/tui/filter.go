@@ -2,6 +2,10 @@ package tui
 
 import (
 	"regexp"
+	"strings"
+	"time"
+
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 type filterMode int
@@ -11,16 +15,59 @@ const (
 	filterExclude
 )
 
+// timeCmp holds a time comparison predicate for :filter ts>now-5m style rules.
+// ref is called at match time so relative offsets stay accurate.
+type timeCmp struct {
+	op  string        // ">", ">=", "<", "<="
+	ref func() time.Time
+}
+
 // filterRule is one include/exclude predicate in the active filter stack.
+// Exactly one of re or cmp is non-nil.
+// key is the attribute name for :filter (Grafana-style); empty means match
+// against the raw line (used by :grep).
 type filterRule struct {
-	re   *regexp.Regexp
+	key  string
+	re   *regexp.Regexp // nil for time comparison rules
+	cmp  *timeCmp       // nil for regex rules
 	mode filterMode
 }
 
-// passesFilters returns true when raw satisfies every rule (AND logic).
-func passesFilters(rules []filterRule, raw string) bool {
+// passesFilters returns true when msg satisfies every rule (AND logic).
+func passesFilters(rules []filterRule, msg logmsg.LogMessage) bool {
 	for _, r := range rules {
-		matched := r.re.MatchString(raw)
+		if r.cmp != nil {
+			t, ok := logmsg.ParseTime(strings.TrimSpace(msg.Attr(r.key)))
+			if !ok {
+				return false
+			}
+			ref := r.cmp.ref()
+			var matched bool
+			switch r.cmp.op {
+			case ">":
+				matched = t.After(ref)
+			case ">=":
+				matched = !t.Before(ref)
+			case "<":
+				matched = t.Before(ref)
+			case "<=":
+				matched = !t.After(ref)
+			}
+			if r.mode == filterInclude && !matched {
+				return false
+			}
+			if r.mode == filterExclude && matched {
+				return false
+			}
+			continue
+		}
+		var target string
+		if r.key == "" {
+			target = msg.Raw
+		} else {
+			target = strings.TrimSpace(msg.Attr(r.key))
+		}
+		matched := r.re.MatchString(target)
 		if r.mode == filterInclude && !matched {
 			return false
 		}
@@ -31,11 +78,24 @@ func passesFilters(rules []filterRule, raw string) bool {
 	return true
 }
 
-// addFilter appends a rule to the stack, enables the filter, and recomputes
-// filterIndices. O(N) full scan; acceptable since the buffer is ring-bounded
-// and this only runs on an explicit user command.
+// addFilter appends a raw-line rule to the stack (:grep), enables the filter,
+// and recomputes filterIndices.
 func addFilter(m *Model, re *regexp.Regexp, mode filterMode) {
 	m.filterRules = append(m.filterRules, filterRule{re: re, mode: mode})
+	m.filterEnabled = true
+	applyFilters(m)
+}
+
+// addAttrFilter appends an attribute rule to the stack (:filter).
+func addAttrFilter(m *Model, key string, re *regexp.Regexp, mode filterMode) {
+	m.filterRules = append(m.filterRules, filterRule{key: key, re: re, mode: mode})
+	m.filterEnabled = true
+	applyFilters(m)
+}
+
+// addTimeCmpFilter appends a time comparison rule to the stack (:filter ts>now-5m).
+func addTimeCmpFilter(m *Model, key string, cmp *timeCmp) {
+	m.filterRules = append(m.filterRules, filterRule{key: key, cmp: cmp, mode: filterInclude})
 	m.filterEnabled = true
 	applyFilters(m)
 }
@@ -43,19 +103,34 @@ func addFilter(m *Model, re *regexp.Regexp, mode filterMode) {
 // applyFilters recomputes filterIndices from the current rule stack. The
 // result is always a non-nil slice so the viewport can distinguish "filter
 // active with zero matches" from "no filter".
+// Viewport and search are only updated when filterEnabled is true, so
+// calling this while paused keeps filterIndices fresh without un-pausing.
 func applyFilters(m *Model) {
 	indices := make([]int, 0)
 	n := m.buf.Len()
 	for i := 0; i < n; i++ {
-		if passesFilters(m.filterRules, m.buf.Line(i).Raw) {
+		if passesFilters(m.filterRules, m.buf.Line(i)) {
 			indices = append(indices, i)
 		}
 	}
 	m.filterIndices = indices
-	m.logs.SetFilter(indices)
-	if m.searchRe != nil {
-		m.intersectSearch()
+	if m.filterEnabled {
+		m.logs.SetFilter(indices)
+		if m.searchRe != nil {
+			m.intersectSearch()
+		}
 	}
+}
+
+// hasTimeRules reports whether any rule in the stack is a time comparison.
+// Used to decide whether the filter tick loop should keep running.
+func hasTimeRules(rules []filterRule) bool {
+	for _, r := range rules {
+		if r.cmp != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // updateFilter keeps filterIndices consistent after a batch of new lines is
@@ -87,7 +162,7 @@ func (m *Model) updateFilter(newLines, evictions int) {
 		start = 0
 	}
 	for i := start; i < bufLen; i++ {
-		if passesFilters(m.filterRules, m.buf.Line(i).Raw) {
+		if passesFilters(m.filterRules, m.buf.Line(i)) {
 			m.filterIndices = append(m.filterIndices, i)
 		}
 	}

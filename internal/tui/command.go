@@ -6,10 +6,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/nqbao/logwiz/internal/config"
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 type cmdHandler func(m Model, args string) (Model, tea.Cmd, error)
@@ -18,6 +20,7 @@ var cmdRegistry = map[string]cmdHandler{
 	"chat":      cmdChat,
 	"search":    cmdSearch,
 	"grep":      cmdGrep,
+	"filter":    cmdFilter,
 	"highlight": cmdHighlight,
 	"hl":        cmdHighlight,
 	"nohl":      cmdNoHL,
@@ -164,6 +167,138 @@ func cmdGrep(m Model, args string) (Model, tea.Cmd, error) {
 	}
 	addFilter(&m, re, mode)
 	return m, nil, nil
+}
+
+// cmdFilter implements :filter key=val  key!=val  key=~re  key!~re.
+// Each call adds one attribute rule to the filter stack (ANDed with others).
+// Operators are matched longest-first: !~  =~  !=  =
+// The value may be optionally wrapped in " or ' quotes.
+// For = and != the value is matched case-insensitively as a full-string literal.
+// For =~ and !~ the value is compiled as a regular expression.
+func cmdFilter(m Model, args string) (Model, tea.Cmd, error) {
+	if args == "" {
+		n := len(m.filterRules)
+		if n == 0 {
+			return m, nil, infoErr{"no active filter"}
+		}
+		return m, nil, infoErr{fmt.Sprintf("%d active filter(s) — esc to clear all", n)}
+	}
+
+	type opDef struct {
+		tok   string
+		mode  filterMode
+		regex bool
+		cmp   bool // time/numeric comparison
+	}
+	// Longest-match first: 2-char operators before 1-char.
+	ops := []opDef{
+		{"!~", filterExclude, true, false},
+		{"=~", filterInclude, true, false},
+		{"!=", filterExclude, false, false},
+		{">=", filterInclude, false, true},
+		{"<=", filterInclude, false, true},
+		{">", filterInclude, false, true},
+		{"<", filterInclude, false, true},
+		{"=", filterInclude, false, false},
+	}
+
+	var key, val string
+	var mode filterMode
+	var isRegex, isCmp bool
+	var cmpOp string
+	found := false
+	for _, op := range ops {
+		idx := strings.Index(args, op.tok)
+		if idx < 0 {
+			continue
+		}
+		key = strings.TrimSpace(args[:idx])
+		val = strings.TrimSpace(args[idx+len(op.tok):])
+		mode = op.mode
+		isRegex = op.regex
+		isCmp = op.cmp
+		cmpOp = op.tok
+		found = true
+		break
+	}
+	if !found || key == "" {
+		return m, nil, fmt.Errorf("usage: filter key=val  key!=val  key=~re  key!~re  key>now-5m")
+	}
+
+	val = strings.Trim(val, `"'`)
+
+	if isCmp {
+		isTimeKey := false
+		for _, tk := range logmsg.TimeKeys {
+			if strings.ToLower(key) == tk {
+				isTimeKey = true
+				break
+			}
+		}
+		if !isTimeKey {
+			return m, nil, fmt.Errorf("comparison operators >/</>=/<= are only supported for time keys (%s)", strings.Join(logmsg.TimeKeys, ", "))
+		}
+		ref, err := parseRHSTime(val)
+		if err != nil {
+			return m, nil, err
+		}
+		addTimeCmpFilter(&m, key, &timeCmp{op: cmpOp, ref: ref})
+		var tick tea.Cmd
+		if !m.filterTickRunning {
+			m.filterTickRunning = true
+			tick = filterTickCmd()
+		}
+		return m, tick, nil
+	}
+
+	var re *regexp.Regexp
+	var err error
+	if isRegex {
+		re, err = regexp.Compile(val)
+	} else {
+		re, err = regexp.Compile("(?i)^" + regexp.QuoteMeta(val) + "$")
+	}
+	if err != nil {
+		return m, nil, err
+	}
+
+	addAttrFilter(&m, key, re, mode)
+	return m, nil, nil
+}
+
+// parseRHSTime parses a time filter right-hand side:
+//   - "now"        → time.Now()
+//   - "now-5m"     → time.Now().Add(-5m)
+//   - "5m"         → shorthand for now-5m
+//   - RFC3339      → fixed absolute time
+func parseRHSTime(s string) (func() time.Time, error) {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "now") {
+		rest := s[3:]
+		if rest == "" {
+			return time.Now, nil
+		}
+		if strings.HasPrefix(rest, "-") {
+			d, err := time.ParseDuration(rest[1:])
+			if err != nil {
+				return nil, fmt.Errorf("invalid duration %q: %w", rest[1:], err)
+			}
+			return func() time.Time { return time.Now().Add(-d) }, nil
+		}
+		return nil, fmt.Errorf("invalid time expression %q (expected now, now-5m, 1h, or RFC3339)", s)
+	}
+	// bare duration: "5m" → shorthand for now-5m
+	if d, err := time.ParseDuration(s); err == nil && d > 0 {
+		return func() time.Time { return time.Now().Add(-d) }, nil
+	}
+	// absolute RFC3339
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return func() time.Time { return t }, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return func() time.Time { return t }, nil
+	}
+	return nil, fmt.Errorf("invalid time expression %q (use now-5m, 1h, or RFC3339)", s)
 }
 
 // parseGrepFlags parses leading flag tokens from args and returns the
