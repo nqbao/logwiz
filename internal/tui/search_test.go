@@ -16,6 +16,13 @@ func seedBuf(buf *buffer.Buffer, lines ...string) {
 	}
 }
 
+// seedStructured appends pre-built LogMessages to a buffer.
+func seedStructured(buf *buffer.Buffer, msgs ...logmsg.LogMessage) {
+	for _, m := range msgs {
+		buf.Append(m)
+	}
+}
+
 // TestUpdateSearch_NewMatchesAdded verifies that a newly appended matching
 // line is appended to searchMatches without moving the viewport.
 func TestUpdateSearch_NewMatchesAdded(t *testing.T) {

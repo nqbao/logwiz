@@ -18,6 +18,7 @@ var cmdRegistry = map[string]cmdHandler{
 	"chat":      cmdChat,
 	"search":    cmdSearch,
 	"grep":      cmdGrep,
+	"filter":    cmdFilter,
 	"highlight": cmdHighlight,
 	"hl":        cmdHighlight,
 	"nohl":      cmdNoHL,
@@ -163,6 +164,70 @@ func cmdGrep(m Model, args string) (Model, tea.Cmd, error) {
 		return m, nil, err
 	}
 	addFilter(&m, re, mode)
+	return m, nil, nil
+}
+
+// cmdFilter implements :filter key=val  key!=val  key=~re  key!~re.
+// Each call adds one attribute rule to the filter stack (ANDed with others).
+// Operators are matched longest-first: !~  =~  !=  =
+// The value may be optionally wrapped in " or ' quotes.
+// For = and != the value is matched case-insensitively as a full-string literal.
+// For =~ and !~ the value is compiled as a regular expression.
+func cmdFilter(m Model, args string) (Model, tea.Cmd, error) {
+	if args == "" {
+		n := len(m.filterRules)
+		if n == 0 {
+			return m, nil, infoErr{"no active filter"}
+		}
+		return m, nil, infoErr{fmt.Sprintf("%d active filter(s) — esc to clear all", n)}
+	}
+
+	type opDef struct {
+		tok   string
+		mode  filterMode
+		regex bool
+	}
+	ops := []opDef{
+		{"!~", filterExclude, true},
+		{"=~", filterInclude, true},
+		{"!=", filterExclude, false},
+		{"=", filterInclude, false},
+	}
+
+	var key, val string
+	var mode filterMode
+	var isRegex bool
+	found := false
+	for _, op := range ops {
+		idx := strings.Index(args, op.tok)
+		if idx < 0 {
+			continue
+		}
+		key = strings.TrimSpace(args[:idx])
+		val = strings.TrimSpace(args[idx+len(op.tok):])
+		mode = op.mode
+		isRegex = op.regex
+		found = true
+		break
+	}
+	if !found || key == "" {
+		return m, nil, fmt.Errorf("usage: filter key=val  key!=val  key=~re  key!~re")
+	}
+
+	val = strings.Trim(val, `"'`)
+
+	var re *regexp.Regexp
+	var err error
+	if isRegex {
+		re, err = regexp.Compile(val)
+	} else {
+		re, err = regexp.Compile("(?i)^" + regexp.QuoteMeta(val) + "$")
+	}
+	if err != nil {
+		return m, nil, err
+	}
+
+	addAttrFilter(&m, key, re, mode)
 	return m, nil, nil
 }
 

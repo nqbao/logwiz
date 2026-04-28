@@ -2,6 +2,9 @@ package tui
 
 import (
 	"regexp"
+	"strings"
+
+	"github.com/nqbao/logwiz/internal/logmsg"
 )
 
 type filterMode int
@@ -12,15 +15,24 @@ const (
 )
 
 // filterRule is one include/exclude predicate in the active filter stack.
+// key is the attribute name for :filter (Grafana-style); empty means match
+// against the raw line (used by :grep).
 type filterRule struct {
+	key  string
 	re   *regexp.Regexp
 	mode filterMode
 }
 
-// passesFilters returns true when raw satisfies every rule (AND logic).
-func passesFilters(rules []filterRule, raw string) bool {
+// passesFilters returns true when msg satisfies every rule (AND logic).
+func passesFilters(rules []filterRule, msg logmsg.LogMessage) bool {
 	for _, r := range rules {
-		matched := r.re.MatchString(raw)
+		var target string
+		if r.key == "" {
+			target = msg.Raw
+		} else {
+			target = strings.TrimSpace(msg.Attr(r.key))
+		}
+		matched := r.re.MatchString(target)
 		if r.mode == filterInclude && !matched {
 			return false
 		}
@@ -31,11 +43,17 @@ func passesFilters(rules []filterRule, raw string) bool {
 	return true
 }
 
-// addFilter appends a rule to the stack, enables the filter, and recomputes
-// filterIndices. O(N) full scan; acceptable since the buffer is ring-bounded
-// and this only runs on an explicit user command.
+// addFilter appends a raw-line rule to the stack (:grep), enables the filter,
+// and recomputes filterIndices.
 func addFilter(m *Model, re *regexp.Regexp, mode filterMode) {
 	m.filterRules = append(m.filterRules, filterRule{re: re, mode: mode})
+	m.filterEnabled = true
+	applyFilters(m)
+}
+
+// addAttrFilter appends an attribute rule to the stack (:filter).
+func addAttrFilter(m *Model, key string, re *regexp.Regexp, mode filterMode) {
+	m.filterRules = append(m.filterRules, filterRule{key: key, re: re, mode: mode})
 	m.filterEnabled = true
 	applyFilters(m)
 }
@@ -47,7 +65,7 @@ func applyFilters(m *Model) {
 	indices := make([]int, 0)
 	n := m.buf.Len()
 	for i := 0; i < n; i++ {
-		if passesFilters(m.filterRules, m.buf.Line(i).Raw) {
+		if passesFilters(m.filterRules, m.buf.Line(i)) {
 			indices = append(indices, i)
 		}
 	}
@@ -87,7 +105,7 @@ func (m *Model) updateFilter(newLines, evictions int) {
 		start = 0
 	}
 	for i := start; i < bufLen; i++ {
-		if passesFilters(m.filterRules, m.buf.Line(i).Raw) {
+		if passesFilters(m.filterRules, m.buf.Line(i)) {
 			m.filterIndices = append(m.filterIndices, i)
 		}
 	}

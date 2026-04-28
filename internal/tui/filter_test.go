@@ -286,3 +286,220 @@ func TestUpdateFilter_ViaNewLinesMsg(t *testing.T) {
 		t.Errorf("new filter index = %d, want 3", mm.filterIndices[2])
 	}
 }
+
+// --- :filter (attribute rules) ---
+
+func TestAttrFilter_ExactMatch(t *testing.T) {
+	m := newTestModel(t)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: `{"level":"error","msg":"boom"}`, Level: "ERROR", Message: "boom"},
+		logmsg.LogMessage{Raw: `{"level":"info","msg":"ok"}`, Level: "INFO ", Message: "ok"},
+		logmsg.LogMessage{Raw: `{"level":"error","msg":"crash"}`, Level: "ERROR", Message: "crash"},
+	)
+
+	re := regexp.MustCompile(`(?i)^error$`)
+	addAttrFilter(&m, "level", re, filterInclude)
+
+	if len(m.filterIndices) != 2 {
+		t.Fatalf("filterIndices = %v, want [0 2]", m.filterIndices)
+	}
+	if m.filterIndices[0] != 0 || m.filterIndices[1] != 2 {
+		t.Errorf("filterIndices = %v, want [0 2]", m.filterIndices)
+	}
+}
+
+func TestAttrFilter_ExactExclude(t *testing.T) {
+	m := newTestModel(t)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Level: "DEBUG"},
+		logmsg.LogMessage{Raw: "b", Level: "INFO "},
+		logmsg.LogMessage{Raw: "c", Level: "DEBUG"},
+	)
+
+	re := regexp.MustCompile(`(?i)^debug$`)
+	addAttrFilter(&m, "level", re, filterExclude)
+
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 1 {
+		t.Errorf("filterIndices = %v, want [1]", m.filterIndices)
+	}
+}
+
+func TestAttrFilter_RegexMatch(t *testing.T) {
+	m := newTestModel(t)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Message: "connection timeout"},
+		logmsg.LogMessage{Raw: "b", Message: "all good"},
+		logmsg.LogMessage{Raw: "c", Message: "timeout exceeded"},
+	)
+
+	re := regexp.MustCompile(`timeout`)
+	addAttrFilter(&m, "msg", re, filterInclude)
+
+	if len(m.filterIndices) != 2 {
+		t.Fatalf("filterIndices = %v, want [0 2]", m.filterIndices)
+	}
+}
+
+func TestAttrFilter_CanonicaLevelAlias(t *testing.T) {
+	m := newTestModel(t)
+	// "lvl" is a canonical alias for Level
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Level: "ERROR"},
+		logmsg.LogMessage{Raw: "b", Level: "INFO "},
+	)
+
+	re := regexp.MustCompile(`(?i)^error$`)
+	addAttrFilter(&m, "lvl", re, filterInclude)
+
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 0 {
+		t.Errorf("filterIndices = %v, want [0]", m.filterIndices)
+	}
+}
+
+func TestAttrFilter_MixedWithGrep(t *testing.T) {
+	m := newTestModel(t)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "error: boom", Level: "ERROR", Message: "boom"},
+		logmsg.LogMessage{Raw: "error: crash", Level: "ERROR", Message: "crash"},
+		logmsg.LogMessage{Raw: "info: boom", Level: "INFO ", Message: "boom"},
+	)
+
+	// :grep error → lines 0,1,2 match raw "error" → [0,1] (info line doesn't have "error" in raw)
+	// Wait: "info: boom" doesn't have "error" so grep narrows to [0,1]
+	// Then :filter msg=boom narrows to [0]
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude) // → [0,1]
+	addAttrFilter(&m, "msg", regexp.MustCompile(`(?i)^boom$`), filterInclude) // → [0]
+
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 0 {
+		t.Errorf("filterIndices = %v, want [0]", m.filterIndices)
+	}
+}
+
+func TestAttrFilter_TrimSpaceOnLevel(t *testing.T) {
+	m := newTestModel(t)
+	// Level is stored as "INFO " (trailing space from NormalizeLevel)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Level: "INFO "},
+		logmsg.LogMessage{Raw: "b", Level: "ERROR"},
+	)
+
+	// (?i)^info$ should match "INFO " after TrimSpace → "INFO"
+	re := regexp.MustCompile(`(?i)^info$`)
+	addAttrFilter(&m, "level", re, filterInclude)
+
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 0 {
+		t.Errorf("filterIndices = %v, want [0] — TrimSpace should strip trailing space from level", m.filterIndices)
+	}
+}
+
+// --- cmdFilter parsing ---
+
+func TestCmdFilter_ParseExact(t *testing.T) {
+	m := newTestModel(t)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Level: "ERROR"},
+		logmsg.LogMessage{Raw: "b", Level: "INFO "},
+	)
+
+	newM, _, err := cmdFilter(m, `level="error"`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(newM.filterRules) != 1 {
+		t.Fatalf("filterRules = %d, want 1", len(newM.filterRules))
+	}
+	if newM.filterRules[0].key != "level" {
+		t.Errorf("key = %q, want \"level\"", newM.filterRules[0].key)
+	}
+	if len(newM.filterIndices) != 1 || newM.filterIndices[0] != 0 {
+		t.Errorf("filterIndices = %v, want [0]", newM.filterIndices)
+	}
+}
+
+func TestCmdFilter_ParseNotEqual(t *testing.T) {
+	m := newTestModel(t)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Level: "DEBUG"},
+		logmsg.LogMessage{Raw: "b", Level: "INFO "},
+	)
+
+	newM, _, err := cmdFilter(m, `level!="debug"`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(newM.filterIndices) != 1 || newM.filterIndices[0] != 1 {
+		t.Errorf("filterIndices = %v, want [1]", newM.filterIndices)
+	}
+}
+
+func TestCmdFilter_ParseRegex(t *testing.T) {
+	m := newTestModel(t)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Message: "timeout"},
+		logmsg.LogMessage{Raw: "b", Message: "ok"},
+	)
+
+	newM, _, err := cmdFilter(m, `msg=~"time.*"`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(newM.filterIndices) != 1 || newM.filterIndices[0] != 0 {
+		t.Errorf("filterIndices = %v, want [0]", newM.filterIndices)
+	}
+}
+
+func TestCmdFilter_ParseRegexNot(t *testing.T) {
+	m := newTestModel(t)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Message: "timeout"},
+		logmsg.LogMessage{Raw: "b", Message: "ok"},
+	)
+
+	newM, _, err := cmdFilter(m, `msg!~"time"`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(newM.filterIndices) != 1 || newM.filterIndices[0] != 1 {
+		t.Errorf("filterIndices = %v, want [1]", newM.filterIndices)
+	}
+}
+
+func TestCmdFilter_NoOp_ReportsCount(t *testing.T) {
+	m := newTestModel(t)
+	addFilter(&m, regexp.MustCompile(`x`), filterInclude)
+
+	_, _, err := cmdFilter(m, "")
+	if err == nil {
+		t.Fatal("want infoErr, got nil")
+	}
+	if _, ok := err.(infoErr); !ok {
+		t.Errorf("want infoErr, got %T: %v", err, err)
+	}
+}
+
+func TestCmdFilter_BadUsage(t *testing.T) {
+	m := newTestModel(t)
+	_, _, err := cmdFilter(m, "justpattern")
+	if err == nil {
+		t.Fatal("want error for missing operator")
+	}
+	if _, ok := err.(infoErr); ok {
+		t.Error("want hard error, not infoErr")
+	}
+}
+
+func TestCmdFilter_UnquotedValue(t *testing.T) {
+	m := newTestModel(t)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Level: "ERROR"},
+		logmsg.LogMessage{Raw: "b", Level: "INFO "},
+	)
+
+	newM, _, err := cmdFilter(m, "level=error")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(newM.filterIndices) != 1 || newM.filterIndices[0] != 0 {
+		t.Errorf("filterIndices = %v, want [0]", newM.filterIndices)
+	}
+}
