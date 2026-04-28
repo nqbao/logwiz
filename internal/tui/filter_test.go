@@ -685,3 +685,82 @@ func TestCmdFilter_NonTimeKeyComparison_Error(t *testing.T) {
 		t.Error("expected error for comparison on non-time key")
 	}
 }
+
+// --- filterTickMsg ---
+
+func TestFilterTick_ReappliesTimeRule(t *testing.T) {
+	m := newTestModel(t)
+	now := time.Now()
+
+	// Both lines are currently within the 5m window.
+	l1 := now.Add(-2 * time.Minute).UTC().Format(time.RFC3339)
+	l2 := now.Add(-4 * time.Minute).UTC().Format(time.RFC3339)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "a", Time: l1},
+		logmsg.LogMessage{Raw: "b", Time: l2},
+	)
+
+	// Rule: ts > now-3m — only l1 matches at rule creation.
+	ref := func() time.Time { return time.Now().Add(-3 * time.Minute) }
+	addTimeCmpFilter(&m, "ts", &timeCmp{op: ">", ref: ref})
+
+	if len(m.filterIndices) != 1 || m.filterIndices[0] != 0 {
+		t.Fatalf("initial filterIndices = %v, want [0]", m.filterIndices)
+	}
+
+	// Simulate tick: both lines now fall outside the 1m window.
+	tightRef := func() time.Time { return time.Now().Add(-1 * time.Minute) }
+	m.filterRules[0].cmp.ref = tightRef
+
+	m2, _ := m.Update(filterTickMsg{})
+	mm := m2.(Model)
+
+	if len(mm.filterIndices) != 0 {
+		t.Errorf("after tick filterIndices = %v, want [] (both lines aged out)", mm.filterIndices)
+	}
+}
+
+func TestFilterTick_StopsWhenNoTimeRules(t *testing.T) {
+	m := newTestModel(t)
+	// No time rules — tick should return nil cmd (loop dies).
+	m2, cmd := m.Update(filterTickMsg{})
+	_ = m2
+	if cmd != nil {
+		t.Error("expected nil cmd when no time rules, got non-nil")
+	}
+}
+
+func TestFilterTick_RespectsFilterPaused(t *testing.T) {
+	m := newTestModel(t)
+	now := time.Now()
+	recent := now.Add(-1 * time.Minute).UTC().Format(time.RFC3339)
+	old := now.Add(-10 * time.Minute).UTC().Format(time.RFC3339)
+	seedStructured(m.buf,
+		logmsg.LogMessage{Raw: "old", Time: old},
+		logmsg.LogMessage{Raw: "recent", Time: recent},
+	)
+
+	ref := func() time.Time { return time.Now().Add(-5 * time.Minute) }
+	addTimeCmpFilter(&m, "ts", &timeCmp{op: ">", ref: ref})
+
+	// Pause the filter — viewport should show all lines.
+	m.pauseFilter()
+	if m.logs.filterIndices != nil {
+		t.Fatal("expected viewport filter to be nil after pauseFilter")
+	}
+
+	// Tick fires while paused — filterIndices updated but viewport stays clear.
+	m2, _ := m.Update(filterTickMsg{})
+	mm := m2.(Model)
+
+	if mm.filterEnabled {
+		t.Error("filterEnabled should remain false after tick while paused")
+	}
+	if mm.logs.filterIndices != nil {
+		t.Error("viewport filter should stay nil while paused")
+	}
+	// But filterIndices should be maintained.
+	if len(mm.filterIndices) != 1 || mm.filterIndices[0] != 1 {
+		t.Errorf("filterIndices = %v, want [1] (maintained while paused)", mm.filterIndices)
+	}
+}

@@ -18,6 +18,9 @@ type ChatReplyMsg struct{ Content string }
 // spinnerTickMsg drives the spinner animation while chatLoading is true.
 type spinnerTickMsg struct{}
 
+// filterTickMsg triggers a reapply of time-based filter rules.
+type filterTickMsg struct{}
+
 var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
 // Update handles all tea messages.
@@ -112,6 +115,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case filterTickMsg:
+		if !hasTimeRules(m.filterRules) {
+			return m, nil // no time rules left; let the tick loop die
+		}
+		applyFilters(&m)
+		return m, filterTickCmd()
+
 	case tea.KeyMsg:
 		return m.onKey(msg)
 
@@ -153,6 +163,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func spinnerCmd() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
 		return spinnerTickMsg{}
+	})
+}
+
+// filterTickCmd schedules one filter tick after 1 s for time-rule reapply.
+func filterTickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return filterTickMsg{}
 	})
 }
 

@@ -103,6 +103,8 @@ func addTimeCmpFilter(m *Model, key string, cmp *timeCmp) {
 // applyFilters recomputes filterIndices from the current rule stack. The
 // result is always a non-nil slice so the viewport can distinguish "filter
 // active with zero matches" from "no filter".
+// Viewport and search are only updated when filterEnabled is true, so
+// calling this while paused keeps filterIndices fresh without un-pausing.
 func applyFilters(m *Model) {
 	indices := make([]int, 0)
 	n := m.buf.Len()
@@ -112,10 +114,23 @@ func applyFilters(m *Model) {
 		}
 	}
 	m.filterIndices = indices
-	m.logs.SetFilter(indices)
-	if m.searchRe != nil {
-		m.intersectSearch()
+	if m.filterEnabled {
+		m.logs.SetFilter(indices)
+		if m.searchRe != nil {
+			m.intersectSearch()
+		}
 	}
+}
+
+// hasTimeRules reports whether any rule in the stack is a time comparison.
+// Used to decide whether the filter tick loop should keep running.
+func hasTimeRules(rules []filterRule) bool {
+	for _, r := range rules {
+		if r.cmp != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // updateFilter keeps filterIndices consistent after a batch of new lines is
