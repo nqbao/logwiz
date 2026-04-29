@@ -26,8 +26,13 @@ func New() *Highlighter {
 }
 
 // Register associates a SpanRenderer with a format name (e.g. "json").
+// Passing nil removes the handler so the format falls back to msg.Raw.
 func (h *Highlighter) Register(format string, fn SpanRenderer) {
-	h.handlers[format] = fn
+	if fn == nil {
+		delete(h.handlers, format)
+	} else {
+		h.handlers[format] = fn
+	}
 }
 
 // maxHighlightLen is the maximum byte length a line may have before syntax

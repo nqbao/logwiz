@@ -245,24 +245,26 @@ func TestParseFormatInvalid(t *testing.T) {
 	}
 }
 
-func TestParsePrettyFlag(t *testing.T) {
+func TestParseViewFlag(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	cfg, err := Parse([]string{"--pretty"}, envFromMap(nil), io.Discard)
-	if err != nil {
-		t.Fatalf("Parse --pretty: %v", err)
-	}
-	if !cfg.Pretty {
-		t.Error("cfg.Pretty should be true when --pretty flag is set")
+	for _, mode := range []string{"raw", "color", "pretty"} {
+		cfg, err := Parse([]string{"--view", mode}, envFromMap(nil), io.Discard)
+		if err != nil {
+			t.Fatalf("Parse --view %s: %v", mode, err)
+		}
+		if cfg.View != mode {
+			t.Errorf("cfg.View should be %q when --view %s flag is set, got %q", mode, mode, cfg.View)
+		}
 	}
 }
 
-func TestParsePrettyDefaultOff(t *testing.T) {
+func TestParseViewDefaultRaw(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	cfg, err := Parse(nil, envFromMap(nil), io.Discard)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if cfg.Pretty {
-		t.Error("cfg.Pretty should be false by default")
+	if cfg.View != "" {
+		t.Errorf("cfg.View should be empty (raw) by default, got %q", cfg.View)
 	}
 }
