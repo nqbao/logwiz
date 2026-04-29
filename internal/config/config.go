@@ -62,9 +62,9 @@ type Config struct {
 	// Format selects the line parser: "json" or "passthrough".
 	Format string
 
-	// Pretty enables humanlog-style rendering (time LEVEL message key=val …)
-	// for json and logfmt lines instead of raw syntax-coloured output.
-	Pretty bool
+	// View sets the log rendering mode: "raw" (default, no coloring),
+	// "color" (syntax-colored), or "pretty" (humanlog-style layout).
+	View string
 
 	// RedactPatterns is a list of Go regex patterns. Any match in a log
 	// line is replaced with [REDACTED] before the line is sent to the LLM.
@@ -86,7 +86,7 @@ type Config struct {
 
 // ConfigurableKeys lists the keys accepted by ApplyKey and SaveKey.
 var ConfigurableKeys = []string{
-	"model", "api-key", "base-url", "sidebar-width", "context-lines", "system-prompt", "thinking-budget", "reasoning-effort", "pretty",
+	"model", "api-key", "base-url", "sidebar-width", "context-lines", "system-prompt", "thinking-budget", "reasoning-effort", "view",
 }
 
 // fileConfig holds the subset of Config that can be set in
@@ -102,7 +102,7 @@ type fileConfig struct {
 	CmdHistoryTurns int    `json:"cmd_history_turns,omitempty"`
 	ThinkingBudget  int    `json:"thinking_budget,omitempty"`
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
-	Pretty          bool   `json:"pretty,omitempty"`
+	View            string `json:"view,omitempty"`
 }
 
 // stringSliceFlag implements flag.Value for a repeatable --redact flag.
@@ -184,7 +184,7 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	}
 	defaultThinkingBudget := fc.ThinkingBudget
 	defaultReasoningEffort := fc.ReasoningEffort
-	defaultPretty := fc.Pretty
+	defaultView := fc.View
 
 	var (
 		cfg           Config
@@ -210,8 +210,8 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		"Path to a file with extra instructions appended to the system prompt")
 	fs.StringVar(&cfg.Format, "format", DefaultFormat,
 		`Line parser: "auto" (default, detects per line), "json", "logfmt", or "passthrough"`)
-	fs.BoolVar(&cfg.Pretty, "pretty", defaultPretty,
-		"Enable pretty mode: render json/logfmt lines as \"time LEVEL message key=val …\" (toggle with P inside the viewer, persist with :config pretty on/off)")
+	fs.StringVar(&cfg.View, "view", defaultView,
+		`Log rendering mode: "raw" (default, no coloring), "color" (syntax-colored), "pretty" (humanlog-style layout). Toggle with p inside the viewer.`)
 	fs.StringVar(&cfg.LogFile, "log-file", "",
 		"Write internal debug logs to `file`")
 	cfg.CmdHistoryTurns = defaultCmdHistoryTurns
@@ -351,14 +351,12 @@ func ApplyKey(cfg *Config, key, value string) error {
 		if value != "" {
 			cfg.ThinkingBudget = 0
 		}
-	case "pretty":
+	case "view":
 		switch strings.ToLower(value) {
-		case "on", "true", "1":
-			cfg.Pretty = true
-		case "off", "false", "0":
-			cfg.Pretty = false
+		case "raw", "color", "pretty":
+			cfg.View = strings.ToLower(value)
 		default:
-			return fmt.Errorf(`pretty must be "on" or "off"`)
+			return fmt.Errorf(`view must be "raw", "color", or "pretty"`)
 		}
 	case "cmd-history-turns":
 		n, err := strconv.Atoi(value)
@@ -409,8 +407,8 @@ func SaveKey(key, value string) error {
 		if value != "" {
 			fc.ThinkingBudget = 0
 		}
-	case "pretty":
-		fc.Pretty = strings.ToLower(value) == "on" || strings.ToLower(value) == "true" || value == "1"
+	case "view":
+		fc.View = strings.ToLower(value)
 	case "cmd-history-turns":
 		n, _ := strconv.Atoi(value)
 		fc.CmdHistoryTurns = n

@@ -186,7 +186,18 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 	ctx, cancel := context.WithCancel(context.Background())
 
 	h := highlight.New()
-	// Raw mode by default: no handlers registered, msg.Raw is returned as-is.
+
+	initialView := viewModeRaw
+	switch cfg.View {
+	case "color":
+		initialView = viewModeColor
+		h.Register("json", highlight.JSONRenderer)
+		h.Register("logfmt", highlight.LogfmtRenderer)
+	case "pretty":
+		initialView = viewModePretty
+		h.Register("json", highlight.PrettyJSONRenderer)
+		h.Register("logfmt", highlight.PrettyLogfmtRenderer)
+	}
 
 	lv := newLogViewport(buf)
 	lv.h = h
@@ -196,7 +207,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 		sourceKind:   kind,
 		buf:          buf,
 		highlighter:  h,
-		view:         viewModeRaw,
+		view:         initialView,
 		logs:         lv,
 		convo:        viewport.New(0, 0),
 		input:        ta,

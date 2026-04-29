@@ -363,6 +363,17 @@ func cmdConfig(m Model, args string) (Model, tea.Cmd, error) {
 		m.chatClient.SetThinkingBudget(m.cfg.ThinkingBudget)
 		m.chatClient.SetReasoningEffort(m.cfg.ReasoningEffort)
 	}
+	if key == "view" {
+		switch m.cfg.View {
+		case "raw":
+			m.view = viewModeRaw
+		case "color":
+			m.view = viewModeColor
+		case "pretty":
+			m.view = viewModePretty
+		}
+		applyViewMode(&m)
+	}
 	if err := config.SaveKey(key, value); err != nil {
 		return m, nil, fmt.Errorf("applied in memory but could not persist: %w", err)
 	}
@@ -391,6 +402,11 @@ func configGetDisplay(cfg config.Config, key string) (string, bool) {
 		return strconv.Itoa(cfg.ThinkingBudget), true
 	case "reasoning-effort":
 		return cfg.ReasoningEffort, true
+	case "view":
+		if cfg.View == "" {
+			return "raw", true
+		}
+		return cfg.View, true
 	case "cmd-history-turns":
 		return strconv.Itoa(cfg.CmdHistoryTurns), true
 	}

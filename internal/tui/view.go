@@ -205,7 +205,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  p             cycle view mode: raw → color → pretty (json/logfmt)",
 		"  :view [raw|color|pretty]   set view mode explicitly",
 		"  :follow [on|off|status]   toggle file-follow (auto-enabled when reading a file)",
-		"  :config <key> [val]   show or set a config value (model, api-key, base-url, sidebar-width, context-lines, system-prompt)",
+		"  :config <key> [val]   show or set a config value (model, api-key, base-url, sidebar-width, context-lines, system-prompt, view)",
 		"  n / N         next / previous search match",
 		"  esc           close sidebar / cancel palette / clear filter / clear search",
 		"  tab           switch focus",
