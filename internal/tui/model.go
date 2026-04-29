@@ -88,6 +88,7 @@ type Model struct {
 	cmdInput  textinput.Model
 	cmdErr    string
 	cmdInfo   string // dim informational line shown below the input
+	cmdAnswer string // agent answer text (rendered in readable style)
 
 	// Search state.
 	searchRe      *regexp.Regexp

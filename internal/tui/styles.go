@@ -53,7 +53,7 @@ var (
 			Foreground(lipgloss.Color("203"))
 
 	styleDim = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("244"))
+			Foreground(lipgloss.Color("248"))
 
 	styleHelp = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("244"))
@@ -61,6 +61,9 @@ var (
 	styleSelectedRow = lipgloss.NewStyle().
 				Background(lipgloss.Color("237")).
 				Foreground(lipgloss.Color("255"))
+
+	styleCmdAnswer = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("252"))
 
 	styleActivity = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("244"))

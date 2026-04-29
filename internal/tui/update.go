@@ -103,6 +103,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cmdAgent = nil
 			m.cmdErr = msg.Err.Error()
 			m.cmdInfo = ""
+			m.cmdAnswer = ""
 			return m, nil
 		}
 		return m, nil // stale agent, ignore
@@ -236,6 +237,7 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cmdActive = false
 			m.cmdErr = ""
 			m.cmdInfo = ""
+			m.cmdAnswer = ""
 			m.cmdAgent = nil
 			m.cmdHistory = nil
 			m.cmdPending = ""

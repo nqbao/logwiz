@@ -59,6 +59,8 @@ func (m Model) renderCommandPalette(width int) string {
 		content += "\n" + styleDim.Render(frame+" "+label)
 	} else if m.cmdErr != "" {
 		content += "\n" + styleErr.Render(m.cmdErr)
+	} else if m.cmdAnswer != "" {
+		content += "\n" + styleCmdAnswer.Render(m.cmdAnswer)
 	} else if m.cmdInfo != "" {
 		content += "\n" + styleDim.Render(m.cmdInfo)
 	}
