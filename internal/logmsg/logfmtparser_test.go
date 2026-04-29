@@ -122,6 +122,21 @@ func TestLogfmtParser_FieldAliases(t *testing.T) {
 	}
 }
 
+func TestLogfmtParser_ANSIColouredProseNotDetected(t *testing.T) {
+	// modd-style coloured prose with embedded `key=val` payloads must not be
+	// claimed as logfmt — re-rendering through go-logfmt mangles the SGR
+	// escapes and leaves literal `[90m` fragments on screen.
+	p := LogfmtParser{}
+	line := "\x1b[90m19:25:19.643\x1b[0m DBG id(loop)=4533864400 \x1b[36msource=\x1b[0mPython"
+	got := p.Parse(line)
+	if got[0].Format != "" {
+		t.Errorf("Format = %q, want \"\" for ANSI-coloured prose", got[0].Format)
+	}
+	if got[0].Raw != line {
+		t.Errorf("Raw mutated: got %q", got[0].Raw)
+	}
+}
+
 func TestLogfmtParser_Flush(t *testing.T) {
 	p := LogfmtParser{}
 	if got := p.Flush(); got != nil {
