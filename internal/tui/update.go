@@ -345,8 +345,8 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case keyPrettyToggle:
-		m.prettyMode = !m.prettyMode
-		applyPrettyMode(&m)
+		m.view = (m.view + 1) % 3
+		applyViewMode(&m)
 		return m, nil
 	case keyEscape:
 		if m.help {
@@ -428,15 +428,19 @@ func (m *Model) refreshConvoContent() {
 }
 
 
-// applyPrettyMode registers the appropriate highlight handlers for m.prettyMode
-// and invalidates all render caches so the next View call re-renders every line.
-func applyPrettyMode(m *Model) {
-	if m.prettyMode {
-		m.highlighter.Register("json", highlight.PrettyJSONRenderer)
-		m.highlighter.Register("logfmt", highlight.PrettyLogfmtRenderer)
-	} else {
+// applyViewMode registers highlight handlers matching m.view and invalidates
+// all render caches so the next View call re-renders every line.
+func applyViewMode(m *Model) {
+	switch m.view {
+	case viewModeRaw:
+		m.highlighter.Register("json", nil)
+		m.highlighter.Register("logfmt", nil)
+	case viewModeColor:
 		m.highlighter.Register("json", highlight.JSONRenderer)
 		m.highlighter.Register("logfmt", highlight.LogfmtRenderer)
+	case viewModePretty:
+		m.highlighter.Register("json", highlight.PrettyJSONRenderer)
+		m.highlighter.Register("logfmt", highlight.PrettyLogfmtRenderer)
 	}
 	m.highlighter.Clear()
 	m.logs.recomputeWidthCache()
@@ -459,7 +463,10 @@ func (m Model) statusLine(lay layout) string {
 	}
 
 	left := styleStatusBar.Render(fmt.Sprintf(" logwiz [%s]  %d lines ", mode, lines)) + " " + badge
-	if m.prettyMode {
+	switch m.view {
+	case viewModeColor:
+		left += " " + styleStatusBadgePretty.Render("color")
+	case viewModePretty:
 		left += " " + styleStatusBadgePretty.Render("pretty")
 	}
 

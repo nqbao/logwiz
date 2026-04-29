@@ -288,53 +288,47 @@ func TestGrepCommand_UnknownFlagKeepsPaletteOpen(t *testing.T) {
 
 // --- :pretty command ---
 
-func TestDispatchCommand_PrettyToggle(t *testing.T) {
+func TestDispatchCommand_ViewRaw(t *testing.T) {
 	m := newTestModel(t)
+	m.view = viewModeColor
 	m.cmdActive = true
 
-	m2, _ := m.dispatchCommand(":pretty")
+	m2, _ := m.dispatchCommand(":view raw")
 	if m2.cmdActive {
-		t.Error("cmdActive should be false after :pretty")
+		t.Error("cmdActive should be false after :view raw")
 	}
-	if !m2.prettyMode {
-		t.Error("prettyMode should be true after first :pretty toggle")
-	}
-
-	m2.cmdActive = true
-	m3, _ := m2.dispatchCommand(":pretty")
-	if m3.prettyMode {
-		t.Error("prettyMode should be false after second :pretty toggle")
+	if m2.view != viewModeRaw {
+		t.Error("view should be raw after :view raw")
 	}
 }
 
-func TestDispatchCommand_PrettyOn(t *testing.T) {
+func TestDispatchCommand_ViewColor(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 
-	m2, _ := m.dispatchCommand(":pretty on")
-	if !m2.prettyMode {
-		t.Error("prettyMode should be true after :pretty on")
+	m2, _ := m.dispatchCommand(":view color")
+	if m2.view != viewModeColor {
+		t.Error("view should be color after :view color")
 	}
 }
 
-func TestDispatchCommand_PrettyOff(t *testing.T) {
+func TestDispatchCommand_ViewPretty(t *testing.T) {
 	m := newTestModel(t)
-	m.prettyMode = true
 	m.cmdActive = true
 
-	m2, _ := m.dispatchCommand(":pretty off")
-	if m2.prettyMode {
-		t.Error("prettyMode should be false after :pretty off")
+	m2, _ := m.dispatchCommand(":view pretty")
+	if m2.view != viewModePretty {
+		t.Error("view should be pretty after :view pretty")
 	}
 }
 
-func TestDispatchCommand_PrettyBadArg(t *testing.T) {
+func TestDispatchCommand_ViewBadArg(t *testing.T) {
 	m := newTestModel(t)
 	m.cmdActive = true
 
-	m2, _ := m.dispatchCommand(":pretty badarg")
+	m2, _ := m.dispatchCommand(":view badarg")
 	if !m2.cmdActive {
-		t.Error("cmdActive should remain true after :pretty with bad argument")
+		t.Error("cmdActive should remain true after :view with bad argument")
 	}
 	if m2.cmdErr == "" {
 		t.Error("cmdErr should be set for unrecognised :pretty argument")

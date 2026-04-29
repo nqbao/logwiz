@@ -41,6 +41,15 @@ const (
 	focusChat
 )
 
+// viewMode controls how log lines are rendered.
+type viewMode int
+
+const (
+	viewModeRaw    viewMode = iota // pass-through: no syntax coloring
+	viewModeColor                  // syntax-colored (chroma/logfmt token colors)
+	viewModePretty                 // humanlog-style: time LEVEL message key=val …
+)
+
 // MaxToolTurns is the maximum number of tool round-trips per user question.
 const MaxToolTurns = 6
 
@@ -141,9 +150,8 @@ type Model struct {
 
 	hintIdx int // cycles through inputHints
 
-	// prettyMode renders structured lines (json/logfmt) in humanlog-style layout
-	// (time level message key=val …) instead of raw syntax-coloured output.
-	prettyMode bool
+	// view controls how structured lines (json/logfmt) are rendered.
+	view viewMode
 
 	// sessionSample is the one-shot log snapshot captured on first submit.
 	sessionSample []string
@@ -178,13 +186,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 	ctx, cancel := context.WithCancel(context.Background())
 
 	h := highlight.New()
-	if cfg.Pretty {
-		h.Register("json", highlight.PrettyJSONRenderer)
-		h.Register("logfmt", highlight.PrettyLogfmtRenderer)
-	} else {
-		h.Register("json", highlight.JSONRenderer)
-		h.Register("logfmt", highlight.LogfmtRenderer)
-	}
+	// Raw mode by default: no handlers registered, msg.Raw is returned as-is.
 
 	lv := newLogViewport(buf)
 	lv.h = h
@@ -194,7 +196,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 		sourceKind:   kind,
 		buf:          buf,
 		highlighter:  h,
-		prettyMode:   cfg.Pretty,
+		view:         viewModeRaw,
 		logs:         lv,
 		convo:        viewport.New(0, 0),
 		input:        ta,

@@ -28,7 +28,7 @@ var cmdRegistry = map[string]cmdHandler{
 	"help":      cmdHelp,
 	"config":    cmdConfig,
 	"quit":      cmdQuit,
-	"pretty":    cmdPretty,
+	"view":      cmdView,
 	"follow":    cmdFollow,
 }
 
@@ -363,10 +363,6 @@ func cmdConfig(m Model, args string) (Model, tea.Cmd, error) {
 		m.chatClient.SetThinkingBudget(m.cfg.ThinkingBudget)
 		m.chatClient.SetReasoningEffort(m.cfg.ReasoningEffort)
 	}
-	if key == "pretty" {
-		m.prettyMode = m.cfg.Pretty
-		applyPrettyMode(&m)
-	}
 	if err := config.SaveKey(key, value); err != nil {
 		return m, nil, fmt.Errorf("applied in memory but could not persist: %w", err)
 	}
@@ -395,11 +391,6 @@ func configGetDisplay(cfg config.Config, key string) (string, bool) {
 		return strconv.Itoa(cfg.ThinkingBudget), true
 	case "reasoning-effort":
 		return cfg.ReasoningEffort, true
-	case "pretty":
-		if cfg.Pretty {
-			return "on", true
-		}
-		return "off", true
 	case "cmd-history-turns":
 		return strconv.Itoa(cfg.CmdHistoryTurns), true
 	}
@@ -464,20 +455,23 @@ func cmdNoHL(m Model, _ string) (Model, tea.Cmd, error) {
 	return m, nil, nil
 }
 
-// cmdPretty implements :pretty [on|off].
-// With no argument it toggles pretty mode; "on"/"off" set it explicitly.
-func cmdPretty(m Model, args string) (Model, tea.Cmd, error) {
+// cmdView implements :view [raw|color|pretty].
+// With no argument it reports the current mode.
+func cmdView(m Model, args string) (Model, tea.Cmd, error) {
 	switch strings.TrimSpace(args) {
-	case "on":
-		m.prettyMode = true
-	case "off":
-		m.prettyMode = false
+	case "raw":
+		m.view = viewModeRaw
+	case "color":
+		m.view = viewModeColor
+	case "pretty":
+		m.view = viewModePretty
 	case "":
-		m.prettyMode = !m.prettyMode
+		names := []string{"raw", "color", "pretty"}
+		return m, nil, infoErr{"view: " + names[m.view] + "  (p to cycle)"}
 	default:
-		return m, nil, fmt.Errorf("usage: pretty [on|off]")
+		return m, nil, fmt.Errorf("usage: view [raw|color|pretty]")
 	}
-	applyPrettyMode(&m)
+	applyViewMode(&m)
 	return m, nil, nil
 }
 
