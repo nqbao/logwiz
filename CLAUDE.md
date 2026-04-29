@@ -25,7 +25,7 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
 
 **Key design rule:** The `buffer.Buffer` is owned exclusively by the Bubble Tea event loop — only mutated inside `Update()`. No locking needed.
 
-**On exit:** `main.go` sends `SIGTERM` to the process group (`-pgid`) so upstream pipeline processes (e.g. `./start_api.sh | logwiz`) are cleaned up.
+**On exit:** `main.go` sends `SIGINT` to the process group (`-pgid`) so upstream pipeline processes (e.g. `./start_api.sh | logwiz`, `modd | logwiz`) are cleaned up. SIGINT (not SIGTERM) because supervisors like modd put their children in separate process groups and only run cleanup logic on SIGINT — SIGTERM hits the default-terminate path and orphans the grandchildren.
 
 ## Package map
 

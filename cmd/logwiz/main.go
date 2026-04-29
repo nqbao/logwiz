@@ -49,9 +49,13 @@ func main() {
 
 	if pgidErr == nil {
 		// Kill the pipeline process group so upstream processes (e.g.
-		// `start_api.sh | logwiz`) exit when the user quits logwiz.
-		signal.Ignore(syscall.SIGTERM)
-		_ = syscall.Kill(-pgid, syscall.SIGTERM)
+		// `start_api.sh | logwiz`, `modd | logwiz`) exit when the user
+		// quits logwiz. We send SIGINT (not SIGTERM) because supervisors
+		// like modd put their children in separate process groups and
+		// only run their cleanup logic on SIGINT — SIGTERM hits the
+		// default-terminate path and leaves the grandchildren orphaned.
+		signal.Ignore(syscall.SIGINT, syscall.SIGTERM)
+		_ = syscall.Kill(-pgid, syscall.SIGINT)
 	}
 }
 
