@@ -29,6 +29,13 @@ func parseLogfmt(raw string) (LogMessage, bool) {
 	if strings.TrimSpace(raw) == "" {
 		return LogMessage{}, false
 	}
+	// ANSI-coloured prose can satisfy the '=' heuristic (e.g. modd's coloured
+	// output around a `key=val` payload), but go-logfmt's scanner mangles ESC
+	// bytes during reconstruction in LogfmtRenderer, leaving literal `[90m`
+	// fragments on screen. Treat any line carrying SGR escapes as prose.
+	if strings.ContainsRune(raw, '\x1b') {
+		return LogMessage{}, false
+	}
 	// Require at least two explicit '=' signs before invoking the full parser.
 	// This rejects plain prose and lines where bare words parse as empty-value
 	// keys (e.g. "2026-04-21 INFO server started" or "user=bob logged in").
@@ -43,11 +50,15 @@ func parseLogfmt(raw string) (LogMessage, bool) {
 	msg := LogMessage{Raw: raw, Format: "logfmt"}
 	seenTime, seenLevel, seenMsg := false, false, false
 	total := 0
+	leadingValued := 0 // count of valued pairs before the first bare-key token
 
 	for dec.ScanKeyval() {
 		total++
 		key := string(dec.Key())
 		val := string(dec.Value())
+		if total == leadingValued+1 && val != "" {
+			leadingValued++
+		}
 		keyLower := strings.ToLower(key)
 		switch {
 		case !seenTime && containsStr(TimeKeys, keyLower):
@@ -63,7 +74,12 @@ func parseLogfmt(raw string) (LogMessage, bool) {
 			msg.Extra.Set(key, val)
 		}
 	}
-	if dec.Err() != nil || total < 2 {
+	// Real logfmt records lead with key=val pairs. Prose with embedded
+	// payloads (e.g. "Loaded loop: id(loop)=42 source=Python") decodes its
+	// leading prose words as bare-key tokens; accepting them would let
+	// LogfmtRenderer re-emit each prose word as `word=`. Require the first
+	// two scanned pairs to both carry values.
+	if dec.Err() != nil || total < 2 || leadingValued < 2 {
 		return LogMessage{}, false
 	}
 	return msg, true
