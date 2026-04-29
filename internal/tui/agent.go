@@ -146,11 +146,11 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 		if a.Mode == "exclude" {
 			verb = "exclude"
 		}
-		return agentKeepPalette(m, fmt.Sprintf("%s: %s", verb, a.Pattern)), nil
+		return agentKeepPalette(m, fmt.Sprintf("%s: %s", verb, a.Pattern), false), nil
 
 	case "clear_grep":
 		m.clearFilter()
-		return agentKeepPalette(m, "filters cleared"), nil
+		return agentKeepPalette(m, "filters cleared", false), nil
 
 	case "jump":
 		reStr := a.Pattern
@@ -166,7 +166,7 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			m.searchCursor = len(m.searchMatches) - 1
 			m.logs.JumpTo(m.searchMatches[m.searchCursor])
 		}
-		return agentKeepPalette(m, fmt.Sprintf("jump: %s", a.Pattern)), nil
+		return agentKeepPalette(m, fmt.Sprintf("jump: %s", a.Pattern), false), nil
 
 	case "highlight":
 		reStr := a.Pattern
@@ -178,32 +178,32 @@ func executeCmdTool(m Model, msg AgentStepMsg) (Model, tea.Cmd) {
 			return agentCmdErr(m, "invalid regex: "+err.Error())
 		}
 		addHL(&m, re)
-		return agentKeepPalette(m, fmt.Sprintf("highlight: %s", a.Pattern)), nil
+		return agentKeepPalette(m, fmt.Sprintf("highlight: %s", a.Pattern), false), nil
 
 	case "clear_highlight":
 		clearHL(&m)
-		return agentKeepPalette(m, "highlights cleared"), nil
+		return agentKeepPalette(m, "highlights cleared", false), nil
 
 	case "set_model":
 		newM, cmd, err := cmdConfig(m, "model "+a.Model)
 		if err != nil {
 			return agentCmdErr(m, err.Error())
 		}
-		return agentKeepPalette(newM, "model: "+a.Model), cmd
+		return agentKeepPalette(newM, "model: "+a.Model, false), cmd
 
 	case "clear_chat":
 		m = clearChat(m)
-		return agentKeepPalette(m, "chat cleared"), nil
+		return agentKeepPalette(m, "chat cleared", false), nil
 
 	case "quit":
 		m.Cancel()
 		return m, tea.Quit
 
 	case "answer":
-		return agentKeepPalette(m, a.Reason), nil
+		return agentKeepPalette(m, a.Reason, true), nil
 
 	case "reject":
-		return agentKeepPalette(m, a.Reason), nil
+		return agentKeepPalette(m, a.Reason, true), nil
 
 	default:
 		return agentCmdErr(m, fmt.Sprintf("unknown pick_tool action: %s", a.Action))
@@ -348,14 +348,21 @@ func runCmdFindCount(m Model, call agent.ToolCall) (result, info string) {
 func agentCmdErr(m Model, msg string) (Model, tea.Cmd) {
 	m.cmdErr = msg
 	m.cmdInfo = ""
+	m.cmdAnswer = ""
 	return m, nil
 }
 
 // agentKeepPalette keeps the palette open after a successful agent command,
 // clears the input, shows an informational summary, and records the Q&A pair
 // in cmdHistory for conversational follow-ups.
-func agentKeepPalette(m Model, info string) Model {
-	m.cmdInfo = info
+// When isAnswer is true, the info text is shown in readable style (for longer
+// natural language responses); otherwise it's dim.
+func agentKeepPalette(m Model, info string, isAnswer bool) Model {
+	if isAnswer {
+		m.cmdAnswer = info
+	} else {
+		m.cmdInfo = info
+	}
 	m.cmdErr = ""
 	if m.cmdPending != "" {
 		m.cmdHistory = append(m.cmdHistory,
