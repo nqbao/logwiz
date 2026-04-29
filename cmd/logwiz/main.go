@@ -87,12 +87,15 @@ func run() error {
 		parser = logmsg.PassthroughParser{}
 	}
 	var (
-		src  source.Source
-		kind tui.SourceKind
+		src        source.Source
+		kind       tui.SourceKind
+		fileFollow source.FileFollower
 	)
 	switch {
 	case cfg.File != "":
-		src = &source.File{Path: cfg.File, Parser: parser, MaxLines: cfg.MaxLines}
+		f := &source.File{Path: cfg.File, Parser: parser, MaxLines: cfg.MaxLines, Follow: true}
+		src = f
+		fileFollow = f
 		kind = tui.SourceFile
 	case !isatty.IsTerminal(os.Stdin.Fd()):
 		src = &source.Stdin{R: os.Stdin, Parser: parser}
@@ -118,7 +121,7 @@ func run() error {
 	}
 
 	registry := tools.NewDefault(redactor)
-	model := tui.New(cfg, kind, buf, client, registry, redactor)
+	model := tui.New(cfg, kind, buf, client, registry, redactor, fileFollow)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 

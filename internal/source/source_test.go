@@ -15,19 +15,22 @@ import (
 )
 
 type recordingSender struct {
-	mu   sync.Mutex
-	msgs []any
-	done chan struct{}
+	mu          sync.Mutex
+	msgs        []any
+	done        chan struct{}
+	followingCh chan struct{}
 }
 
 func newRecorder() *recordingSender {
-	return &recordingSender{done: make(chan struct{})}
+	return &recordingSender{
+		done:        make(chan struct{}),
+		followingCh: make(chan struct{}),
+	}
 }
 
 func (r *recordingSender) Send(msg any) {
 	r.mu.Lock()
 	r.msgs = append(r.msgs, msg)
-	// Signal on terminal messages so tests don't poll.
 	switch msg.(type) {
 	case EOFMsg, ErrMsg:
 		select {
@@ -35,8 +38,23 @@ func (r *recordingSender) Send(msg any) {
 		default:
 			close(r.done)
 		}
+	case FollowingMsg:
+		select {
+		case <-r.followingCh:
+		default:
+			close(r.followingCh)
+		}
 	}
 	r.mu.Unlock()
+}
+
+func (r *recordingSender) waitForFollowing(t *testing.T) {
+	t.Helper()
+	select {
+	case <-r.followingCh:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for FollowingMsg; got %v", r.snapshot())
+	}
 }
 
 func (r *recordingSender) snapshot() []any {
@@ -353,6 +371,163 @@ func TestFileTailSeekScalesWithLineSize(t *testing.T) {
 		if n < 80 || n > 200 {
 			t.Errorf("retained %d, want in [80, 200] for MaxLines=100 with 1.25× headroom", n)
 		}
+	}
+}
+
+// eventually calls check every 50ms until it returns true or the deadline passes.
+func eventually(t *testing.T, timeout time.Duration, check func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if check() {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("condition not met within", timeout)
+}
+
+func containsLine(lines []string, want string) bool {
+	for _, l := range lines {
+		if l == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestFileFollowAppend(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "follow.log")
+	if err := os.WriteFile(path, []byte("line1\nline2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rec := newRecorder()
+	src := &File{Path: path, Follow: true}
+	src.Start(ctx, rec)
+	rec.waitForFollowing(t)
+
+	// Confirm initial lines were received.
+	lines := collectRaws(rec.snapshot())
+	if !containsLine(lines, "line1") || !containsLine(lines, "line2") {
+		t.Fatalf("initial lines missing: %v", lines)
+	}
+
+	// Append new lines.
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("line3\nline4\n"); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+
+	eventually(t, 2*time.Second, func() bool {
+		l := collectRaws(rec.snapshot())
+		return containsLine(l, "line3") && containsLine(l, "line4")
+	})
+}
+
+func TestFileFollowTruncate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "truncate.log")
+	if err := os.WriteFile(path, []byte("before1\nbefore2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rec := newRecorder()
+	src := &File{Path: path, Follow: true}
+	src.Start(ctx, rec)
+	rec.waitForFollowing(t)
+
+	// Truncate the file and write new content.
+	if err := os.WriteFile(path, []byte("after1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	eventually(t, 2*time.Second, func() bool {
+		l := collectRaws(rec.snapshot())
+		return containsLine(l, "[logwiz: file truncated]") && containsLine(l, "after1")
+	})
+}
+
+func TestFileFollowRotate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rotate.log")
+	if err := os.WriteFile(path, []byte("old1\nold2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rec := newRecorder()
+	src := &File{Path: path, Follow: true}
+	src.Start(ctx, rec)
+	rec.waitForFollowing(t)
+
+	// Rotate: rename the old file and create a new one at the same path.
+	if err := os.Rename(path, path+".1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("new1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	eventually(t, 2*time.Second, func() bool {
+		l := collectRaws(rec.snapshot())
+		return containsLine(l, "[logwiz: file rotated]") && containsLine(l, "new1")
+	})
+}
+
+func TestFileNoFollowSendsEOF(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nofollow.log")
+	if err := os.WriteFile(path, []byte("a\nb\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := newRecorder()
+	src := &File{Path: path, Follow: false}
+	src.Start(context.Background(), rec)
+	rec.waitForTerminal(t)
+
+	msgs := rec.snapshot()
+	if _, ok := msgs[len(msgs)-1].(EOFMsg); !ok {
+		t.Fatalf("last msg = %T, want EOFMsg", msgs[len(msgs)-1])
+	}
+}
+
+func TestFileFollowStopFollow(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "stop.log")
+	if err := os.WriteFile(path, []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rec := newRecorder()
+	src := &File{Path: path, Follow: true}
+	src.Start(ctx, rec)
+	rec.waitForFollowing(t)
+
+	// Stop following; expect EOFMsg.
+	src.StopFollow()
+	rec.waitForTerminal(t)
+
+	msgs := rec.snapshot()
+	if _, ok := msgs[len(msgs)-1].(EOFMsg); !ok {
+		t.Fatalf("last msg after StopFollow = %T, want EOFMsg", msgs[len(msgs)-1])
 	}
 }
 

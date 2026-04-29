@@ -22,6 +22,7 @@ import (
 	"github.com/nqbao/logwiz/internal/highlight"
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/redact"
+	"github.com/nqbao/logwiz/internal/source"
 	"github.com/nqbao/logwiz/internal/tools"
 )
 
@@ -66,6 +67,8 @@ type Model struct {
 
 	buf         *buffer.Buffer
 	eof         bool
+	following   bool // true while file watcher is active
+	fileFollow  source.FileFollower
 	highlighter *highlight.Highlighter
 
 	logs LogViewport
@@ -159,7 +162,7 @@ var inputHints = []string{
 }
 
 // New builds a ready-to-run Model.
-func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.Client, reg *tools.Registry, r *redact.Redactor) Model {
+func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.Client, reg *tools.Registry, r *redact.Redactor, follow source.FileFollower) Model {
 	ta := textarea.New()
 	ta.Placeholder = inputHints[0]
 	ta.Prompt = ""
@@ -200,6 +203,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 		chatClient:   client,
 		toolsReg:     reg,
 		redactor:     r,
+		fileFollow:   follow,
 		turnIdxByMsg: make(map[int]int),
 		activeTurn:   -1,
 		ctx:          ctx,
