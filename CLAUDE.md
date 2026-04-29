@@ -19,7 +19,7 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
 
 **Data flow:**
 1. `cmd/logwiz/main.go` wires everything: parses config, picks source, creates buffer, starts TUI program
-2. A `source.Source` goroutine reads lines and pushes `source.NewLineMsg` into the Bubble Tea event loop via `program.Send`
+2. A `source.Source` goroutine reads lines and pushes `source.NewLinesMsg` batches into the Bubble Tea event loop via `program.Send`
 3. `Update()` in `internal/tui/update.go` appends each line to the `buffer.Buffer` and calls `refreshLogsContent()` to update the viewport
 4. Chat requests and palette agent commands are fired as `tea.Cmd` (off the event loop), returning agent step/done/err messages
 
@@ -30,25 +30,15 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
 ## Package map
 
 - `internal/buffer` — fixed-size ring buffer of log lines
-- `internal/source` — stdin and file readers; emit `NewLineMsg`/`EOFMsg`/`ErrMsg`
+- `internal/source` — stdin and file readers; emit `NewLinesMsg`/`EOFMsg`/`ErrMsg`
 - `internal/config` — flag + env var resolution (flag > env > `~/.logwiz/config.json` > default)
-- `internal/agent` — LLM client, message types, and agent lifecycle:
-  - `agent.go` — `Agent` struct, `Step()` loop, `FeedResults()`
-  - `chat.go` — `NewChatAgent`, `BuildChatMessages()` (system prompt + history + fenced log context)
-  - `command.go` — `NewCmdAgent`, `CmdToolDefs`, `CmdInspectToolDefs`, `CmdCommitToolDef`, `BuildCmdPrompt`
-  - `client.go` — OpenAI-compatible HTTP client
-  - `types.go` — `Message`, `ToolSpec`, `ToolCall` types
-- `internal/tui` — Bubble Tea model split across:
-  - `model.go` — state struct + `New`
-  - `update.go` — `Update()` dispatch, key handling, `refreshLogsContent`, status bar
-  - `view.go` — `View()` composition, sidebar rendering, inline banner, help overlay
-  - `layout.go` — logs/sidebar width split calculation (`computeLayout`)
-  - `styles.go` — all lipgloss styles
-  - `keys.go` — key name constants
-  - `agent.go` — bridges agent execution with TUI state: `startAgentCmd`, `executeCmdTool`, `runCmdInspection`, `submitChat`, `onChatToolCalls`, `onChatDone`
-  - `command.go` — command palette dispatcher (`dispatchCommand`) and handlers (`:chat`, `:search`, `:grep`, `:clear`, `:help`, `:model`, `:quit`)
-  - `search.go` — regex search helpers: `runSearch`, `updateSearch`, `nextMatch`, `prevMatch`, `clearSearch`
-  - `filter.go` — view-layer filter: `runFilter`, `updateFilter`, `clearFilter`, `intersectSearch`
+- `internal/logmsg` — log message types and parsers (JSON, logfmt, auto-detect, passthrough)
+- `internal/highlight` — syntax highlighting with a per-message render cache
+- `internal/redact` — redacts sensitive fields before sending logs to the LLM
+- `internal/tools` — buffer-query tool registry (`search_regex`, `count_regex`, `tail`, `read`) used by the chat agent
+- `internal/agent` — LLM client, message types, and agent lifecycle; `command.go` defines the palette agent's tool schemas (`find`, `count`, `tail`, `read`, `pick_tool`)
+- `internal/tui` — Bubble Tea model: state, update loop, viewport, layout, rendering, search/filter, agent bridging, and command palette
+- `cmd/logsim` — log simulator for development and testing
 
 ## TUI focus model
 
@@ -58,7 +48,7 @@ The model tracks a `focusArea` (either `focusLogs` or `focusChat`). All key rout
 
 Unprefixed palette input (no `:` or `/` prefix) is routed through a short-lived `cmdAgent` defined in `internal/agent/command.go`. The agent runs a two-phase loop:
 
-1. **Inspection** (`find`, `count`, `tail`, `read`) — read-only tools that query the buffer and feed results back into the loop. Budget: `MaxCmdToolTurns` (4).
+1. **Inspection** (`find`, `count`, `tail`, `read`) — read-only tools that query the buffer and feed results back into the loop. Budget: 4 rounds (`MaxCmdToolTurns` in `tui/model.go`).
 2. **Commit** (`pick_tool`) — a single umbrella call that names the action and closes the loop.
 
 `pick_tool` actions: `grep`, `clear_grep`, `jump`, `highlight`, `clear_highlight`, `set_model`, `clear_chat`, `quit`, `answer`, `reject`.
