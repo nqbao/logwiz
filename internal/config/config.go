@@ -18,7 +18,7 @@ import (
 // Defaults.
 const (
 	DefaultBaseURL          = "https://api.openai.com/v1"
-	DefaultModel            = "gpt-4o-mini"
+	DefaultModel            = "gpt-5.4-nano"
 	DefaultMaxLines         = 50000
 	DefaultContextLines     = 10
 	DefaultSidebarWidth     = 50
