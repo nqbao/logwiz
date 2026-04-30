@@ -38,6 +38,14 @@ func main() {
 		return
 	}
 
+	if len(os.Args) >= 2 && os.Args[1] == "setup" {
+		if err := config.Setup(); err != nil {
+			fmt.Fprintln(os.Stderr, "logwiz:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Capture the pipeline pgid before running so we can signal the whole
 	// group (start_api.sh, uvicorn, vite, etc.) when logwiz exits.
 	pgid, pgidErr := syscall.Getpgid(0)
