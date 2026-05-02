@@ -103,6 +103,12 @@ func run() error {
 		kind       tui.SourceKind
 		fileFollow source.FileFollower
 	)
+	if cfg.File != "" {
+		if _, err := os.Stat(cfg.File); err != nil {
+			return fmt.Errorf("open %s: %w", cfg.File, err)
+		}
+	}
+
 	switch {
 	case cfg.File != "":
 		f := &source.File{Path: cfg.File, Parser: parser, MaxLines: cfg.MaxLines, Follow: true}
