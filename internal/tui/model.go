@@ -8,6 +8,7 @@ package tui
 
 import (
 	"context"
+	"math/rand"
 	"regexp"
 	"time"
 
@@ -161,6 +162,27 @@ type Model struct {
 	cancel context.CancelFunc
 }
 
+// cmdHints are random placeholder tips shown in the command palette input.
+var cmdHints = []string{
+	"Ask anything about the logs…",
+	"grep for timeout errors",
+	"count how many 500 errors occurred",
+	"show errors from the last 5 minutes",
+	"what's causing the spike in errors?",
+	"find lines matching panic",
+	"how many 4xx requests happened?",
+	"summarize recent activity",
+	"count warnings vs errors",
+	"any database connection failures?",
+	"grep for slow queries",
+	"filter lines with :grep timeout",
+	"case-insensitive search with :grep -i warning",
+	"highlight matches with :hl error",
+	"clear all highlights with :nohl",
+	"pretty-print structured logs with :view pretty",
+	"see raw lines with :view raw",
+}
+
 // inputHints cycles through the textarea placeholder.
 var inputHints = []string{
 	"Ask a question about the logs...",
@@ -180,7 +202,7 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 
 	ci := textinput.New()
 	ci.Prompt = ""
-	ci.Placeholder = ":command  /command  or describe what you want"
+	ci.Placeholder = cmdHints[rand.Intn(len(cmdHints))]
 	ci.CharLimit = 200
 
 	ctx, cancel := context.WithCancel(context.Background())

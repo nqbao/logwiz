@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -309,6 +310,7 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyOpen:
 		m.cmdActive = true
 		m.cmdInput.SetValue("")
+		m.cmdInput.Placeholder = cmdHints[rand.Intn(len(cmdHints))]
 		m.cmdErr = ""
 		m = m.onResize(m.width, m.height)
 		return m, m.cmdInput.Focus()

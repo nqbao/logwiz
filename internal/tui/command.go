@@ -58,7 +58,7 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 	if raw[0] != ':' && raw[0] != '/' {
 		// Agent command: route through LLM tool-caller.
 		if m.chatClient == nil {
-			m.cmdErr = "agent commands require API key (set OPENAI_API_KEY or --api-key)"
+			m.cmdErr = "LLM is not configured — run 'logwiz setup' to set your service API key"
 			m.cmdInfo = ""
 			return m, nil
 		}

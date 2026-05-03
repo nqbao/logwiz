@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"regexp"
 	"strings"
 	"time"
@@ -377,6 +378,7 @@ func agentKeepPalette(m Model, info string, isAnswer bool) Model {
 		m.cmdPending = ""
 	}
 	m.cmdInput.SetValue("")
+	m.cmdInput.Placeholder = cmdHints[rand.Intn(len(cmdHints))]
 	return m
 }
 
@@ -398,7 +400,7 @@ func (m Model) submitChat() (tea.Model, tea.Cmd) {
 	}
 
 	if m.chatClient == nil {
-		m.chatErr = "chat is not configured (set OPENAI_API_KEY or --api-key)"
+		m.chatErr = "LLM is not configured — run 'logwiz setup' to set your service API key"
 		return m, nil
 	}
 
