@@ -143,6 +143,8 @@ func (m *Model) updateFilter(newLines, evictions int) {
 		return
 	}
 
+	oldLen := len(m.filterIndices)
+
 	// Shift stored indices down by eviction count; drop gone entries.
 	if evictions > 0 {
 		keep := 0
@@ -154,6 +156,8 @@ func (m *Model) updateFilter(newLines, evictions int) {
 		}
 		m.filterIndices = m.filterIndices[:keep]
 	}
+
+	filterEvictions := oldLen - len(m.filterIndices)
 
 	// Scan the newly appended tail for additional matches.
 	bufLen := m.buf.Len()
@@ -169,7 +173,7 @@ func (m *Model) updateFilter(newLines, evictions int) {
 
 	// Only push to the viewport and intersect search when filter is active.
 	if m.filterEnabled {
-		m.logs.SetFilter(m.filterIndices)
+		m.logs.SetFilterIncremental(m.filterIndices, filterEvictions)
 		if m.searchRe != nil {
 			m.intersectSearch()
 		}

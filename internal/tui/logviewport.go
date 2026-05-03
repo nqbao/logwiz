@@ -83,6 +83,72 @@ func (v *LogViewport) SetFilter(indices []int) {
 	}
 }
 
+// SetFilterIncremental updates filterIndices and incrementally maintains
+// widthCache (and wrapCache in wrap mode) when only entries at the front
+// have been evicted and entries at the tail have been appended — the
+// typical streaming pattern from updateFilter.
+//
+// evictedCount is the number of filterIndices entries removed from the front.
+// The remaining entries' buffer indices have been decremented but their
+// content (and therefore visual width) is unchanged, so the corresponding
+// widthCache entries are still valid — they just need to be shifted left.
+//
+// Falls back to a full SetFilter rebuild when cache lengths don't match,
+// ensuring correctness in the face of view-mode changes, size changes, etc.
+func (v *LogViewport) SetFilterIncremental(indices []int, evictedCount int) {
+	prevLen := len(v.filterIndices)
+	if len(v.widthCache) != prevLen {
+		v.SetFilter(indices)
+		return
+	}
+	if len(indices) < prevLen-evictedCount {
+		v.SetFilter(indices)
+		return
+	}
+
+	v.filterIndices = indices
+
+	if evictedCount > prevLen {
+		v.SetFilter(indices)
+		return
+	}
+
+	if evictedCount > 0 {
+		copy(v.widthCache, v.widthCache[evictedCount:])
+		v.widthCache = v.widthCache[:len(v.widthCache)-evictedCount]
+	}
+
+	for i := len(v.widthCache); i < len(indices); i++ {
+		v.widthCache = append(v.widthCache,
+			ansi.StringWidth(v.display(v.buf.Line(indices[i]))))
+	}
+
+	if v.Wrap {
+		if v.contentWidth() != v.wrapCacheWidth {
+			v.recomputeWrapCache()
+		} else {
+			if evictedCount > 0 {
+				for i := 0; i < evictedCount; i++ {
+					v.totalRows -= v.wrapCache[i]
+				}
+				copy(v.wrapCache, v.wrapCache[evictedCount:])
+				v.wrapCache = v.wrapCache[:len(v.wrapCache)-evictedCount]
+			}
+			for i := len(v.wrapCache); i < len(indices); i++ {
+				h := v.lineWrapHeight(v.widthCache[i])
+				v.wrapCache = append(v.wrapCache, h)
+				v.totalRows += h
+			}
+		}
+	}
+
+	if v.autoScroll {
+		v.GotoBottom()
+	} else {
+		v.YOffset = clamp(v.YOffset, 0, v.maxYOffset())
+	}
+}
+
 // effectiveLen returns the number of visible lines (filtered or total).
 func (v *LogViewport) effectiveLen() int {
 	if v.filterIndices != nil {
