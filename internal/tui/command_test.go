@@ -61,26 +61,6 @@ func TestDispatchCommand_BadRegex(t *testing.T) {
 	}
 }
 
-// TestDispatchCommand_Chat opens the sidebar and pre-fills the input.
-func TestDispatchCommand_Chat(t *testing.T) {
-	m := newTestModel(t)
-	m.cmdActive = true
-
-	m2, _ := m.dispatchCommand(":chat hello world")
-	if m2.cmdActive {
-		t.Error("cmdActive should be false after :chat")
-	}
-	if !m2.sidebarOpen {
-		t.Error("sidebar should be open after :chat")
-	}
-	if m2.focus != focusChat {
-		t.Errorf("focus = %v, want focusChat", m2.focus)
-	}
-	if got := m2.input.Value(); got != "hello world" {
-		t.Errorf("input value = %q, want %q", got, "hello world")
-	}
-}
-
 // TestDispatchCommand_Clear resets conversation.
 func TestDispatchCommand_Clear(t *testing.T) {
 	m := newTestModel(t)

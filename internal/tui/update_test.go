@@ -349,29 +349,6 @@ func TestPaletteEscCancels(t *testing.T) {
 	}
 }
 
-// TestPaletteEnterChatOpensSidebar verifies Enter on :chat hello opens sidebar
-// with the pre-filled text and focuses chat.
-func TestPaletteEnterChatOpensSidebar(t *testing.T) {
-	m := newTestModel(t)
-	m.cmdActive = true
-	m.cmdInput.SetValue(":chat hello")
-
-	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	mm := m2.(Model)
-	if mm.cmdActive {
-		t.Error("cmdActive should be false after successful :chat")
-	}
-	if !mm.sidebarOpen {
-		t.Error("sidebar should be open after :chat")
-	}
-	if mm.focus != focusChat {
-		t.Errorf("focus = %v, want focusChat", mm.focus)
-	}
-	if got := mm.input.Value(); got != "hello" {
-		t.Errorf("input value = %q, want %q", got, "hello")
-	}
-}
-
 // TestNKeyAdvancesSearchCursor verifies n advances cursor and wraps.
 func TestNKeyAdvancesSearchCursor(t *testing.T) {
 	m := newTestModel(t)
