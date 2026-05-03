@@ -101,17 +101,16 @@ func (v *LogViewport) SetFilterIncremental(indices []int, evictedCount int) {
 		v.SetFilter(indices)
 		return
 	}
+	if evictedCount > prevLen {
+		v.SetFilter(indices)
+		return
+	}
 	if len(indices) < prevLen-evictedCount {
 		v.SetFilter(indices)
 		return
 	}
 
 	v.filterIndices = indices
-
-	if evictedCount > prevLen {
-		v.SetFilter(indices)
-		return
-	}
 
 	if evictedCount > 0 {
 		copy(v.widthCache, v.widthCache[evictedCount:])
