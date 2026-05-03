@@ -17,7 +17,8 @@ import (
 type cmdHandler func(m Model, args string) (Model, tea.Cmd, error)
 
 var cmdRegistry = map[string]cmdHandler{
-	"chat":      cmdChat,
+	// for future sidebar chat
+	// "chat":      cmdChat,
 	"search":    cmdSearch,
 	"grep":      cmdGrep,
 	"filter":    cmdFilter,
@@ -64,6 +65,8 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 		}
 		m.cmdInfo = "thinking…"
 		m.cmdErr = ""
+		m.cmdAnswer = ""
+		m = m.onResize(m.width, m.height)
 		return startAgentCmd(m, raw)
 	}
 	raw = strings.TrimSpace(raw[1:])

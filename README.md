@@ -28,15 +28,14 @@ export OPENAI_BASE_URL=https://api.openai.com/v1   # or Ollama / LM Studio / vLL
 export OPENAI_MODEL=gpt-5.4-nano
 ```
 
-Skip this if you just want the viewer — search, filter, and highlights work
-without any API key.
+View, search, filter, and highlight always work without any LLM or API key.
 
 ## Usage
 
 ```
 some_command 2>&1 | logwiz          # stream from pipe
 logwiz server.log                   # read a file
-logwiz setup                        # configure API endpoint
+logwiz -h                           # see all other command
 ```
 
 Press `/` to open the command palette, then ask questions or run commands:
@@ -51,12 +50,19 @@ Press `/` to open the command palette, then ask questions or run commands:
 
 `q` quits. Press `?` for all keybindings.
 
+## Features
+
+- Stream from a pipe or read a file; works with JSON, logfmt, and plain text
+- Regex search, filter (`:grep`), and highlight — stackable and composable
+- AI command palette: ask questions in plain English, AI inspects the buffer and answers
+- Sensitive field redaction before logs are sent to the LLM (enabled by default)
+- Pretty-print view for structured logs; raw and colorized modes also available
+
 ## Commands & Keys
 
 | Key | Action |
 | --- | ------ |
 | `/` | open command palette — type a question or a `:command` |
-| `:chat [q]` | open chat sidebar |
 | `:search <re>` | regex search |
 | `:grep [-i] [-F] [-v] <re>` | filter lines by regex (stackable, ANDed) |
 | `:hl [-i] [-F] <re>` | highlight matching lines (stackable) |
@@ -66,36 +72,11 @@ Press `/` to open the command palette, then ask questions or run commands:
 | `n` / `N` | next / prev search match |
 | `f` / `F` | pause / clear filters |
 | `H` | toggle highlights on/off |
-| `c` | clear chat history |
 | `?` | toggle help overlay |
-| `tab` | switch focus (logs / chat input) |
-| `esc` | close sidebar / cancel palette / clear search |
+| `esc` | cancel palette / clear search |
 | `j` / `k` / pgup / pgdn | scroll logs |
 | `q` | quit |
 
 Other commands available inside the palette: `:filter` (attribute/time-based
 filtering), `:follow` (live tail a file), `:config` (runtime configuration),
-`:view` (set view mode), `:clear` (reset filters/highlights/chat).
-
-## Configuration
-
-Flags > env vars > `~/.logwiz/config.json` > defaults.
-
-Set at runtime with `:config <key> [val]`, persisted to `~/.logwiz/config.json`.
-
-| Flag | Env | Default |
-| --- | --- | --- |
-| `--api-key` | `OPENAI_API_KEY` | — |
-| `--base-url` | `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
-| `--model` | `OPENAI_MODEL` | `gpt-5.4-nano` |
-| `--max-lines` | — | `50000` |
-| `--context-lines` | — | `10` |
-| `--sidebar-width` | — | `50` |
-| `--view` | — | `raw` |
-| `--format` | — | `auto` |
-
-## Tests
-
-```
-make test
-```
+`:view` (set view mode), `:clear` (reset filters/highlights).

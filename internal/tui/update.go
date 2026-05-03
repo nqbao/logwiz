@@ -191,8 +191,8 @@ func (m Model) cmdRows() int {
 	if !m.cmdActive {
 		return 0
 	}
-	if m.cmdErr != "" || m.cmdInfo != "" {
-		return 4 // border_top + input + info/error + border_bottom
+	if m.cmdErr != "" || m.cmdInfo != "" || m.cmdAnswer != "" || m.cmdAgent != nil {
+		return 4 // border_top + input + info/error/answer + border_bottom
 	}
 	return 3 // border_top + input + border_bottom
 }
