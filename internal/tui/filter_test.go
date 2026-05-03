@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/nqbao/logwiz/internal/logmsg"
 	"github.com/nqbao/logwiz/internal/source"
 )
@@ -286,6 +288,56 @@ func TestUpdateFilter_ViaNewLinesMsg(t *testing.T) {
 	}
 	if mm.filterIndices[2] != 3 {
 		t.Errorf("new filter index = %d, want 3", mm.filterIndices[2])
+	}
+}
+
+func TestUpdateFilter_ViaNewLinesMsg_ViewportWidthCache(t *testing.T) {
+	m := newTestModel(t)
+	seedBuf(m.buf, "error: a", "info: b", "error: c")
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
+
+	if len(m.logs.widthCache) != 2 {
+		t.Fatalf("initial widthCache len = %d, want 2", len(m.logs.widthCache))
+	}
+	if len(m.logs.filterIndices) != 2 {
+		t.Fatalf("initial logs.filterIndices len = %d, want 2", len(m.logs.filterIndices))
+	}
+
+	m2, _ := m.Update(source.NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "error: d"}}})
+	mm := m2.(Model)
+
+	if len(mm.logs.widthCache) != 3 {
+		t.Fatalf("widthCache len = %d, want 3", len(mm.logs.widthCache))
+	}
+	if len(mm.logs.filterIndices) != 3 {
+		t.Fatalf("logs.filterIndices len = %d, want 3", len(mm.logs.filterIndices))
+	}
+	if mm.logs.filterIndices[2] != 3 {
+		t.Errorf("logs.filterIndices[2] = %d, want 3", mm.logs.filterIndices[2])
+	}
+	want := ansi.StringWidth("error: d")
+	if mm.logs.widthCache[2] != want {
+		t.Errorf("widthCache[2] = %d, want %d", mm.logs.widthCache[2], want)
+	}
+}
+
+func TestUpdateFilter_ViaNewLinesMsg_NonMatching_ViewportCacheUnchanged(t *testing.T) {
+	m := newTestModel(t)
+	seedBuf(m.buf, "error: a", "info: b")
+	addFilter(&m, regexp.MustCompile(`^error`), filterInclude)
+
+	if len(m.logs.widthCache) != 1 {
+		t.Fatalf("initial widthCache len = %d, want 1", len(m.logs.widthCache))
+	}
+
+	m2, _ := m.Update(source.NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "info: c"}}})
+	mm := m2.(Model)
+
+	if len(mm.logs.widthCache) != 1 {
+		t.Fatalf("widthCache len = %d, want 1 (no new match)", len(mm.logs.widthCache))
+	}
+	if len(mm.filterIndices) != 1 {
+		t.Fatalf("filterIndices len = %d, want 1", len(mm.filterIndices))
 	}
 }
 

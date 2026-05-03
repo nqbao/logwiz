@@ -710,3 +710,192 @@ func TestSetFilter_ClampsStaleYOffset(t *testing.T) {
 		}
 	}
 }
+
+// --- SetFilterIncremental ---
+
+func TestSetFilterIncremental_BasicAppend(t *testing.T) {
+	v := newTestViewport(80, 5, "a", "b", "c", "d", "e", "f")
+	v.SetFilter([]int{0, 2, 4})
+	if len(v.widthCache) != 3 {
+		t.Fatalf("initial widthCache len = %d, want 3", len(v.widthCache))
+	}
+
+	v.SetFilterIncremental([]int{0, 2, 4, 5}, 0)
+
+	if len(v.filterIndices) != 4 {
+		t.Fatalf("filterIndices len = %d, want 4", len(v.filterIndices))
+	}
+	if v.filterIndices[3] != 5 {
+		t.Errorf("filterIndices[3] = %d, want 5", v.filterIndices[3])
+	}
+	if len(v.widthCache) != 4 {
+		t.Fatalf("widthCache len = %d, want 4", len(v.widthCache))
+	}
+	want := ansi.StringWidth("f")
+	if v.widthCache[3] != want {
+		t.Errorf("widthCache[3] = %d, want %d", v.widthCache[3], want)
+	}
+}
+
+func TestSetFilterIncremental_AppendFromEmptyFilter(t *testing.T) {
+	v := newTestViewport(80, 5, "a", "b", "c")
+	v.SetFilter([]int{})
+
+	v.SetFilterIncremental([]int{0, 2}, 0)
+
+	if len(v.filterIndices) != 2 {
+		t.Fatalf("filterIndices len = %d, want 2", len(v.filterIndices))
+	}
+	if len(v.widthCache) != 2 {
+		t.Fatalf("widthCache len = %d, want 2", len(v.widthCache))
+	}
+}
+
+func TestSetFilterIncremental_EvictionOnly(t *testing.T) {
+	v := newTestViewport(80, 5, "a", "b", "c", "d", "e")
+	v.SetFilter([]int{0, 2, 4})
+	origLen := len(v.widthCache)
+
+	v.SetFilterIncremental([]int{2, 4}, 1)
+
+	if len(v.filterIndices) != 2 {
+		t.Fatalf("filterIndices len = %d, want 2", len(v.filterIndices))
+	}
+	if v.filterIndices[0] != 2 || v.filterIndices[1] != 4 {
+		t.Errorf("filterIndices = %v, want [2 4]", v.filterIndices)
+	}
+	if len(v.widthCache) != 2 {
+		t.Fatalf("widthCache len = %d, want 2", len(v.widthCache))
+	}
+	if len(v.widthCache) != origLen-1 {
+		t.Errorf("widthCache shrunk from %d to %d, want %d", origLen, len(v.widthCache), origLen-1)
+	}
+}
+
+func TestSetFilterIncremental_EvictionAndAppend(t *testing.T) {
+	v := newTestViewport(80, 5, "a", "b", "c", "d", "e", "f")
+	v.SetFilter([]int{0, 2, 4})
+
+	v.SetFilterIncremental([]int{1, 3, 5}, 1)
+
+	if len(v.filterIndices) != 3 {
+		t.Fatalf("filterIndices len = %d, want 3", len(v.filterIndices))
+	}
+	if v.filterIndices[0] != 1 || v.filterIndices[1] != 3 || v.filterIndices[2] != 5 {
+		t.Errorf("filterIndices = %v, want [1 3 5]", v.filterIndices)
+	}
+	if len(v.widthCache) != 3 {
+		t.Fatalf("widthCache len = %d, want 3", len(v.widthCache))
+	}
+	want := ansi.StringWidth("f")
+	if v.widthCache[2] != want {
+		t.Errorf("widthCache[2] = %d, want %d", v.widthCache[2], want)
+	}
+}
+
+func TestSetFilterIncremental_FallBackOnCacheLengthMismatch(t *testing.T) {
+	v := newTestViewport(80, 5, "a", "b", "c", "d")
+	v.SetFilter([]int{0, 2})
+	v.widthCache = v.widthCache[:1]
+
+	v.SetFilterIncremental([]int{0, 2, 3}, 0)
+
+	if len(v.widthCache) != 3 {
+		t.Fatalf("widthCache len = %d after fallback, want 3", len(v.widthCache))
+	}
+	if len(v.filterIndices) != 3 {
+		t.Fatalf("filterIndices len = %d after fallback, want 3", len(v.filterIndices))
+	}
+}
+
+func TestSetFilterIncremental_FallBackOnExcessEviction(t *testing.T) {
+	v := newTestViewport(80, 5, "a", "b")
+	v.SetFilter([]int{1})
+
+	v.SetFilterIncremental([]int{0, 1}, 2)
+
+	if v.filterIndices[0] != 0 {
+		t.Errorf("filterIndices[0] = %d, want 0 (full rebuild)", v.filterIndices[0])
+	}
+	if len(v.widthCache) != 2 {
+		t.Fatalf("widthCache len = %d after fallback, want 2", len(v.widthCache))
+	}
+}
+
+func TestSetFilterIncremental_NoAutoScroll(t *testing.T) {
+	v := newTestViewport(80, 5, "a", "b", "c", "d", "e", "f")
+	v.autoScroll = false
+	v.SetFilter([]int{0, 2, 4})
+	v.YOffset = 0
+
+	v.SetFilterIncremental([]int{2, 4}, 1)
+
+	if v.YOffset != 0 {
+		t.Errorf("YOffset = %d, want 0 (clamped, no auto-scroll)", v.YOffset)
+	}
+	if v.filterIndices[0] != 2 {
+		t.Errorf("filterIndices[0] = %d, want 2", v.filterIndices[0])
+	}
+}
+
+func TestSetFilterIncremental_WrapMode_EvictionOnly(t *testing.T) {
+	v := newWrapViewport(5, 10, "a", "ab", "abcde", "xyz", "short")
+	v.SetFilter([]int{0, 2, 4})
+	if len(v.wrapCache) != 3 {
+		t.Fatalf("initial wrapCache len = %d, want 3", len(v.wrapCache))
+	}
+	initialRows := v.totalRows
+
+	v.SetFilterIncremental([]int{2, 4}, 1)
+
+	if len(v.filterIndices) != 2 {
+		t.Fatalf("filterIndices len = %d, want 2", len(v.filterIndices))
+	}
+	if len(v.wrapCache) != 2 {
+		t.Fatalf("wrapCache len = %d, want 2", len(v.wrapCache))
+	}
+	if v.totalRows >= initialRows {
+		t.Errorf("totalRows = %d, want < %d (eviction removed rows)", v.totalRows, initialRows)
+	}
+}
+
+func TestSetFilterIncremental_WrapMode_EvictionAndAppend(t *testing.T) {
+	v := newWrapViewport(5, 10, "a", "ab", "abcde", "xyz", "short", "longstring")
+	v.SetFilter([]int{0, 2, 4})
+	initialRows := v.totalRows
+	initialWrapLen := len(v.wrapCache)
+
+	v.SetFilterIncremental([]int{2, 4, 5}, 1)
+
+	if len(v.filterIndices) != 3 {
+		t.Fatalf("filterIndices len = %d, want 3", len(v.filterIndices))
+	}
+	if len(v.wrapCache) != 3 {
+		t.Fatalf("wrapCache len = %d, want 3 (was %d → evict 1 → append 1)", len(v.wrapCache), initialWrapLen)
+	}
+	if v.filterIndices[2] != 5 {
+		t.Errorf("filterIndices[2] = %d, want 5", v.filterIndices[2])
+	}
+	if v.wrapCacheWidth != v.contentWidth() {
+		t.Errorf("wrapCacheWidth = %d, want %d", v.wrapCacheWidth, v.contentWidth())
+	}
+	_ = initialRows // evicted + appended = net change; just verify consistency
+	if v.totalRows != v.wrapCache[0]+v.wrapCache[1]+v.wrapCache[2] {
+		t.Errorf("totalRows = %d, want sum(wrapCache) = %d", v.totalRows, v.wrapCache[0]+v.wrapCache[1]+v.wrapCache[2])
+	}
+}
+
+func TestSetFilterIncremental_WrapMode_FallBackOnWidthChange(t *testing.T) {
+	v := newWrapViewport(5, 10, "a", "ab", "abcde")
+	v.SetFilter([]int{0, 2})
+	v.wrapCacheWidth = 999
+
+	v.SetFilterIncremental([]int{0, 2}, 0)
+
+	if v.wrapCacheWidth == 999 {
+		t.Error("wrapCacheWidth should have been recomputed by fallback")
+	}
+	if len(v.wrapCache) != 2 {
+		t.Errorf("wrapCache len = %d after fallback, want 2", len(v.wrapCache))
+	}
+}
