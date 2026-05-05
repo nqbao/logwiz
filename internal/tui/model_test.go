@@ -6,7 +6,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/buffer"
 	"github.com/nqbao/logwiz/internal/config"
 	"github.com/nqbao/logwiz/internal/logmsg"
@@ -127,20 +126,8 @@ func TestChatErrClearsLoadingAndRecordsMessage(t *testing.T) {
 	}
 }
 
-func TestClearEmptiesChat(t *testing.T) {
-	m := newTestModel(t)
-	m.chatMsgs = []agent.Message{{Role: "user", Content: "x"}}
-	m.chatErr = "some err"
-	// 'c' works only in logs focus; sidebar closed by default.
-	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	mm := m2.(Model)
-	if len(mm.chatMsgs) != 0 {
-		t.Fatalf("chatMsgs = %+v", mm.chatMsgs)
-	}
-	if mm.chatErr != "" {
-		t.Fatalf("chatErr = %q", mm.chatErr)
-	}
-}
+// TODO: re-enable when chat sidebar is re-enabled.
+// func TestClearEmptiesChat(t *testing.T) { ... }
 
 func TestSubmitWithoutClientSetsError(t *testing.T) {
 	m := newTestModel(t)

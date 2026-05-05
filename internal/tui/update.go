@@ -374,9 +374,10 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyHelp:
 		m.help = !m.help
 		return m, nil
-	case keyClear:
-		m = clearChat(m)
-		return m, nil
+	// TODO: re-enable when chat sidebar is re-enabled.
+	// case keyClear:
+	// 	m = clearChat(m)
+	// 	return m, nil
 	case keyBufferClear:
 		if m.sourceKind == SourceStdin {
 			m = clearBuffer(m)
