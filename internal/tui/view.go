@@ -201,6 +201,8 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  :hl [-i] [-F] re    highlight matching lines in colour (stackable, does not hide)",
 		"  :nohl         clear all highlights",
 		"  :clear chat|grep|hl   clear chat history / grep filters / highlights",
+		"  :clear buffer         discard all buffered lines (streaming only)",
+		"  C                     clear buffer (streaming only)",
 		"  H             toggle highlights on / off",
 		"  p             cycle view mode: raw → color → pretty (json/logfmt)",
 		"  :view [raw|color|pretty]   set view mode explicitly",
@@ -211,7 +213,8 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  tab           switch focus",
 		"  enter         send chat message (in input)",
 		"  ctrl+j        newline in chat input",
-		"  c             clear chat history",
+		// TODO: re-enable when chat sidebar is re-enabled.
+		// "  c             clear chat history",
 		"  w             toggle line wrap",
 		"  j / ↓         scroll logs down",
 		"  k / ↑         scroll logs up",
