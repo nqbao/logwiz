@@ -533,6 +533,10 @@ func cmdFollow(m Model, args string) (Model, tea.Cmd, error) {
 func clearBuffer(m Model) Model {
 	m.buf.Clear()
 
+	// Drop all cached renderings for the evicted lines. buffer.Clear does not
+	// call Evict per-line, so we flush the whole cache here.
+	m.highlighter.Clear()
+
 	// Re-create the log viewport against the now-empty buffer, preserving
 	// display settings (dimensions, wrap, highlighter).
 	old := m.logs
