@@ -550,8 +550,14 @@ func clearBuffer(m Model) Model {
 	// Clear derived filter indices; rules are preserved so they apply to new lines.
 	m.filterIndices = nil
 
-	// Clear derived highlight match maps; rules are preserved.
-	m.hlMatches = nil
+	// Clear derived highlight match indices; rules are preserved, but the per-rule
+	// index slices must be re-allocated to the correct length so updateHL can
+	// safely index into m.hlMatches[ri] when the next batch of lines arrives.
+	if len(m.hlRules) > 0 {
+		m.hlMatches = make([][]int, len(m.hlRules))
+	} else {
+		m.hlMatches = nil
+	}
 	m.logs.hlMatchMap = nil
 
 	return m
