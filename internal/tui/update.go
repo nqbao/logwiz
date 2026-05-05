@@ -377,6 +377,11 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyClear:
 		m = clearChat(m)
 		return m, nil
+	case keyBufferClear:
+		if m.sourceKind == SourceStdin {
+			m = clearBuffer(m)
+		}
+		return m, nil
 	case keyWrap:
 		m.logs.ToggleWrap()
 		return m, nil

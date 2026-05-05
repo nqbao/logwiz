@@ -426,8 +426,13 @@ func cmdClear(m Model, args string) (Model, tea.Cmd, error) {
 	case "hl", "highlight":
 		clearHL(&m)
 		return m, nil, infoErr{"highlights cleared"}
+	case "buffer":
+		if m.sourceKind != SourceStdin {
+			return m, nil, fmt.Errorf(":clear buffer is only available in streaming mode")
+		}
+		return clearBuffer(m), nil, nil
 	default:
-		return m, nil, fmt.Errorf("usage: clear chat|grep|hl")
+		return m, nil, fmt.Errorf("usage: clear chat|grep|hl|buffer")
 	}
 }
 
@@ -521,6 +526,35 @@ func cmdFollow(m Model, args string) (Model, tea.Cmd, error) {
 	default:
 		return m, nil, fmt.Errorf("usage: follow [on|off|status]")
 	}
+}
+
+// clearBuffer discards all buffered lines and resets derived viewport/search/
+// filter/highlight state. Only called in streaming (stdin) mode.
+func clearBuffer(m Model) Model {
+	m.buf.Clear()
+
+	// Re-create the log viewport against the now-empty buffer, preserving
+	// display settings (dimensions, wrap, highlighter).
+	old := m.logs
+	m.logs = newLogViewport(m.buf)
+	m.logs.Width = old.Width
+	m.logs.Height = old.Height
+	m.logs.Wrap = old.Wrap
+	m.logs.h = old.h
+
+	// Clear search state — no lines left to match.
+	m.searchRe = nil
+	m.searchMatches = nil
+	m.searchCursor = 0
+
+	// Clear derived filter indices; rules are preserved so they apply to new lines.
+	m.filterIndices = nil
+
+	// Clear derived highlight match maps; rules are preserved.
+	m.hlMatches = nil
+	m.logs.hlMatchMap = nil
+
+	return m
 }
 
 // clearChat resets conversation state. Used by both the keybinding and

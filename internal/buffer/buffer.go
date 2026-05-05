@@ -35,6 +35,13 @@ func New(capLines int) *Buffer {
 // Cap returns the maximum number of lines retained.
 func (b *Buffer) Cap() int { return b.cap }
 
+// Clear discards all stored lines, resetting the buffer to empty. nextLine is
+// not reset so that IDs remain unique across the lifetime of the process.
+func (b *Buffer) Clear() {
+	b.head = 0
+	b.size = 0
+}
+
 // Len returns the number of lines currently stored.
 func (b *Buffer) Len() int { return b.size }
 

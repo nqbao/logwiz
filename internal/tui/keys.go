@@ -13,7 +13,8 @@ const (
 	keyEnter    = "enter"
 	keyAltEnter = "ctrl+j"
 	keyHelp     = "?"
-	keyClear    = "c"
+	keyClear       = "c"
+	keyBufferClear = "C"
 	keyWrap     = "w"
 
 	keyNextMatch = "n"
