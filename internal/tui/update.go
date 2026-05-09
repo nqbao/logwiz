@@ -165,6 +165,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+		// Block left clicks outside the logs pane (palette, status row).
+		// Wheel events still fall through so scrolling works anywhere.
+		if msg.Y >= m.logs.Height && msg.Button == tea.MouseButtonLeft {
+			return m, nil
+		}
+
 		m.logs.Update(msg)
 		return m, nil
 	}

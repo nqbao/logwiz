@@ -96,6 +96,7 @@ func TestUpdateSearch_EvictedMatchDropped(t *testing.T) {
 	m.searchRe = regexp.MustCompile("hit")
 	m.searchMatches = []int{0, 3}
 	m.searchCursor = 1 // was pointing at index 3
+	m.logs.Selected = 3
 
 	m.updateSearch(0, 1)
 
@@ -153,5 +154,46 @@ func TestUpdateSearch_ViaNewLinesMsg(t *testing.T) {
 	}
 	if mm.searchMatches[2] != 3 {
 		t.Errorf("new match index = %d, want 3", mm.searchMatches[2])
+	}
+}
+
+// TestUpdateSearch_PreservesUserClick verifies that after the user has clicked
+// a different line (Selected != cursor's match), incoming streaming batches
+// don't snap Selected back to the cursor's match.
+func TestUpdateSearch_PreservesUserClick(t *testing.T) {
+	m := newTestModel(t)
+	seedBuf(m.buf, "hit", "other", "hit")
+	m.searchRe = regexp.MustCompile("hit")
+	m.searchMatches = []int{0, 2}
+	m.searchCursor = 0
+	// Simulate user clicking the non-match line at index 1.
+	m.logs.Selected = 1
+
+	m.buf.Append(logmsg.LogMessage{Raw: "more"})
+	m.updateSearch(1, 0)
+
+	if m.logs.Selected != 1 {
+		t.Errorf("Selected = %d, want 1 (user click preserved)", m.logs.Selected)
+	}
+}
+
+// TestUpdateSearch_TracksCursorWhenInSync verifies that when Selected still
+// matches the cursor (no user override), eviction shifts propagate to Selected.
+func TestUpdateSearch_TracksCursorWhenInSync(t *testing.T) {
+	m := newTestModel(t)
+	seedBuf(m.buf, "hit", "miss", "hit")
+	m.searchRe = regexp.MustCompile("hit")
+	m.searchMatches = []int{0, 2}
+	m.searchCursor = 1
+	m.logs.Selected = 2 // tracking cursor's match
+
+	m.updateSearch(0, 1) // 1 eviction
+
+	// matches shift: [0,2] -> drop 0, [1]; cursor clamps to 0; Selected -> 1.
+	if len(m.searchMatches) != 1 || m.searchMatches[0] != 1 {
+		t.Fatalf("searchMatches = %v, want [1]", m.searchMatches)
+	}
+	if m.logs.Selected != 1 {
+		t.Errorf("Selected = %d, want 1 (cursor tracked)", m.logs.Selected)
 	}
 }

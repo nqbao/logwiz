@@ -43,12 +43,22 @@ func runSearch(m *Model, re *regexp.Regexp) {
 // their indices. Because the ring buffer maintains chronological order and
 // scanning only covers the newly added tail, the result list stays sorted.
 //
-// The viewport's Selected is updated to track the cursor's match; the viewport
-// position is not moved.
+// The viewport's Selected is updated to track the cursor's match only when it
+// is still on that match — if the user has clicked elsewhere we leave their
+// selection alone. The viewport position is not moved.
 func (m *Model) updateSearch(newLines, evictions int) {
 	if m.searchRe == nil {
 		return
 	}
+
+	// Capture whether Selected currently tracks the cursor's match before any
+	// shifts. If not, the user has moved selection (e.g. mouse click) and we
+	// must not snap them back.
+	prevCursorMatch := -1
+	if m.searchCursor < len(m.searchMatches) {
+		prevCursorMatch = m.searchMatches[m.searchCursor]
+	}
+	trackingCursor := m.logs.Selected == prevCursorMatch
 
 	// Shift stored indices down by eviction count; drop gone entries.
 	if evictions > 0 {
@@ -75,6 +85,10 @@ func (m *Model) updateSearch(newLines, evictions int) {
 		if m.searchRe.MatchString(m.buf.Line(i).Raw) {
 			m.searchMatches = append(m.searchMatches, i)
 		}
+	}
+
+	if !trackingCursor {
+		return
 	}
 
 	// Sync Selected with the current cursor without moving the viewport.

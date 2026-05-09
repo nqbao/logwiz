@@ -409,3 +409,21 @@ func TestEscClearsSearchWhenNoSidebar(t *testing.T) {
 		t.Errorf("logs.Selected = %d, want -1 after search clear", mm.logs.Selected)
 	}
 }
+
+// TestMouseLeftClickBelowLogsIgnored verifies that a left click in the palette
+// or status row (Y >= logs.Height) does not change the log selection.
+func TestMouseLeftClickBelowLogsIgnored(t *testing.T) {
+	m := newTestModel(t)
+	m.logs.Selected = 5
+	clickY := m.logs.Height + 1
+
+	m2, _ := m.Update(tea.MouseMsg{
+		Action: tea.MouseActionPress,
+		Button: tea.MouseButtonLeft,
+		Y:      clickY,
+	})
+	mm := m2.(Model)
+	if mm.logs.Selected != 5 {
+		t.Errorf("Selected = %d, want 5 (click below logs should be ignored)", mm.logs.Selected)
+	}
+}

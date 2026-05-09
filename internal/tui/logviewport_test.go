@@ -357,6 +357,22 @@ func TestUpdate_MouseReleaseIgnored(t *testing.T) {
 	}
 }
 
+// TestView_HighlightedSelectedKeepsBar verifies that selecting a highlighted
+// line preserves the colored ▌ gutter bar instead of replacing it with a space.
+func TestView_HighlightedSelectedKeepsBar(t *testing.T) {
+	const bar = "▌"
+	for _, wrap := range []bool{false, true} {
+		v := newTestViewport(40, 3, "alpha", "beta", "gamma")
+		v.Wrap = wrap
+		v.hlMatchMap = map[int]lipgloss.Color{1: "31"}
+		v.Selected = 1
+		out := v.View(noStyle)
+		if !strings.Contains(out, bar) {
+			t.Errorf("wrap=%v: selected highlighted line missing bar %q in output:\n%s", wrap, bar, out)
+		}
+	}
+}
+
 // --- View ---
 
 func TestView_RendersVisibleLines(t *testing.T) {
