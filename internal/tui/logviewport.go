@@ -644,9 +644,13 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 			line = ansi.Cut(line, v.xOffset, v.xOffset+cw)
 		}
 		if bufIdx == v.Selected {
-			line = selectedStyle.Width(cw).Render(ansi.Strip(line))
-			if v.hlMatchMap != nil {
-				line = " " + line
+			inner := selectedStyle.Width(cw).Render(ansi.Strip(line))
+			if col, ok := v.hlMatchMap[bufIdx]; ok {
+				line = lipgloss.NewStyle().Foreground(col).Render("▌") + inner
+			} else if v.hlMatchMap != nil {
+				line = " " + inner
+			} else {
+				line = inner
 			}
 		} else if col, ok := v.hlMatchMap[bufIdx]; ok {
 			bar := lipgloss.NewStyle().Foreground(col).Render("▌")
@@ -710,9 +714,13 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 				segment = ansi.Cut(line, wr*cw, (wr+1)*cw)
 			}
 			if bufIdx == v.Selected {
-				segment = selectedStyle.Width(cw).Render(ansi.Strip(segment))
-				if v.hlMatchMap != nil {
-					segment = " " + segment
+				inner := selectedStyle.Width(cw).Render(ansi.Strip(segment))
+				if col, ok := v.hlMatchMap[bufIdx]; ok {
+					segment = lipgloss.NewStyle().Foreground(col).Render("▌") + inner
+				} else if v.hlMatchMap != nil {
+					segment = " " + inner
+				} else {
+					segment = inner
 				}
 			} else if col, ok := v.hlMatchMap[bufIdx]; ok {
 				bar := lipgloss.NewStyle().Foreground(col).Render("▌")
