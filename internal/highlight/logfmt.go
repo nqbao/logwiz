@@ -141,6 +141,8 @@ func PrettyLogfmtRenderer(msg logmsg.LogMessage) string {
 
 func lfRenderValue(ls logfmtStyles, key, val string) string {
 	switch strings.ToLower(key) {
+	case "time", "ts", "@timestamp", "timestamp":
+		return ls.str.Render(logmsg.NormalizeTime(val))
 	case "level", "lvl", "severity":
 		switch strings.ToLower(val) {
 		case "error", "err", "fatal":

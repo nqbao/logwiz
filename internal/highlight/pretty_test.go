@@ -156,6 +156,35 @@ func TestPrettyLogfmtRenderer_LevelAliases(t *testing.T) {
 	}
 }
 
+func TestPrettyRenderer_NumericTimestamp(t *testing.T) {
+	// Unix epoch 1234567890 → 2009-02-13 23:31:30.000 UTC
+	jsonRaw := `{"ts":1234567890,"level":"info","msg":"hello"}`
+	lfRaw := `ts=1234567890 level=info msg=hello`
+
+	jsonOut := stripANSI(PrettyJSONRenderer(jsonMsg(jsonRaw)))
+	lfOut := stripANSI(PrettyLogfmtRenderer(logfmtMsg(lfRaw)))
+
+	for _, out := range []string{jsonOut, lfOut} {
+		if strings.Contains(out, "1234567890") {
+			t.Errorf("numeric ts should be normalized, got raw epoch in: %q", out)
+		}
+		if !strings.Contains(out, "2009-02-13") {
+			t.Errorf("expected normalized date 2009-02-13 in: %q", out)
+		}
+	}
+}
+
+func TestLogfmtRenderer_NumericTimestamp(t *testing.T) {
+	raw := `ts=1234567890 level=info msg=hello`
+	out := stripANSI(LogfmtRenderer(logfmtMsg(raw)))
+	if strings.Contains(out, "1234567890") {
+		t.Errorf("LogfmtRenderer: numeric ts should be normalized, got: %q", out)
+	}
+	if !strings.Contains(out, "2009-02-13") {
+		t.Errorf("LogfmtRenderer: expected normalized date 2009-02-13, got: %q", out)
+	}
+}
+
 func TestPrettyJSONAndLogfmt_EqualOutput(t *testing.T) {
 	jsonRaw := `{"ts":"2026-04-21T14:02:31Z","level":"info","msg":"hello","user":"bob"}`
 	lfRaw := `ts=2026-04-21T14:02:31Z level=info msg=hello user=bob`
