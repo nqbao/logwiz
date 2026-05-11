@@ -141,7 +141,8 @@ func TestJSONParser_BoolAndNullScalars(t *testing.T) {
 
 func TestJSONParser_MalformedJSONKeepsFormat(t *testing.T) {
 	p := JSONParser{}
-	got := p.Parse(`{bad json`)
+	// Malformed but bracket-balanced: still gets format hint for highlighter.
+	got := p.Parse(`{bad json}`)
 	if got[0].Format != "json" {
 		t.Errorf("Format = %q, want \"json\"", got[0].Format)
 	}
@@ -150,17 +151,18 @@ func TestJSONParser_MalformedJSONKeepsFormat(t *testing.T) {
 	}
 }
 
-func TestJSONParser_BracketPrefixPlainTextNotJSON(t *testing.T) {
+func TestJSONParser_UnbalancedBracketsNotJSON(t *testing.T) {
 	p := JSONParser{}
 	cases := []string{
 		"[DEBUG] 12:34:56: hello world",
 		"[INFO] starting server",
 		"[ERROR] something went wrong",
+		"{startup} config loaded",
 	}
 	for _, line := range cases {
 		got := p.Parse(line)
 		if got[0].Format != "" {
-			t.Errorf("Parse(%q).Format = %q, want \"\" (plain text should not get json format)", line, got[0].Format)
+			t.Errorf("Parse(%q).Format = %q, want \"\" (unbalanced brackets should not get json format)", line, got[0].Format)
 		}
 	}
 }

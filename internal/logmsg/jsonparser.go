@@ -16,16 +16,8 @@ func (JSONParser) Parse(raw string) []LogMessage {
 	}
 	msg, ok := parseJSON(raw)
 	if !ok {
-		// For lines starting with '{': keep the format hint even when
-		// malformed so the JSON highlighter can still colourize the attempt.
-		// For lines starting with '[': only keep the hint when the content
-		// is actually valid JSON (a JSON array). Plain-text lines that begin
-		// with '[' (e.g. "[DEBUG] 12:34:56: msg") must not get Format="json"
-		// or JSONRenderer will apply random colours to them.
-		t := strings.TrimSpace(raw)
-		if len(t) > 0 && t[0] == '[' && !json.Valid([]byte(raw)) {
-			return []LogMessage{{Raw: raw}}
-		}
+		// Malformed or non-object JSON (e.g. top-level array): keep the
+		// format hint for the highlighter but leave fields empty.
 		return []LogMessage{{Raw: raw, Format: "json"}}
 	}
 	return []LogMessage{msg}
@@ -77,14 +69,15 @@ func parseJSON(raw string) (LogMessage, bool) {
 	return msg, true
 }
 
-// looksLikeJSON is a cheap byte-level heuristic: a line is treated as JSON
-// if its first non-whitespace character is '{' or '['. Full validation is
-// intentionally deferred to parseJSON so malformed input still gets the
-// format tag for graceful highlighter fallback.
+// looksLikeJSON is a cheap byte-level heuristic to avoid invoking the full
+// JSON decoder on plain text. A line must both open and close with matching
+// delimiters: '{' … '}' for objects, '[' … ']' for arrays. This rejects log
+// prefixes like "[DEBUG] 12:34:56: msg" or "{startup} config loaded" that
+// open with a JSON delimiter but are not JSON.
 func looksLikeJSON(s string) bool {
 	t := strings.TrimSpace(s)
 	if len(t) == 0 {
 		return false
 	}
-	return t[0] == '{' || t[0] == '['
+	return (t[0] == '{' && t[len(t)-1] == '}') || (t[0] == '[' && t[len(t)-1] == ']')
 }
