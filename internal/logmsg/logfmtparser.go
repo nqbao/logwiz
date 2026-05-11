@@ -1,10 +1,17 @@
 package logmsg
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/go-logfmt/logfmt"
 )
+
+// twoPairAtStart matches lines that begin with at least two key=value
+// pairs. Used as a quick heuristic to reject prose before invoking the
+// full decoder (e.g. "[DEBUG] YY:MM:DD level=debug msg=hello" is prose;
+// "level=debug msg=hello" is logfmt).
+var twoPairAtStart = regexp.MustCompile(`^[^\s=]+=[^\s=].*?\s[^\s=]+=[^\s=]`)
 
 // LogfmtParser detects logfmt-formatted lines and parses their key=value
 // pairs, splitting into canonical Time/Level/Message fields plus Extra
@@ -36,10 +43,10 @@ func parseLogfmt(raw string) (LogMessage, bool) {
 	if strings.ContainsRune(raw, '\x1b') {
 		return LogMessage{}, false
 	}
-	// Require at least two explicit '=' signs before invoking the full parser.
-	// This rejects plain prose and lines where bare words parse as empty-value
-	// keys (e.g. "2026-04-21 INFO server started" or "user=bob logged in").
-	if strings.Count(raw, "=") < 2 {
+	// Require at least two key=value pairs at the start of the line.
+	// This rejects plain prose and lines where a prose prefix precedes
+	// logfmt pairs (e.g. "[DEBUG] YY:MM:DD level=debug msg=hello").
+	if !twoPairAtStart.MatchString(raw) {
 		return LogMessage{}, false
 	}
 	dec := logfmt.NewDecoder(strings.NewReader(raw))

@@ -163,3 +163,28 @@ func TestLogfmtParser_Flush(t *testing.T) {
 func TestLogfmtParser_ImplementsParser(t *testing.T) {
 	var _ Parser = LogfmtParser{}
 }
+
+func TestLogfmtParser_BracketPrefix(t *testing.T) {
+	p := LogfmtParser{}
+	cases := []struct {
+		raw      string
+		isLogfmt bool
+	}{
+		{`[DEBUG] YY:MM:DD`, false},
+		{`[DEBUG] YY:MM:DD level=debug msg=hello`, false},
+		{`[DEBUG] ts=12:34:56 level=debug msg=hello`, false},
+		{`[DEBUG]  2026/05/11 12:34:56 level=info msg=started`, false},
+		{`[DEBUG]=YY:MM:DD level=debug msg=hello`, true},
+		{`ts=2026-04-21 level=info msg="hello world"`, true},
+		{`level=debug msg=hello [DEBUG] YY:MM:DD`, true},
+		{`msg="hello world" ts=now level=info`, true},
+		{`key==val key2=val2`, false},
+	}
+	for i, tc := range cases {
+		got := p.Parse(tc.raw)
+		isLogfmt := got[0].Format == "logfmt"
+		if isLogfmt != tc.isLogfmt {
+			t.Errorf("[%d] %q: Format=%q, want isLogfmt=%v", i, tc.raw, got[0].Format, tc.isLogfmt)
+		}
+	}
+}
