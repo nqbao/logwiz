@@ -41,6 +41,17 @@ func TestNormalizeTime_EpochMs(t *testing.T) {
 	}
 }
 
+func TestNormalizeTime_EpochSecFloat(t *testing.T) {
+	// 1234567890.123 → 2009-02-13 23:31:30.123
+	got := NormalizeTime("1234567890.123")
+	if !fullTsRe.MatchString(got) {
+		t.Errorf("NormalizeTime(epoch-sec float) = %q, want YYYY-MM-DD HH:MM:SS.mmm format", got)
+	}
+	if got != "2009-02-13 23:31:30.123" {
+		t.Errorf("NormalizeTime(epoch-sec float) = %q, want \"2009-02-13 23:31:30.123\"", got)
+	}
+}
+
 func TestNormalizeTime_Unparseable(t *testing.T) {
 	const s = "not-a-timestamp"
 	if got := NormalizeTime(s); got != s {

@@ -19,12 +19,7 @@ func ParseTime(s string) (time.Time, bool) {
 		return t, true
 	}
 	if f, err := strconv.ParseFloat(s, 64); err == nil && f > 0 {
-		if f > 1e12 {
-			return time.UnixMilli(int64(f)), true
-		}
-		sec := int64(f)
-		nsec := int64((f - float64(sec)) * 1e9)
-		return time.Unix(sec, nsec), true
+		return parseEpoch(s, f), true
 	}
 	return time.Time{}, false
 }
@@ -39,18 +34,35 @@ func NormalizeTime(s string) string {
 		return t.UTC().Format("2006-01-02 15:04:05.000")
 	}
 	if f, err := strconv.ParseFloat(s, 64); err == nil && f > 0 {
-		var t time.Time
-		if f > 1e12 { // milliseconds
-			ms := int64(f)
-			t = time.Unix(ms/1000, (ms%1000)*int64(time.Millisecond))
-		} else { // seconds
-			sec := int64(f)
-			nsec := int64(math.Round((f - float64(sec)) * 1e9))
-			t = time.Unix(sec, nsec)
-		}
-		return t.UTC().Format("2006-01-02 15:04:05.000")
+		return parseEpoch(s, f).UTC().Format("2006-01-02 15:04:05.000")
 	}
 	return s
+}
+
+// parseEpoch converts a numeric timestamp string (already parsed to f) into a
+// time.Time. Values above 1e12 are treated as milliseconds; smaller values as
+// seconds. The fractional part is read directly from the string to avoid the
+// precision loss that results from computing (f - float64(sec)) * 1e9.
+func parseEpoch(s string, f float64) time.Time {
+	if f > 1e12 { // milliseconds
+		ms := int64(f)
+		return time.Unix(ms/1000, (ms%1000)*int64(time.Millisecond))
+	}
+	sec := int64(f)
+	var nsec int64
+	if dot := strings.IndexByte(s, '.'); dot >= 0 {
+		frac := s[dot+1:]
+		if len(frac) > 9 {
+			frac = frac[:9]
+		}
+		if v, err := strconv.ParseInt(frac, 10, 64); err == nil {
+			for i := len(frac); i < 9; i++ {
+				v *= 10
+			}
+			nsec = v
+		}
+	}
+	return time.Unix(sec, nsec)
 }
 
 // NormalizeLevel maps any level string to a 5-char uppercase form.
