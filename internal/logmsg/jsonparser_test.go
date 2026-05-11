@@ -149,3 +149,18 @@ func TestJSONParser_MalformedJSONKeepsFormat(t *testing.T) {
 		t.Errorf("Extra.Len() = %d, want 0 for malformed JSON", got[0].Extra.Len())
 	}
 }
+
+func TestJSONParser_BracketPrefixPlainTextNotJSON(t *testing.T) {
+	p := JSONParser{}
+	cases := []string{
+		"[DEBUG] 12:34:56: hello world",
+		"[INFO] starting server",
+		"[ERROR] something went wrong",
+	}
+	for _, line := range cases {
+		got := p.Parse(line)
+		if got[0].Format != "" {
+			t.Errorf("Parse(%q).Format = %q, want \"\" (plain text should not get json format)", line, got[0].Format)
+		}
+	}
+}

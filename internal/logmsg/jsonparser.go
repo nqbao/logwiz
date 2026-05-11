@@ -16,8 +16,16 @@ func (JSONParser) Parse(raw string) []LogMessage {
 	}
 	msg, ok := parseJSON(raw)
 	if !ok {
-		// Malformed or non-object JSON (e.g. top-level array): keep the
-		// format hint for the highlighter but leave fields empty.
+		// For lines starting with '{': keep the format hint even when
+		// malformed so the JSON highlighter can still colourize the attempt.
+		// For lines starting with '[': only keep the hint when the content
+		// is actually valid JSON (a JSON array). Plain-text lines that begin
+		// with '[' (e.g. "[DEBUG] 12:34:56: msg") must not get Format="json"
+		// or JSONRenderer will apply random colours to them.
+		t := strings.TrimSpace(raw)
+		if len(t) > 0 && t[0] == '[' && !json.Valid([]byte(raw)) {
+			return []LogMessage{{Raw: raw}}
+		}
 		return []LogMessage{{Raw: raw, Format: "json"}}
 	}
 	return []LogMessage{msg}
