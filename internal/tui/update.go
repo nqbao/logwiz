@@ -411,9 +411,10 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			raw := m.buf.Line(m.logs.Selected).Raw
 			if err := clipboard.WriteAll(raw); err == nil {
 				m.yankNotice = "yanked"
+				return m, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg { return yankNoticeClearMsg{} })
 			}
 		}
-		return m, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg { return yankNoticeClearMsg{} })
+		return m, nil
 	}
 
 	// Forward remaining keys to the log viewport.
