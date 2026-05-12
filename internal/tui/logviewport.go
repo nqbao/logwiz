@@ -29,8 +29,9 @@ type LogViewport struct {
 
 	YOffset    int  // first visible unit (screen row when Wrap, logical line otherwise)
 	xOffset    int  // horizontal scroll columns (Wrap=false only)
-	Selected   int  // selected logical line (buffer index); -1 = none
-	autoScroll bool // follow the tail when new lines arrive
+	Selected    int         // primary selected line (buffer index); -1 = none
+	selectedSet map[int]bool // additional lines selected via shift-click
+	autoScroll  bool        // follow the tail when new lines arrive
 
 	buf *buffer.Buffer
 	h   *highlight.Highlighter // may be nil; display() falls back to Raw
@@ -64,6 +65,59 @@ type LogViewport struct {
 
 func newLogViewport(buf *buffer.Buffer) LogViewport {
 	return LogViewport{buf: buf, Selected: -1, autoScroll: true}
+}
+
+func (v *LogViewport) isSelected(bufIdx int) bool {
+	return bufIdx == v.Selected || v.selectedSet[bufIdx]
+}
+
+// ToggleAt shift-clicks a screen-relative Y coordinate: toggles that line
+// in/out of selectedSet without clearing the primary selection.
+func (v *LogViewport) ToggleAt(screenY int) {
+	n := v.effectiveLen()
+	if n == 0 {
+		return
+	}
+	var bufIdx int
+	if !v.Wrap {
+		pos := clamp(v.YOffset+screenY, 0, n-1)
+		bufIdx = v.effectiveBufIdx(pos)
+	} else {
+		v.ensureWrapCache()
+		line, _ := v.screenRowToLine(v.YOffset + screenY)
+		bufIdx = v.effectiveBufIdx(clamp(line, 0, n-1))
+	}
+	if bufIdx == v.Selected {
+		return // primary selection can't be toggled off
+	}
+	if v.selectedSet == nil {
+		v.selectedSet = make(map[int]bool)
+	}
+	if v.selectedSet[bufIdx] {
+		delete(v.selectedSet, bufIdx)
+	} else {
+		v.selectedSet[bufIdx] = true
+	}
+}
+
+// ClearMultiSelect removes all entries from selectedSet (keeps primary Selected).
+func (v *LogViewport) ClearMultiSelect() {
+	v.selectedSet = nil
+}
+
+// ShiftSelectedSet adjusts stored buffer indices after evictions. Each
+// eviction removes the oldest line, shifting all remaining indices down by 1.
+func (v *LogViewport) ShiftSelectedSet(evictions int) {
+	if evictions <= 0 || len(v.selectedSet) == 0 {
+		return
+	}
+	next := make(map[int]bool, len(v.selectedSet))
+	for idx := range v.selectedSet {
+		if shifted := idx - evictions; shifted >= 0 {
+			next[shifted] = true
+		}
+	}
+	v.selectedSet = next
 }
 
 // SetFilter replaces the active filter index list. Pass nil to show all lines.
@@ -481,8 +535,10 @@ func (v *LogViewport) ScrollPercent() float64 {
 	return float64(v.YOffset) / float64(m)
 }
 
-// SelectAt maps a screen-relative Y coordinate to a buffer index.
+// SelectAt maps a screen-relative Y coordinate to a buffer index and clears
+// any multi-selection.
 func (v *LogViewport) SelectAt(screenY int) {
+	v.selectedSet = nil
 	n := v.effectiveLen()
 	if n == 0 {
 		v.Selected = -1
@@ -643,7 +699,7 @@ func (v *LogViewport) viewNoWrap(selectedStyle lipgloss.Style) string {
 		if v.xOffset > 0 || w > cw {
 			line = ansi.Cut(line, v.xOffset, v.xOffset+cw)
 		}
-		if bufIdx == v.Selected {
+		if v.isSelected(bufIdx) {
 			inner := selectedStyle.Width(cw).Render(ansi.Strip(line))
 			if col, ok := v.hlMatchMap[bufIdx]; ok {
 				line = lipgloss.NewStyle().Foreground(col).Render("▌") + inner
@@ -713,7 +769,7 @@ func (v *LogViewport) viewWrap(selectedStyle lipgloss.Style) string {
 			} else {
 				segment = ansi.Cut(line, wr*cw, (wr+1)*cw)
 			}
-			if bufIdx == v.Selected {
+			if v.isSelected(bufIdx) {
 				inner := selectedStyle.Width(cw).Render(ansi.Strip(segment))
 				if col, ok := v.hlMatchMap[bufIdx]; ok {
 					segment = lipgloss.NewStyle().Foreground(col).Render("▌") + inner
