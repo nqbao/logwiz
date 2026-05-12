@@ -38,6 +38,127 @@ func newTestViewport(width, height int, lines ...string) *LogViewport {
 	return &v
 }
 
+// --- selectedSet: ToggleAt / isSelected / ClearMultiSelect / ShiftSelectedSet ---
+
+func TestToggleAt_AddsLine(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.Selected = 0
+	v.ToggleAt(2) // screen row 2 → buf index 2
+	if !v.isSelected(2) {
+		t.Error("buf index 2 should be in selectedSet after ToggleAt")
+	}
+}
+
+func TestToggleAt_RemovesOnSecondClick(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.Selected = 0
+	v.ToggleAt(2)
+	v.ToggleAt(2)
+	if v.isSelected(2) {
+		t.Error("buf index 2 should have been removed from selectedSet")
+	}
+}
+
+func TestToggleAt_IgnoresPrimarySelection(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.Selected = 1
+	v.ToggleAt(1) // try to toggle the primary selected line
+	if v.selectedSet[1] {
+		t.Error("primary Selected line must not be added to selectedSet")
+	}
+}
+
+func TestIsSelected_ChecksBothFields(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.Selected = 0
+	v.ToggleAt(2)
+	if !v.isSelected(0) {
+		t.Error("primary Selected should satisfy isSelected")
+	}
+	if !v.isSelected(2) {
+		t.Error("selectedSet entry should satisfy isSelected")
+	}
+	if v.isSelected(1) {
+		t.Error("unselected line should not satisfy isSelected")
+	}
+}
+
+func TestClearMultiSelect_RemovesEntries(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.Selected = 0
+	v.ToggleAt(1)
+	v.ToggleAt(2)
+	v.ClearMultiSelect()
+	if v.isSelected(1) || v.isSelected(2) {
+		t.Error("selectedSet should be empty after ClearMultiSelect")
+	}
+	// Primary selection is untouched.
+	if !v.isSelected(0) {
+		t.Error("ClearMultiSelect must not clear primary Selected")
+	}
+}
+
+func TestShiftSelectedSet_AdjustsIndices(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c", "d")
+	v.selectedSet = map[int]bool{1: true, 3: true}
+	v.ShiftSelectedSet(1)
+	if !v.selectedSet[0] || !v.selectedSet[2] {
+		t.Errorf("selectedSet after eviction of 1 = %v, want {0:true 2:true}", v.selectedSet)
+	}
+}
+
+func TestShiftSelectedSet_DropsEvictedEntries(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.selectedSet = map[int]bool{0: true, 2: true}
+	v.ShiftSelectedSet(1) // evict first line: 0→-1 (dropped), 2→1
+	if v.selectedSet[0] {
+		t.Error("evicted entry (was at 0) should be dropped")
+	}
+	if !v.selectedSet[1] {
+		t.Error("surviving entry should now be at index 1")
+	}
+}
+
+func TestShiftSelected_AdjustsIndex(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c", "d")
+	v.Selected = 3
+	v.ShiftSelected(2)
+	if v.Selected != 1 {
+		t.Errorf("Selected = %d after ShiftSelected(2), want 1", v.Selected)
+	}
+}
+
+func TestShiftSelected_ResetWhenEvicted(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.Selected = 1
+	v.ShiftSelected(2) // line 1 evicted (1-2 = -1)
+	if v.Selected != -1 {
+		t.Errorf("Selected = %d after evicting selected line, want -1", v.Selected)
+	}
+}
+
+func TestShiftSelected_NoopWhenNoneSelected(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.Selected = -1
+	v.ShiftSelected(1)
+	if v.Selected != -1 {
+		t.Errorf("Selected = %d, want -1 (no-op when unselected)", v.Selected)
+	}
+}
+
+func TestJumpTo_ClearsSelectedSet(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c", "d")
+	v.Selected = 0
+	v.selectedSet = map[int]bool{2: true, 3: true}
+	v.JumpTo(1)
+	if len(v.selectedSet) != 0 {
+		t.Errorf("selectedSet should be empty after JumpTo, got %v", v.selectedSet)
+	}
+	if v.Selected != 1 {
+		t.Errorf("Selected = %d, want 1", v.Selected)
+	}
+}
+
 // --- clamp ---
 
 func TestClamp(t *testing.T) {

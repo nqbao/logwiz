@@ -8,6 +8,7 @@ import (
 
 	"github.com/nqbao/logwiz/internal/agent"
 	"github.com/nqbao/logwiz/internal/logmsg"
+	"github.com/nqbao/logwiz/internal/source"
 )
 
 // TestChatStepWithToolCallsExecutesTool verifies that when AgentStepMsg
@@ -307,6 +308,66 @@ func TestCmdAgentFindThenJump(t *testing.T) {
 	}
 	if len(mmm.searchMatches) == 0 {
 		t.Error("searchMatches should be non-empty after jump to 500")
+	}
+}
+
+// TestSelectedShiftedOnEviction verifies that when the ring buffer evicts lines
+// the primary Selected index is decremented to track the same logical line.
+func TestSelectedShiftedOnEviction(t *testing.T) {
+	m := newTestModel(t)
+	// Fill the buffer to capacity (100 lines per newTestModel config).
+	for i := 0; i < 100; i++ {
+		m.buf.Append(logmsg.LogMessage{Raw: "line"})
+	}
+	m.logs.Selected = 50 // user clicked line at buf index 50
+
+	// Send one new line — this evicts the oldest entry (buf index 0 disappears,
+	// every remaining line shifts down by 1).
+	m2, _ := m.Update(source.NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "new"}}})
+	mm := m2.(Model)
+
+	if mm.logs.Selected != 49 {
+		t.Errorf("Selected = %d after 1 eviction, want 49", mm.logs.Selected)
+	}
+}
+
+// TestSelectedResetWhenEvicted verifies that when the selected line itself is
+// evicted, Selected is reset to -1.
+func TestSelectedResetWhenEvicted(t *testing.T) {
+	m := newTestModel(t)
+	for i := 0; i < 100; i++ {
+		m.buf.Append(logmsg.LogMessage{Raw: "line"})
+	}
+	m.logs.Selected = 0 // oldest line — will be evicted on the next append
+
+	m2, _ := m.Update(source.NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "new"}}})
+	mm := m2.(Model)
+
+	if mm.logs.Selected != -1 {
+		t.Errorf("Selected = %d after evicting selected line, want -1", mm.logs.Selected)
+	}
+}
+
+// TestSelectedNotDoubleShiftedWithSearch verifies that when a search is active
+// and Selected is tracking the search cursor, updateSearch sets Selected to the
+// correct post-eviction value and ShiftSelected is not applied on top of it.
+func TestSelectedNotDoubleShiftedWithSearch(t *testing.T) {
+	m := newTestModel(t)
+	for i := 0; i < 100; i++ {
+		m.buf.Append(logmsg.LogMessage{Raw: "line"})
+	}
+	// Search with cursor pointing at buf index 50; Selected tracks it.
+	m.searchRe = regexp.MustCompile("line")
+	m.searchMatches = []int{50}
+	m.searchCursor = 0
+	m.logs.Selected = 50
+
+	// One eviction shifts the match from 50 → 49.
+	m2, _ := m.Update(source.NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "line"}}})
+	mm := m2.(Model)
+
+	if mm.logs.Selected != 49 {
+		t.Errorf("Selected = %d, want 49 (shifted once, not twice)", mm.logs.Selected)
 	}
 }
 

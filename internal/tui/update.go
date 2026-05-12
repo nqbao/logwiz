@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ type spinnerTickMsg struct{}
 // filterTickMsg triggers a reapply of time-based filter rules.
 type filterTickMsg struct{}
 
-// yankNoticeClearMsg clears the transient "yanked" status notice.
+// yankNoticeClearMsg clears the transient "copied" status notice.
 type yankNoticeClearMsg struct{}
 
 var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
@@ -43,14 +44,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.logs.OnNewLines(len(msg.Lines))
+		m.logs.ShiftSelectedSet(evictions)
+		searchUpdatedSelected := false
 		if m.searchRe != nil {
-			m.updateSearch(len(msg.Lines), evictions)
+			searchUpdatedSelected = m.updateSearch(len(msg.Lines), evictions)
 		}
 		if len(m.filterRules) > 0 {
 			m.updateFilter(len(msg.Lines), evictions)
 		}
 		if len(m.hlRules) > 0 {
 			updateHL(&m, len(msg.Lines), evictions)
+		}
+		// Shift primary Selected for evictions when no subsystem already set it.
+		// updateSearch sets it when tracking the search cursor (returns true).
+		// updateFilter→intersectSearch sets it when filter+search are both active.
+		if !searchUpdatedSelected && !(m.searchRe != nil && len(m.filterRules) > 0 && m.filterEnabled) {
+			m.logs.ShiftSelected(evictions)
 		}
 		return m, nil
 
@@ -176,6 +185,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Block left clicks outside the logs pane (palette, status row).
 		// Wheel events still fall through so scrolling works anywhere.
 		if msg.Y >= m.logs.Height && msg.Button == tea.MouseButtonLeft {
+			return m, nil
+		}
+
+		// Shift+left-click toggles the clicked line into/out of selectedSet.
+		if msg.Button == tea.MouseButtonLeft && msg.Shift {
+			m.logs.ToggleAt(msg.Y)
 			return m, nil
 		}
 
@@ -408,9 +423,24 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keyYank:
 		if m.logs.Selected >= 0 {
-			raw := m.buf.Line(m.logs.Selected).Raw
-			if err := clipboard.WriteAll(raw); err == nil {
-				m.yankNotice = "yanked"
+			// Collect all selected indices in chronological order.
+			indices := []int{m.logs.Selected}
+			for idx := range m.logs.selectedSet {
+				if idx != m.logs.Selected {
+					indices = append(indices, idx)
+				}
+			}
+			sort.Ints(indices)
+			lines := make([]string, len(indices))
+			for i, idx := range indices {
+				lines[i] = m.buf.Line(idx).Raw
+			}
+			if err := clipboard.WriteAll(strings.Join(lines, "\n")); err == nil {
+				if len(indices) > 1 {
+					m.yankNotice = fmt.Sprintf("copied %d lines", len(indices))
+				} else {
+					m.yankNotice = "copied"
+				}
 				return m, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg { return yankNoticeClearMsg{} })
 			}
 		}

@@ -197,3 +197,44 @@ func TestUpdateSearch_TracksCursorWhenInSync(t *testing.T) {
 		t.Errorf("Selected = %d, want 1 (cursor tracked)", m.logs.Selected)
 	}
 }
+
+// TestClearSearch_ClearsSelectedSet verifies that pressing Esc to clear search
+// also removes any shift-click multi-selections.
+func TestClearSearch_ClearsSelectedSet(t *testing.T) {
+	m := newTestModel(t)
+	seedBuf(m.buf, "a", "b", "c")
+	m.searchRe = regexp.MustCompile("a")
+	m.searchMatches = []int{0}
+	m.logs.Selected = 0
+	m.logs.ToggleAt(2) // shift-click line 2
+
+	m.clearSearch()
+
+	if m.logs.Selected != -1 {
+		t.Errorf("Selected = %d, want -1", m.logs.Selected)
+	}
+	if len(m.logs.selectedSet) != 0 {
+		t.Error("selectedSet should be empty after clearSearch")
+	}
+}
+
+// TestNextMatch_ClearsSelectedSet verifies that navigating to the next search
+// match (via JumpTo) clears any accumulated shift-click selections.
+func TestNextMatch_ClearsSelectedSet(t *testing.T) {
+	m := newTestModel(t)
+	seedBuf(m.buf, "hit", "other", "hit")
+	m.searchRe = regexp.MustCompile("hit")
+	m.searchMatches = []int{0, 2}
+	m.searchCursor = 0
+	m.logs.Selected = 0
+	m.logs.ToggleAt(1) // shift-click line 1
+
+	m.nextMatch()
+
+	if len(m.logs.selectedSet) != 0 {
+		t.Error("selectedSet should be cleared by nextMatch")
+	}
+	if m.logs.Selected != 2 {
+		t.Errorf("Selected = %d, want 2", m.logs.Selected)
+	}
+}

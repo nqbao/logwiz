@@ -46,9 +46,12 @@ func runSearch(m *Model, re *regexp.Regexp) {
 // The viewport's Selected is updated to track the cursor's match only when it
 // is still on that match — if the user has clicked elsewhere we leave their
 // selection alone. The viewport position is not moved.
-func (m *Model) updateSearch(newLines, evictions int) {
+// updateSearch returns true if it set m.logs.Selected to the correct
+// post-eviction value (tracking-cursor case). When it returns false the caller
+// is responsible for shifting Selected if needed.
+func (m *Model) updateSearch(newLines, evictions int) (updatedSelected bool) {
 	if m.searchRe == nil {
-		return
+		return false
 	}
 
 	// Capture whether Selected currently tracks the cursor's match before any
@@ -70,7 +73,9 @@ func (m *Model) updateSearch(newLines, evictions int) {
 			}
 		}
 		m.searchMatches = m.searchMatches[:keep]
-		if m.searchCursor >= len(m.searchMatches) && len(m.searchMatches) > 0 {
+		if len(m.searchMatches) == 0 {
+			m.searchCursor = 0
+		} else if m.searchCursor >= len(m.searchMatches) {
 			m.searchCursor = len(m.searchMatches) - 1
 		}
 	}
@@ -88,7 +93,7 @@ func (m *Model) updateSearch(newLines, evictions int) {
 	}
 
 	if !trackingCursor {
-		return
+		return false
 	}
 
 	// Sync Selected with the current cursor without moving the viewport.
@@ -98,6 +103,7 @@ func (m *Model) updateSearch(newLines, evictions int) {
 	} else {
 		m.logs.Selected = m.searchMatches[m.searchCursor]
 	}
+	return true
 }
 
 func (m *Model) nextMatch() {
@@ -121,4 +127,5 @@ func (m *Model) clearSearch() {
 	m.searchMatches = nil
 	m.searchCursor = 0
 	m.logs.Selected = -1
+	m.logs.ClearMultiSelect()
 }
