@@ -589,6 +589,7 @@ func (v *LogViewport) JumpTo(bufIdx int) {
 	}
 	pos = clamp(pos, 0, n-1)
 	v.Selected = bufIdx
+	v.ClearMultiSelect()
 	v.autoScroll = false
 
 	if !v.Wrap {

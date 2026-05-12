@@ -70,7 +70,9 @@ func (m *Model) updateSearch(newLines, evictions int) {
 			}
 		}
 		m.searchMatches = m.searchMatches[:keep]
-		if m.searchCursor >= len(m.searchMatches) && len(m.searchMatches) > 0 {
+		if len(m.searchMatches) == 0 {
+			m.searchCursor = 0
+		} else if m.searchCursor >= len(m.searchMatches) {
 			m.searchCursor = len(m.searchMatches) - 1
 		}
 	}
@@ -121,4 +123,5 @@ func (m *Model) clearSearch() {
 	m.searchMatches = nil
 	m.searchCursor = 0
 	m.logs.Selected = -1
+	m.logs.ClearMultiSelect()
 }

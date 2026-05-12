@@ -215,7 +215,8 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  ctrl+j        newline in chat input",
 		// TODO: re-enable when chat sidebar is re-enabled.
 		// "  c             clear chat history",
-		"  y             yank (copy) selected line to clipboard",
+		"  shift+click   add/remove a line from multi-selection",
+		"  y             yank selected line(s) to clipboard (all shift-clicked lines)",
 		"  w             toggle line wrap",
 		"  j / ↓         scroll logs down",
 		"  k / ↑         scroll logs up",
