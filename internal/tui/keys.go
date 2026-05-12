@@ -25,6 +25,7 @@ const (
 
 	keyHlToggle     = "H" // toggle highlights on/off (h is scroll-left)
 	keyPrettyToggle = "p" // toggle pretty mode (humanlog-style layout)
+	keyYank         = "y" // copy selected line to clipboard
 
 	// Log viewport scroll keys (mirrors viewport.DefaultKeyMap).
 	keyScrollDown       = "j"

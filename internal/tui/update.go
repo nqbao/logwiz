@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/nqbao/logwiz/internal/agent"
@@ -21,6 +22,9 @@ type spinnerTickMsg struct{}
 
 // filterTickMsg triggers a reapply of time-based filter rules.
 type filterTickMsg struct{}
+
+// yankNoticeClearMsg clears the transient "yanked" status notice.
+type yankNoticeClearMsg struct{}
 
 var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
@@ -134,6 +138,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		applyFilters(&m)
 		return m, filterTickCmd()
+
+	case yankNoticeClearMsg:
+		m.yankNotice = ""
+		return m, nil
 
 	case tea.KeyMsg:
 		return m.onKey(msg)
@@ -398,6 +406,14 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyPrevMatch:
 		m.prevMatch()
 		return m, nil
+	case keyYank:
+		if m.logs.Selected >= 0 {
+			raw := m.buf.Line(m.logs.Selected).Raw
+			if err := clipboard.WriteAll(raw); err == nil {
+				m.yankNotice = "yanked"
+			}
+		}
+		return m, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg { return yankNoticeClearMsg{} })
 	}
 
 	// Forward remaining keys to the log viewport.
@@ -486,6 +502,8 @@ func (m Model) statusLine(lay layout) string {
 
 	var right string
 	switch {
+	case m.yankNotice != "":
+		right = styleHelp.Render(" " + m.yankNotice + " ")
 	case m.cmdActive:
 		right = styleHelp.Render(" enter:run  esc:cancel ")
 	case len(m.filterRules) > 0 && m.filterEnabled:

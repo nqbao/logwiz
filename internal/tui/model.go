@@ -149,7 +149,8 @@ type Model struct {
 	// (enables provider-side prompt caching on the prefix).
 	cmdSample []logmsg.LogMessage
 
-	hintIdx int // cycles through inputHints
+	hintIdx     int    // cycles through inputHints
+	yankNotice  string // transient "yanked" flash in the status bar
 
 	// view controls how structured lines (json/logfmt) are rendered.
 	view viewMode
