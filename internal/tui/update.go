@@ -24,7 +24,7 @@ type spinnerTickMsg struct{}
 // filterTickMsg triggers a reapply of time-based filter rules.
 type filterTickMsg struct{}
 
-// yankNoticeClearMsg clears the transient "yanked" status notice.
+// yankNoticeClearMsg clears the transient "copied" status notice.
 type yankNoticeClearMsg struct{}
 
 var spinnerFrames = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
@@ -45,14 +45,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.logs.OnNewLines(len(msg.Lines))
 		m.logs.ShiftSelectedSet(evictions)
+		searchUpdatedSelected := false
 		if m.searchRe != nil {
-			m.updateSearch(len(msg.Lines), evictions)
+			searchUpdatedSelected = m.updateSearch(len(msg.Lines), evictions)
 		}
 		if len(m.filterRules) > 0 {
 			m.updateFilter(len(msg.Lines), evictions)
 		}
 		if len(m.hlRules) > 0 {
 			updateHL(&m, len(msg.Lines), evictions)
+		}
+		// Shift primary Selected for evictions when no subsystem already set it.
+		// updateSearch sets it when tracking the search cursor (returns true).
+		// updateFilter→intersectSearch sets it when filter+search are both active.
+		if !searchUpdatedSelected && !(m.searchRe != nil && len(m.filterRules) > 0 && m.filterEnabled) {
+			m.logs.ShiftSelected(evictions)
 		}
 		return m, nil
 

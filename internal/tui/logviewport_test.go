@@ -119,6 +119,33 @@ func TestShiftSelectedSet_DropsEvictedEntries(t *testing.T) {
 	}
 }
 
+func TestShiftSelected_AdjustsIndex(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c", "d")
+	v.Selected = 3
+	v.ShiftSelected(2)
+	if v.Selected != 1 {
+		t.Errorf("Selected = %d after ShiftSelected(2), want 1", v.Selected)
+	}
+}
+
+func TestShiftSelected_ResetWhenEvicted(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.Selected = 1
+	v.ShiftSelected(2) // line 1 evicted (1-2 = -1)
+	if v.Selected != -1 {
+		t.Errorf("Selected = %d after evicting selected line, want -1", v.Selected)
+	}
+}
+
+func TestShiftSelected_NoopWhenNoneSelected(t *testing.T) {
+	v := newTestViewport(80, 10, "a", "b", "c")
+	v.Selected = -1
+	v.ShiftSelected(1)
+	if v.Selected != -1 {
+		t.Errorf("Selected = %d, want -1 (no-op when unselected)", v.Selected)
+	}
+}
+
 func TestJumpTo_ClearsSelectedSet(t *testing.T) {
 	v := newTestViewport(80, 10, "a", "b", "c", "d")
 	v.Selected = 0

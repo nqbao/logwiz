@@ -105,6 +105,18 @@ func (v *LogViewport) ClearMultiSelect() {
 	v.selectedSet = nil
 }
 
+// ShiftSelected shifts the primary Selected buffer index down by evictions.
+// Indices that go negative (the line was evicted) are reset to -1 (none selected).
+func (v *LogViewport) ShiftSelected(evictions int) {
+	if evictions <= 0 || v.Selected < 0 {
+		return
+	}
+	v.Selected -= evictions
+	if v.Selected < 0 {
+		v.Selected = -1
+	}
+}
+
 // ShiftSelectedSet adjusts stored buffer indices after evictions. Each
 // eviction removes the oldest line, shifting all remaining indices down by 1.
 func (v *LogViewport) ShiftSelectedSet(evictions int) {
