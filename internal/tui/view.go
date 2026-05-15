@@ -222,7 +222,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  k / ↑         scroll logs up",
 		"  pgup/pgdn     page logs",
 		"  ?             toggle this help",
-		"  q             quit (ctrl+c always quits)",
+		fmt.Sprintf("  %-13s quit (ctrl+c always quits)", keyQuitNow),
 	}, "\n")
 	box := lipgloss.NewStyle().
 		Padding(1, 2).

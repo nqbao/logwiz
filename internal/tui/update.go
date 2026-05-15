@@ -200,7 +200,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-
 // spinnerCmd schedules one spinner tick after 100 ms.
 func spinnerCmd() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg {
@@ -264,14 +263,17 @@ func (m Model) onResize(w, h int) Model {
 }
 
 func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Ctrl+C always quits.
-	if msg.String() == keyCtrlC {
+	if pending, quit := nextQuitState(m.quitPending, msg); quit {
+		m.quitPending = false
 		m.Cancel()
 		return m, tea.Quit
+	} else {
+		m.quitPending = pending
 	}
 
 	// Command palette is active: route all input to it.
 	if m.cmdActive {
+		m.quitPending = false
 		switch msg.String() {
 		case keyEscape:
 			m.cmdActive = false
@@ -301,6 +303,7 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// When the chat input has focus, let it swallow characters first.
 	if m.focus == focusChat && m.sidebarOpen {
+		m.quitPending = false
 		// While a request is in flight, block all input except Esc/Tab to blur.
 		if m.chatLoading {
 			switch msg.String() {
@@ -334,8 +337,7 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Logs-focused keybindings.
 	switch msg.String() {
 	case keyQuit:
-		m.Cancel()
-		return m, tea.Quit
+		return m, nil
 	case keyOpen:
 		m.cmdActive = true
 		m.cmdInput.SetValue("")
@@ -380,6 +382,10 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		applyViewMode(&m)
 		return m, nil
 	case keyEscape:
+		if m.quitPending {
+			m.quitPending = false
+			return m, nil
+		}
 		if m.help {
 			m.help = false
 			return m, nil
@@ -448,6 +454,7 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Forward remaining keys to the log viewport.
+	m.quitPending = false
 	m.logs.Update(msg)
 	return m, nil
 }
@@ -487,7 +494,6 @@ func (m *Model) refreshConvoContent() {
 	m.convo.SetContent(strings.Join(lines, "\n"))
 	m.convo.GotoBottom()
 }
-
 
 // applyViewMode registers highlight handlers matching m.view and invalidates
 // all render caches so the next View call re-renders every line.
@@ -559,8 +565,10 @@ func (m Model) statusLine(lay layout) string {
 		} else {
 			right = styleHelp.Render(" tab:focus  esc:close  enter:send ")
 		}
+	case m.quitPending:
+		right = styleErr.Render(" q again to quit  esc:cancel ")
 	default:
-		right = styleHelp.Render(" /:cmd  ?:help  q:quit ")
+		right = styleHelp.Render(fmt.Sprintf(" /:cmd  ?:help  %s:quit ", keyQuitNow))
 	}
 
 	pad := lay.logsWidth + lay.sidebarWidth + 1 - visualWidth(left) - visualWidth(right)

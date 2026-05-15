@@ -57,7 +57,6 @@ const MaxToolTurns = 6
 // MaxCmdToolTurns is the maximum number of inspection round-trips for a palette command.
 const MaxCmdToolTurns = 4
 
-
 // turnActivity records status for one assistant turn (from user question to
 // final answer). It is displayed as a dim activity line in the sidebar.
 type turnActivity struct {
@@ -95,6 +94,8 @@ type Model struct {
 	width, height int
 
 	help bool
+
+	quitPending bool
 
 	// Command palette state.
 	cmdActive bool
@@ -149,8 +150,8 @@ type Model struct {
 	// (enables provider-side prompt caching on the prefix).
 	cmdSample []logmsg.LogMessage
 
-	hintIdx     int    // cycles through inputHints
-	yankNotice  string // transient "yanked" flash in the status bar
+	hintIdx    int    // cycles through inputHints
+	yankNotice string // transient "yanked" flash in the status bar
 
 	// view controls how structured lines (json/logfmt) are rendered.
 	view viewMode

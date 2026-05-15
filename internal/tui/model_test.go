@@ -86,16 +86,36 @@ func TestEscClosesSidebarFromLogsFocus(t *testing.T) {
 	}
 }
 
-func TestQKeyInLogsFocusQuits(t *testing.T) {
+func TestQKeyInLogsFocusArmsQuit(t *testing.T) {
 	m := newTestModel(t)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	if cmd == nil {
-		t.Fatal("q produced no cmd")
+	m2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd != nil {
+		t.Fatal("first q should not quit")
 	}
-	// tea.Quit is a tea.Cmd that returns tea.QuitMsg{} when invoked.
+	if !m2.(Model).quitPending {
+		t.Fatal("first q should arm quit")
+	}
+}
+
+func TestQQInLogsFocusQuits(t *testing.T) {
+	m := newTestModel(t)
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	_, cmd := m2.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd == nil {
+		t.Fatal("second q produced no cmd")
+	}
 	msg := cmd()
 	if _, ok := msg.(tea.QuitMsg); !ok {
-		t.Fatalf("q cmd = %T, want tea.QuitMsg", msg)
+		t.Fatalf("qq cmd = %T, want tea.QuitMsg", msg)
+	}
+}
+
+func TestQuitPendingClearsOnOtherKey(t *testing.T) {
+	m := newTestModel(t)
+	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m3, _ := m2.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m3.(Model).quitPending {
+		t.Fatal("non-q key should clear pending quit")
 	}
 }
 
