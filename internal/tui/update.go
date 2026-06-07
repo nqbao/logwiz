@@ -340,7 +340,7 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keyOpen:
 		m.cmdActive = true
-		m.cmdInput.SetValue("")
+		m.cmdInput.SetValue("/")
 		m.cmdInput.Placeholder = cmdHints[rand.Intn(len(cmdHints))]
 		m.cmdErr = ""
 		m = m.onResize(m.width, m.height)

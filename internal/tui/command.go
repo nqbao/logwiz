@@ -69,6 +69,76 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 		m = m.onResize(m.width, m.height)
 		return startAgentCmd(m, raw)
 	}
+
+	if raw[0] == '/' {
+		if args, ok, err := slashHighlightArgs(raw); ok || err != nil {
+			if err != nil {
+				m.cmdErr = err.Error()
+				m.cmdInfo = ""
+				return m, nil
+			}
+			newM, cmd, err := cmdHighlight(m, args)
+			if err != nil {
+				m.cmdErr = err.Error()
+				m.cmdInfo = ""
+				return m, nil
+			}
+			newM.cmdActive = false
+			newM.cmdErr = ""
+			newM.cmdInfo = ""
+			newM.cmdInput.Blur()
+			newM = newM.onResize(newM.width, newM.height)
+			return newM, cmd
+		}
+
+		raw = strings.TrimSpace(raw[1:])
+		if raw == "" {
+			m.cmdActive = false
+			m.cmdErr = ""
+			m.cmdInfo = ""
+			m.cmdInput.Blur()
+			m = m.onResize(m.width, m.height)
+			return m, nil
+		}
+
+		name, args, _ := strings.Cut(raw, " ")
+		name = strings.ToLower(strings.TrimSpace(name))
+		if handler, ok := cmdRegistry[name]; ok {
+			newM, cmd, err := handler(m, strings.TrimSpace(args))
+			if err != nil {
+				var ie infoErr
+				if errors.As(err, &ie) {
+					newM.cmdInfo = ie.msg
+					newM.cmdErr = ""
+					newM.cmdInput.SetValue("")
+					return newM, cmd
+				}
+				m.cmdErr = err.Error()
+				m.cmdInfo = ""
+				return m, nil
+			}
+			newM.cmdActive = false
+			newM.cmdErr = ""
+			newM.cmdInfo = ""
+			newM.cmdInput.Blur()
+			newM = newM.onResize(newM.width, newM.height)
+			return newM, cmd
+		}
+
+		// Slash-prefixed free text keeps working as "open palette, ask question",
+		// while still allowing /search and /foo/ shorthands.
+		if m.chatClient == nil {
+			m.cmdErr = "LLM is not configured — run 'logwiz setup' to set your service API key"
+			m.cmdInfo = ""
+			return m, nil
+		}
+		m.cmdInfo = "thinking…"
+		m.cmdErr = ""
+		m.cmdAnswer = ""
+		m = m.onResize(m.width, m.height)
+		return startAgentCmd(m, raw)
+	}
+
 	raw = strings.TrimSpace(raw[1:])
 
 	name, args, _ := strings.Cut(raw, " ")
@@ -112,6 +182,46 @@ func (m Model) dispatchCommand(raw string) (Model, tea.Cmd) {
 	newM.cmdInput.Blur()
 	newM = newM.onResize(newM.width, newM.height)
 	return newM, cmd
+}
+
+func slashHighlightArgs(raw string) (string, bool, error) {
+	if len(raw) < 3 || raw[0] != '/' {
+		return "", false, nil
+	}
+
+	lastSlash := -1
+	escaped := false
+	for i := 1; i < len(raw); i++ {
+		switch {
+		case escaped:
+			escaped = false
+		case raw[i] == '\\':
+			escaped = true
+		case raw[i] == '/':
+			lastSlash = i
+		}
+	}
+	if lastSlash <= 1 {
+		return "", false, nil
+	}
+
+	pattern := raw[1:lastSlash]
+	flags := raw[lastSlash+1:]
+	if pattern == "" || strings.ContainsAny(flags, " \t") {
+		return "", false, nil
+	}
+
+	var parts []string
+	for _, ch := range flags {
+		switch ch {
+		case 'i', 'F':
+			parts = append(parts, "-"+string(ch))
+		default:
+			return "", true, fmt.Errorf("unknown slash flag %q (supported: i F)", string(ch))
+		}
+	}
+	parts = append(parts, pattern)
+	return strings.Join(parts, " "), true, nil
 }
 
 func cmdChat(m Model, args string) (Model, tea.Cmd, error) {

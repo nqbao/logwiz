@@ -392,6 +392,9 @@ func TestSlashKeyOpensPalette(t *testing.T) {
 	if mm.sidebarOpen {
 		t.Fatal("'/' should not open sidebar directly")
 	}
+	if got := mm.cmdInput.Value(); got != "/" {
+		t.Fatalf("cmd input = %q, want /", got)
+	}
 }
 
 // TestPaletteEscCancels verifies Esc while palette is open closes it.

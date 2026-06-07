@@ -174,6 +174,7 @@ var cmdHints = []string{
 	"find lines matching panic",
 	"how many 4xx requests happened?",
 	"summarize recent activity",
+	"highlight with /timeout/",
 	"count warnings vs errors",
 	"any database connection failures?",
 	"grep for slow queries",

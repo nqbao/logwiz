@@ -44,11 +44,13 @@ Press `/` to open the command palette, then ask questions or run commands:
 |-------|--------|
 | `how many errors since 5min ago` | AI greps, counts, and answers |
 | `show me lines with timeout` | AI highlights matching lines |
+| `/timeout/` | highlight matching lines directly |
+| `/timeout/i` | highlight matching lines case-insensitively |
 | `:search timeout` | regex search with n/N navigation |
 | `:grep error` | filter to matching lines |
 | `:view pretty` | switch to humanlog-style layout |
 
-`q` quits. Press `?` for all keybindings.
+`qq` quits from the logs view, and `ctrl+c` always quits. Press `?` for all keybindings.
 
 ## Features
 
@@ -63,6 +65,7 @@ Press `/` to open the command palette, then ask questions or run commands:
 | Key | Action |
 | --- | ------ |
 | `/` | open command palette — type a question or a `:command` |
+| `/re/[iF]` | highlight matches with Vim-style slash syntax (`i` case-insensitive, `F` literal) |
 | `:search <re>` | regex search |
 | `:grep [-i] [-F] [-v] <re>` | filter lines by regex (stackable, ANDed) |
 | `:hl [-i] [-F] <re>` | highlight matching lines (stackable) |
@@ -73,9 +76,9 @@ Press `/` to open the command palette, then ask questions or run commands:
 | `f` / `F` | pause / clear filters |
 | `H` | toggle highlights on/off |
 | `?` | toggle help overlay |
-| `esc` | cancel palette / clear search |
+| `esc` | cancel palette / close sidebar / clear search |
 | `j` / `k` / pgup / pgdn | scroll logs |
-| `q` | quit |
+| `qq` | quit |
 
 Other commands available inside the palette: `:filter` (attribute/time-based
 filtering), `:follow` (live tail a file), `:config` (runtime configuration),

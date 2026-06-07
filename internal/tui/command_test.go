@@ -30,6 +30,66 @@ func TestDispatchCommand_NormalizesLeadingColon(t *testing.T) {
 	}
 }
 
+func TestDispatchCommand_SlashPatternAddsHighlight(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.buf.Append(logmsg.LogMessage{Raw: "alpha"})
+	m.buf.Append(logmsg.LogMessage{Raw: "beta"})
+	m.buf.Append(logmsg.LogMessage{Raw: "alpha again"})
+
+	m2, _ := m.dispatchCommand("/alpha/")
+	if m2.cmdActive {
+		t.Error("cmdActive should be false after /alpha/")
+	}
+	if len(m2.hlRules) != 1 {
+		t.Fatalf("hlRules len = %d, want 1", len(m2.hlRules))
+	}
+	if len(m2.hlMatches) != 1 || len(m2.hlMatches[0]) != 2 {
+		t.Fatalf("hlMatches = %v, want one rule with two matches", m2.hlMatches)
+	}
+	if !m2.hlEnabled {
+		t.Fatal("highlights should be enabled after /alpha/")
+	}
+}
+
+func TestDispatchCommand_SlashPatternCaseInsensitiveHighlight(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.buf.Append(logmsg.LogMessage{Raw: "ALPHA"})
+	m.buf.Append(logmsg.LogMessage{Raw: "beta"})
+	m.buf.Append(logmsg.LogMessage{Raw: "alpha again"})
+
+	m2, _ := m.dispatchCommand("/alpha/i")
+	if len(m2.hlMatches) != 1 || len(m2.hlMatches[0]) != 2 {
+		t.Fatalf("hlMatches = %v, want one case-insensitive rule with two matches", m2.hlMatches)
+	}
+}
+
+func TestDispatchCommand_SlashPatternFixedStringHighlight(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+	m.buf.Append(logmsg.LogMessage{Raw: "[http] 200"})
+	m.buf.Append(logmsg.LogMessage{Raw: "xhttp 200"})
+
+	m2, _ := m.dispatchCommand("/[http]/F")
+	if len(m2.hlMatches) != 1 || len(m2.hlMatches[0]) != 1 {
+		t.Fatalf("hlMatches = %v, want one literal rule with one match", m2.hlMatches)
+	}
+}
+
+func TestDispatchCommand_SlashPatternUnknownFlagKeepsPaletteOpen(t *testing.T) {
+	m := newTestModel(t)
+	m.cmdActive = true
+
+	m2, _ := m.dispatchCommand("/alpha/z")
+	if !m2.cmdActive {
+		t.Error("cmdActive should remain true after unknown slash flag")
+	}
+	if m2.cmdErr == "" {
+		t.Error("cmdErr should be set for unknown slash flag")
+	}
+}
+
 // TestDispatchCommand_UnknownCommand leaves palette open with an error.
 func TestDispatchCommand_UnknownCommand(t *testing.T) {
 	m := newTestModel(t)
