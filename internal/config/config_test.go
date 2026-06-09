@@ -97,6 +97,45 @@ func TestParsePositionalFile(t *testing.T) {
 	}
 }
 
+func TestParseManagedCommand(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := Parse([]string{"--max-lines", "123", "--", "bash", "-lc", "echo hi"}, envFromMap(nil), io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.File != "" {
+		t.Errorf("File = %q, want empty", cfg.File)
+	}
+	if got, want := cfg.Command, []string{"bash", "-lc", "echo hi"}; len(got) != len(want) {
+		t.Fatalf("Command len = %d, want %d (%v)", len(got), len(want), got)
+	} else {
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("Command[%d] = %q, want %q (full=%v)", i, got[i], want[i], got)
+			}
+		}
+	}
+	if cfg.MaxLines != 123 {
+		t.Errorf("MaxLines = %d, want 123", cfg.MaxLines)
+	}
+}
+
+func TestParseRejectsFileAndManagedCommand(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_, err := Parse([]string{"server.log", "--", "echo", "hi"}, envFromMap(nil), io.Discard)
+	if err == nil {
+		t.Fatal("expected error for file + managed command")
+	}
+}
+
+func TestParseRejectsBareDoubleDash(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	_, err := Parse([]string{"--"}, envFromMap(nil), io.Discard)
+	if err == nil {
+		t.Fatal("expected error for bare --")
+	}
+}
+
 func TestParseTooManyPositionals(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	_, err := Parse([]string{"a.log", "b.log"}, envFromMap(nil), io.Discard)

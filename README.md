@@ -35,8 +35,13 @@ View, search, filter, and highlight always work without any LLM or API key.
 ```
 some_command 2>&1 | logwiz          # stream from pipe
 logwiz server.log                   # read a file
+logwiz -- your-command --flag arg   # logwiz starts and manages the child
 logwiz -h                           # see all other command
 ```
+
+In managed-command mode, `logwiz` captures both stdout and stderr and sends
+`SIGINT` to the child process group when you quit, so wrapper shells and
+well-behaved descendants are torn down with it.
 
 Press `/` to open the command palette, then ask questions or run commands:
 

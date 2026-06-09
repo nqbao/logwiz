@@ -31,8 +31,9 @@ import (
 type SourceKind string
 
 const (
-	SourceStdin SourceKind = "stdin"
-	SourceFile  SourceKind = "file"
+	SourceStdin   SourceKind = "stdin"
+	SourceFile    SourceKind = "file"
+	SourceCommand SourceKind = "command"
 )
 
 type focusArea int

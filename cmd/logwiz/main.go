@@ -8,6 +8,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -32,6 +33,8 @@ import (
 //	go build -ldflags "-X main.Version=$(VERSION)"
 var Version = "dev"
 
+var errNoInput = errors.New("no input")
+
 func main() {
 	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
 		fmt.Println("logwiz", Version)
@@ -46,16 +49,18 @@ func main() {
 		return
 	}
 
-	// Capture the pipeline pgid before running so we can signal the whole
-	// group (start_api.sh, uvicorn, vite, etc.) when logwiz exits.
 	pgid, pgidErr := syscall.Getpgid(0)
 
-	if err := run(); err != nil {
+	killPipelineGroup, err := run()
+	if err != nil {
+		if errors.Is(err, errNoInput) {
+			os.Exit(2)
+		}
 		fmt.Fprintln(os.Stderr, "logwiz:", err)
 		os.Exit(1)
 	}
 
-	if pgidErr == nil {
+	if killPipelineGroup && pgidErr == nil {
 		// Kill the pipeline process group so upstream processes (e.g.
 		// `start_api.sh | logwiz`, `modd | logwiz`) exit when the user
 		// quits logwiz. We send SIGINT (not SIGTERM) because supervisors
@@ -67,16 +72,16 @@ func main() {
 	}
 }
 
-func run() error {
+func run() (bool, error) {
 	cfg, err := config.ParseOSArgs()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if cfg.LogFile != "" {
 		f, err := os.OpenFile(cfg.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
-			return fmt.Errorf("--log-file: %w", err)
+			return false, fmt.Errorf("--log-file: %w", err)
 		}
 		defer f.Close()
 		slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})))
@@ -105,11 +110,15 @@ func run() error {
 	)
 	if cfg.File != "" {
 		if _, err := os.Stat(cfg.File); err != nil {
-			return fmt.Errorf("open %s: %w", cfg.File, err)
+			return false, fmt.Errorf("open %s: %w", cfg.File, err)
 		}
 	}
 
+	killPipelineGroup := false
 	switch {
+	case len(cfg.Command) > 0:
+		src = &source.Command{Args: cfg.Command, Parser: parser}
+		kind = tui.SourceCommand
 	case cfg.File != "":
 		f := &source.File{Path: cfg.File, Parser: parser, MaxLines: cfg.MaxLines, Follow: true}
 		src = f
@@ -118,17 +127,19 @@ func run() error {
 	case !isatty.IsTerminal(os.Stdin.Fd()):
 		src = &source.Stdin{R: os.Stdin, Parser: parser}
 		kind = tui.SourceStdin
+		killPipelineGroup = true
 	default:
 		fmt.Fprintln(os.Stderr, "logwiz: no input — pipe logs in or pass a file")
 		fmt.Fprintln(os.Stderr, "usage: logwiz [flags] [file]")
-		os.Exit(2)
+		fmt.Fprintln(os.Stderr, "   or: logwiz [flags] -- <command> [args...]")
+		return false, errNoInput
 	}
 
 	buf := buffer.New(cfg.MaxLines)
 
 	redactor, err := redact.New(cfg.RedactPatterns)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	var client *agent.Client
@@ -148,10 +159,10 @@ func run() error {
 	src.Start(model.Context(), senderAdapter{p})
 
 	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("tui: %w", err)
+		return killPipelineGroup, fmt.Errorf("tui: %w", err)
 	}
 
-	return nil
+	return killPipelineGroup, nil
 }
 
 // senderAdapter bridges *tea.Program (Send(tea.Msg)) to source.Sender

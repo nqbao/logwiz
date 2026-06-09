@@ -17,14 +17,14 @@ import (
 
 // Defaults.
 const (
-	DefaultBaseURL          = "https://api.openai.com/v1"
-	DefaultModel            = "gpt-5.4-nano"
-	DefaultMaxLines         = 50000
-	DefaultContextLines     = 10
-	DefaultSidebarWidth     = 50
-	DefaultCmdHistoryTurns  = 20
-	DefaultSystemPrompt     = "You are logwiz, an assistant analyzing terminal logs. You have access to tools: tail(n), read(start, n), count_regex(pattern, case_insensitive, since_line), search_regex(pattern, max, case_insensitive, since_line). Use count_regex first to assess scale cheaply, then search_regex to fetch matching lines. Use them to fetch the log data you need — do not guess. Indexes are absolute line numbers in the current buffer (0 = oldest). Cite line numbers when giving findings. Keep answers concise."
-	DefaultFormat           = "auto"
+	DefaultBaseURL         = "https://api.openai.com/v1"
+	DefaultModel           = "gpt-5.4-nano"
+	DefaultMaxLines        = 50000
+	DefaultContextLines    = 10
+	DefaultSidebarWidth    = 50
+	DefaultCmdHistoryTurns = 20
+	DefaultSystemPrompt    = "You are logwiz, an assistant analyzing terminal logs. You have access to tools: tail(n), read(start, n), count_regex(pattern, case_insensitive, since_line), search_regex(pattern, max, case_insensitive, since_line). Use count_regex first to assess scale cheaply, then search_regex to fetch matching lines. Use them to fetch the log data you need — do not guess. Indexes are absolute line numbers in the current buffer (0 = oldest). Cite line numbers when giving findings. Keep answers concise."
+	DefaultFormat          = "auto"
 )
 
 // Env var names.
@@ -55,6 +55,10 @@ type Config struct {
 	// File is the path to read when not reading from stdin. Empty
 	// means stdin mode.
 	File string
+
+	// Command is the child process to spawn when the CLI is invoked as
+	// `logwiz [flags] -- <command> [args...]`.
+	Command []string
 
 	// LogFile is the path to write internal debug logs to. Empty disables logging.
 	LogFile string
@@ -92,24 +96,24 @@ var ConfigurableKeys = []string{
 // fileConfig holds the subset of Config that can be set in
 // ~/.logwiz/config.json.
 type fileConfig struct {
-	OpenAIAPIKey   string   `json:"openai_api_key,omitempty"`
-	OpenAIBaseURL  string   `json:"openai_base_url,omitempty"`
-	OpenAIModel    string   `json:"openai_model,omitempty"`
-	SidebarWidth   int      `json:"sidebar_width,omitempty"`
-	ContextLines   *int     `json:"context_lines,omitempty"`
-	SystemPrompt   string   `json:"system_prompt,omitempty"`
-	RedactPatterns []string `json:"redact_patterns,omitempty"`
-	CmdHistoryTurns int    `json:"cmd_history_turns,omitempty"`
-	ThinkingBudget  int    `json:"thinking_budget,omitempty"`
-	ReasoningEffort string `json:"reasoning_effort,omitempty"`
-	View            string `json:"view,omitempty"`
+	OpenAIAPIKey    string   `json:"openai_api_key,omitempty"`
+	OpenAIBaseURL   string   `json:"openai_base_url,omitempty"`
+	OpenAIModel     string   `json:"openai_model,omitempty"`
+	SidebarWidth    int      `json:"sidebar_width,omitempty"`
+	ContextLines    *int     `json:"context_lines,omitempty"`
+	SystemPrompt    string   `json:"system_prompt,omitempty"`
+	RedactPatterns  []string `json:"redact_patterns,omitempty"`
+	CmdHistoryTurns int      `json:"cmd_history_turns,omitempty"`
+	ThinkingBudget  int      `json:"thinking_budget,omitempty"`
+	ReasoningEffort string   `json:"reasoning_effort,omitempty"`
+	View            string   `json:"view,omitempty"`
 }
 
 // stringSliceFlag implements flag.Value for a repeatable --redact flag.
 type stringSliceFlag []string
 
-func (f *stringSliceFlag) String() string        { return strings.Join(*f, ",") }
-func (f *stringSliceFlag) Set(v string) error    { *f = append(*f, v); return nil }
+func (f *stringSliceFlag) String() string     { return strings.Join(*f, ",") }
+func (f *stringSliceFlag) Set(v string) error { *f = append(*f, v); return nil }
 
 // loadFileConfig reads ~/.logwiz/config.json. Missing file is not an
 // error; any other problem is returned.
@@ -142,6 +146,14 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	fc, err := loadFileConfig()
 	if err != nil {
 		fmt.Fprintln(out, "logwiz: warning:", err)
+	}
+
+	sawDoubleDash := false
+	cmdArgs := []string(nil)
+	if i := indexDoubleDash(args); i >= 0 {
+		sawDoubleDash = true
+		cmdArgs = append([]string(nil), args[i+1:]...)
+		args = args[:i]
 	}
 
 	fs := flag.NewFlagSet("logwiz", flag.ContinueOnError)
@@ -187,8 +199,8 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	defaultView := fc.View
 
 	var (
-		cfg           Config
-		redactFlag    stringSliceFlag = append(stringSliceFlag(nil), fc.RedactPatterns...)
+		cfg        Config
+		redactFlag stringSliceFlag = append(stringSliceFlag(nil), fc.RedactPatterns...)
 	)
 	fs.Var(&redactFlag, "redact",
 		"Go regex; matching spans are replaced with [REDACTED] before sending to LLM (repeatable)")
@@ -222,10 +234,12 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 
 	fs.Usage = func() {
 		fmt.Fprintln(out, "Usage: logwiz [flags] [file]")
+		fmt.Fprintln(out, "       logwiz [flags] -- <command> [args...]")
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "Read logs from stdin (piped) or from [file] and open an interactive")
 		fmt.Fprintln(out, "viewer with an optional chat sidebar backed by an OpenAI-compatible")
-		fmt.Fprintln(out, "chat completions endpoint.")
+		fmt.Fprintln(out, "chat completions endpoint. With `-- <command>`, logwiz starts the")
+		fmt.Fprintln(out, "child itself, captures stdout+stderr, and owns its lifecycle.")
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "Flags:")
 		fs.PrintDefaults()
@@ -236,10 +250,17 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	}
 
 	rest := fs.Args()
-	switch len(rest) {
-	case 0:
+	switch {
+	case len(cmdArgs) > 0:
+		if len(rest) != 0 {
+			return Config{}, errors.New("cannot combine [file] with `-- <command>`")
+		}
+		cfg.Command = cmdArgs
+	case sawDoubleDash:
+		return Config{}, errors.New("expected command after `--`")
+	case len(rest) == 0:
 		// stdin mode
-	case 1:
+	case len(rest) == 1:
 		cfg.File = rest[0]
 	default:
 		return Config{}, fmt.Errorf("expected at most one positional argument (file), got %d", len(rest))
@@ -281,6 +302,15 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	}
 
 	return cfg, nil
+}
+
+func indexDoubleDash(args []string) int {
+	for i, arg := range args {
+		if arg == "--" {
+			return i
+		}
+	}
+	return -1
 }
 
 // ParseOSArgs is a convenience wrapper around Parse that uses
