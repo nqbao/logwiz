@@ -64,7 +64,7 @@ func CmdInspectToolDefs() []ToolSpec {
 		},
 		{
 			Name:        "read",
-			Description: "Read a specific inclusive 1-based line range from the log buffer (max 200 lines). Use when the user references a specific line range.",
+			Description: "Read a specific inclusive 1-based line range from the log buffer (max 200 lines). start and end are line numbers, not counts or offsets. Use when the user references a specific line range.",
 			Parameters: must(`{
 				"type": "object",
 				"properties": {
@@ -114,10 +114,11 @@ Rules:
 - Always end with exactly one pick_tool call.
 - Pattern strings are Go regex. In JSON, write one backslash for a literal dot: "\." not "\\.".
 - Inspection tools are read-only — they do not modify the view.
+- find and read use 1-based inclusive line numbers in their outputs and arguments.
 - Use find before jump when the user names something that might match unrelated lines (e.g. "500 error" could match timestamps — verify with find first).
 - Use pick_tool(action="answer", reason="…") for questions about the logs. Keep reason to 1–2 lines (≤200 chars), no markdown.
 - Use tail(n) to read the most recent lines when the user asks about recent activity or wants a summary.
-- Use read(start, end) when the user references a specific line range.
+- Use read(start, end) when the user references a specific line range. start/end are 1-based inclusive line numbers, not start+count.
 - Use count when the user asks "how many".
 - Use highlight to colour-band matching lines without hiding others; use clear_highlight to remove all colour bands.
 - Unprefixed input may be an action or a question — decide from context.

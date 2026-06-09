@@ -72,6 +72,42 @@ func TestCmdInspectToolDefs_HasExpectedTools(t *testing.T) {
 	}
 }
 
+func TestCmdInspectToolDefs_ReadUsesInclusiveOneBasedRange(t *testing.T) {
+	defs := CmdInspectToolDefs()
+	var read *ToolSpec
+	for i := range defs {
+		if defs[i].Name == "read" {
+			read = &defs[i]
+			break
+		}
+	}
+	if read == nil {
+		t.Fatal("read not found in CmdInspectToolDefs")
+	}
+	if !strings.Contains(read.Description, "inclusive 1-based line range") {
+		t.Fatalf("read description = %q, want explicit inclusive 1-based wording", read.Description)
+	}
+
+	var schema struct {
+		Properties map[string]struct {
+			Description string `json:"description"`
+		} `json:"properties"`
+		Required []string `json:"required"`
+	}
+	if err := json.Unmarshal(read.Parameters, &schema); err != nil {
+		t.Fatalf("parsing read schema: %v", err)
+	}
+	if got := schema.Properties["start"].Description; !strings.Contains(got, "1-based") || !strings.Contains(got, "inclusive") {
+		t.Errorf("start description = %q, want 1-based inclusive wording", got)
+	}
+	if got := schema.Properties["end"].Description; !strings.Contains(got, "1-based") || !strings.Contains(got, "inclusive") {
+		t.Errorf("end description = %q, want 1-based inclusive wording", got)
+	}
+	if len(schema.Required) != 2 || schema.Required[0] != "start" || schema.Required[1] != "end" {
+		t.Errorf("required = %v, want [start end]", schema.Required)
+	}
+}
+
 func TestCmdCommitToolDef_IsPickTool(t *testing.T) {
 	def := CmdCommitToolDef()
 	if def.Name != "pick_tool" {
@@ -106,6 +142,19 @@ func TestBuildCmdPrompt_SystemPromptHasRulesAndExamples(t *testing.T) {
 	// Few-shot examples indicated by →
 	if !strings.Contains(sys, "→") {
 		t.Error("system prompt should contain few-shot examples with →")
+	}
+}
+
+func TestBuildCmdPrompt_StatesReadContractExplicitly(t *testing.T) {
+	sys := BuildCmdPrompt("test", "", nil)[0].Content
+	for _, want := range []string{
+		"find and read use 1-based inclusive line numbers",
+		"read(start, end)",
+		"not start+count",
+	} {
+		if !strings.Contains(sys, want) {
+			t.Errorf("system prompt missing %q", want)
+		}
 	}
 }
 

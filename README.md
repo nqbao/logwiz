@@ -76,10 +76,10 @@ Press `/` to open the command palette, then ask questions or run commands:
 | `f` / `F` | pause / clear filters |
 | `H` | toggle highlights on/off |
 | `?` | toggle help overlay |
-| `esc` | cancel palette / close sidebar / clear search |
+| `esc` | cancel palette / clear search |
 | `j` / `k` / pgup / pgdn | scroll logs |
 | `qq` | quit |
 
 Other commands available inside the palette: `:filter` (attribute/time-based
 filtering), `:follow` (live tail a file), `:config` (runtime configuration),
-`:view` (set view mode), `:clear` (reset filters/highlights).
+`:view` (set view mode), `:clear` (reset filters/highlights/history).
