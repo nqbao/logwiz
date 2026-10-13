@@ -52,6 +52,10 @@ type Config struct {
 	// It is not settable via flags; it is derived from InstructionsFile.
 	Instructions string
 
+	// Memory holds the content of ~/.logwiz/memory.md, loaded at parse
+	// time. Empty when the file is missing.
+	Memory string
+
 	// File is the path to read when not reading from stdin. Empty
 	// means stdin mode.
 	File string
@@ -301,7 +305,30 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		cfg.Instructions = strings.TrimRight(string(data), "\n")
 	}
 
+	mem, err := loadMemory()
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.Memory = mem
+
 	return cfg, nil
+}
+
+// loadMemory reads ~/.logwiz/memory.md. Missing file is not an error;
+// any other problem is returned.
+func loadMemory() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", nil
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".logwiz", "memory.md"))
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("reading ~/.logwiz/memory.md: %w", err)
+	}
+	return strings.TrimSpace(string(data)), nil
 }
 
 func indexDoubleDash(args []string) int {
@@ -449,10 +476,25 @@ func SaveKey(key, value string) error {
 }
 
 // EffectiveSystemPrompt returns the system prompt with any
-// instructions-file content appended.
+// instructions-file content and memory appended.
 func (c Config) EffectiveSystemPrompt() string {
-	if c.Instructions == "" {
-		return c.SystemPrompt
+	s := c.SystemPrompt
+	if c.Instructions != "" {
+		s += "\n\n" + c.Instructions
 	}
-	return c.SystemPrompt + "\n\n" + c.Instructions
+	if m := c.MemorySection(); m != "" {
+		s += "\n\n" + m
+	}
+	return s
+}
+
+// MemorySection returns the memory file content wrapped in a prompt
+// section, or "" when there is no memory.
+func (c Config) MemorySection() string {
+	if c.Memory == "" {
+		return ""
+	}
+	return "## Memory\n" +
+		"Facts the user asked you to remember. Treat as background context; " +
+		"the logs take precedence if they disagree.\n\n" + c.Memory
 }

@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -305,5 +306,46 @@ func TestParseViewDefaultRaw(t *testing.T) {
 	}
 	if cfg.View != "" {
 		t.Errorf("cfg.View should be empty (raw) by default, got %q", cfg.View)
+	}
+}
+
+func TestParseLoadsMemory(t *testing.T) {
+	dir := t.TempDir()
+	cfgDir := filepath.Join(dir, ".logwiz")
+	if err := os.MkdirAll(cfgDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "memory.md"), []byte("- /healthz is noise\n\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", dir)
+
+	cfg, err := Parse(nil, envFromMap(nil), io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Memory != "- /healthz is noise" {
+		t.Errorf("Memory = %q", cfg.Memory)
+	}
+	p := cfg.EffectiveSystemPrompt()
+	if !strings.HasPrefix(p, cfg.SystemPrompt) {
+		t.Errorf("prompt does not start with base system prompt: %q", p)
+	}
+	if !strings.HasSuffix(p, "## Memory\nFacts the user asked you to remember. Treat as background context; the logs take precedence if they disagree.\n\n- /healthz is noise") {
+		t.Errorf("prompt missing memory section: %q", p)
+	}
+}
+
+func TestParseMissingMemory(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	cfg, err := Parse(nil, envFromMap(nil), io.Discard)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Memory != "" || cfg.MemorySection() != "" {
+		t.Errorf("expected no memory, got %q", cfg.Memory)
+	}
+	if cfg.EffectiveSystemPrompt() != cfg.SystemPrompt {
+		t.Errorf("prompt changed without memory: %q", cfg.EffectiveSystemPrompt())
 	}
 }
