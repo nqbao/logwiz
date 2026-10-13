@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -395,5 +397,49 @@ func TestDispatchCommand_Search(t *testing.T) {
 	}
 	if m2.searchCursor != 0 {
 		t.Errorf("searchCursor = %d, want 0", m2.searchCursor)
+	}
+}
+
+func TestCmdSave(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestModel(t)
+	m.buf.Append(logmsg.LogMessage{Raw: "alpha"})
+	m.buf.Append(logmsg.LogMessage{Raw: "beta"})
+	m.buf.Append(logmsg.LogMessage{Raw: "alpha again"})
+
+	path := filepath.Join(dir, "out.log")
+	m.cmdActive = true
+	m2, _ := m.dispatchCommand(":save " + path)
+	if m2.cmdErr != "" {
+		t.Fatalf("unexpected error: %s", m2.cmdErr)
+	}
+	if !strings.Contains(m2.cmdInfo, "saved 3 line(s)") {
+		t.Errorf("cmdInfo = %q", m2.cmdInfo)
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != "alpha\nbeta\nalpha again\n" {
+		t.Errorf("file = %q", got)
+	}
+
+	// Existing file is not overwritten without -f.
+	m3, _ := m.dispatchCommand(":save " + path)
+	if !strings.Contains(m3.cmdErr, "exists") {
+		t.Errorf("cmdErr = %q, want exists error", m3.cmdErr)
+	}
+
+	// With an active grep only the visible lines are written.
+	m4, _ := m.dispatchCommand(":grep alpha")
+	m4.cmdActive = true
+	m4, _ = m4.dispatchCommand(":w -f " + path)
+	got, _ = os.ReadFile(path)
+	if string(got) != "alpha\nalpha again\n" {
+		t.Errorf("filtered file = %q", got)
+	}
+
+	// -a appends; --all ignores the filter.
+	m4, _ = m4.dispatchCommand(":save -a --all " + path)
+	got, _ = os.ReadFile(path)
+	if string(got) != "alpha\nalpha again\nalpha\nbeta\nalpha again\n" {
+		t.Errorf("appended file = %q", got)
 	}
 }
