@@ -152,6 +152,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.yankNotice = ""
 		return m, nil
 
+	case memoryEditedMsg:
+		return m.onMemoryEdited(msg)
+
 	case tea.KeyMsg:
 		return m.onKey(msg)
 
@@ -274,6 +277,15 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Command palette is active: route all input to it.
 	if m.cmdActive {
 		m.quitPending = false
+		if c := m.cmdConfirm; c != nil {
+			m.cmdConfirm = nil
+			if msg.String() == "y" || msg.String() == "Y" {
+				m, m.cmdInfo = c.run(m)
+			} else {
+				m.cmdInfo = "cancelled"
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case keyEscape:
 			m.cmdActive = false

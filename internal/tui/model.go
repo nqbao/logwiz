@@ -144,6 +144,7 @@ type Model struct {
 	// Palette carry-over: bounded Q&A history across invocations (reset on Escape / :clear chat).
 	cmdHistory []agent.Message // alternating user/assistant pairs
 	cmdPending string          // raw input for the in-flight palette turn
+	cmdConfirm *paletteConfirm // pending y/n question; next key answers it
 
 	// cmdSample is a one-shot log snapshot captured on first palette agent use,
 	// stored as copies so it's independent of ring-buffer eviction. Kept for
@@ -152,7 +153,7 @@ type Model struct {
 	cmdSample []logmsg.LogMessage
 
 	hintIdx    int    // cycles through inputHints
-	yankNotice string // transient "yanked" flash in the status bar
+	yankNotice string // transient status-bar flash ("copied", "memory reloaded", …)
 
 	// view controls how structured lines (json/logfmt) are rendered.
 	view viewMode

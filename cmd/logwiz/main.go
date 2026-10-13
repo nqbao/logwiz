@@ -157,8 +157,11 @@ func run() (bool, error) {
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	// Start source reader; it will Send messages into the program.
-	// An adapter keeps the source package free of a tea dependency.
-	src.Start(model.Context(), senderAdapter{p})
+	// An adapter keeps the source package free of a tea dependency. The
+	// queue keeps the source draining its input while the event loop is
+	// blocked (e.g. :memory edit suspends the TUI for $EDITOR), so upstream
+	// processes never stall on a full pipe.
+	src.Start(model.Context(), source.NewQueue(model.Context(), senderAdapter{p}, cfg.MaxLines))
 
 	if _, err := p.Run(); err != nil {
 		return killPipelineGroup, fmt.Errorf("tui: %w", err)

@@ -35,6 +35,7 @@ var cmdRegistry = map[string]cmdHandler{
 	"view":      cmdView,
 	"follow":    cmdFollow,
 	"save":      cmdSave,
+	"memory":    cmdMemory,
 	"w":         cmdSave,
 }
 

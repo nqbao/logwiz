@@ -70,6 +70,9 @@ func startAgentCmd(m Model, raw string) (Model, tea.Cmd) {
 		m.cmdSample = captureCmdSample(m.buf)
 	}
 	ctx := formatCmdSample(m.cmdSample, m.redactor)
+	if mem := m.cfg.MemorySection(); mem != "" {
+		ctx = mem + "\n\n" + ctx
+	}
 	msgs := agent.BuildCmdPrompt(raw, ctx, m.cmdHistory)
 	m.cmdPending = raw
 	m.cmdAgent = agent.NewCmdAgent(m.chatClient, m.ctx, msgs)
