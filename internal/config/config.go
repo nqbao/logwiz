@@ -305,30 +305,13 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		cfg.Instructions = strings.TrimRight(string(data), "\n")
 	}
 
-	mem, err := loadMemory()
+	mem, err := LoadMemory()
 	if err != nil {
 		return Config{}, err
 	}
 	cfg.Memory = mem
 
 	return cfg, nil
-}
-
-// loadMemory reads ~/.logwiz/memory.md. Missing file is not an error;
-// any other problem is returned.
-func loadMemory() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", nil
-	}
-	data, err := os.ReadFile(filepath.Join(home, ".logwiz", "memory.md"))
-	if os.IsNotExist(err) {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("reading ~/.logwiz/memory.md: %w", err)
-	}
-	return strings.TrimSpace(string(data)), nil
 }
 
 func indexDoubleDash(args []string) int {

@@ -349,3 +349,65 @@ func TestParseMissingMemory(t *testing.T) {
 		t.Errorf("prompt changed without memory: %q", cfg.EffectiveSystemPrompt())
 	}
 }
+
+func TestMemoryAppendAndClear(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	if err := AppendMemory("  /healthz   is noise "); err != nil {
+		t.Fatalf("AppendMemory: %v", err)
+	}
+	if err := AppendMemory("- already a bullet"); err != nil {
+		t.Fatalf("AppendMemory: %v", err)
+	}
+	mem, err := LoadMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "- /healthz is noise\n- already a bullet"; mem != want {
+		t.Errorf("memory = %q, want %q", mem, want)
+	}
+	info, err := os.Stat(filepath.Join(dir, ".logwiz", "memory.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0600 {
+		t.Errorf("perm = %o, want 600", perm)
+	}
+
+	if err := AppendMemory("   "); err == nil {
+		t.Error("expected error for empty text")
+	}
+
+	if err := ClearMemory(); err != nil {
+		t.Fatalf("ClearMemory: %v", err)
+	}
+	if mem, _ := LoadMemory(); mem != "" {
+		t.Errorf("memory after clear = %q", mem)
+	}
+}
+
+func TestMemoryAppendAddsMissingNewline(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	path, err := EnsureMemoryFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("- hand written"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendMemory("new"); err != nil {
+		t.Fatal(err)
+	}
+	if mem, _ := LoadMemory(); mem != "- hand written\n- new" {
+		t.Errorf("memory = %q", mem)
+	}
+}
+
+func TestClearMemoryMissingFile(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if err := ClearMemory(); err != nil {
+		t.Errorf("ClearMemory on missing file: %v", err)
+	}
+}
