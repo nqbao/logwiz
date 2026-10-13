@@ -29,6 +29,9 @@ type MsgID struct {
 // uppercase, e.g. "INFO ", "ERROR"). Time and Message are stored raw;
 // renderers are responsible for time normalization. Extra holds the
 // remaining non-canonical key=value pairs.
+//
+// Notice marks lines synthesized by logwiz itself (e.g. "[logwiz: file
+// rotated]") rather than read from the input; :save skips them.
 type LogMessage struct {
 	ID     MsgID
 	Raw    string
@@ -39,6 +42,8 @@ type LogMessage struct {
 	Message string
 
 	Extra Extra
+
+	Notice bool
 }
 
 // Canonical field aliases. First match wins at parse time,

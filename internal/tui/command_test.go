@@ -405,6 +405,7 @@ func TestCmdSave(t *testing.T) {
 	m := newTestModel(t)
 	m.buf.Append(logmsg.LogMessage{Raw: "alpha"})
 	m.buf.Append(logmsg.LogMessage{Raw: "beta"})
+	m.buf.Append(logmsg.LogMessage{Raw: "[logwiz: file rotated]", Notice: true})
 	m.buf.Append(logmsg.LogMessage{Raw: "alpha again"})
 
 	path := filepath.Join(dir, "out.log")

@@ -645,7 +645,8 @@ func cmdFollow(m Model, args string) (Model, tea.Cmd, error) {
 
 // cmdSave implements :save [-f] [-a] [--all] <path> (alias :w).
 // Writes the raw text of the currently visible lines (respecting an active
-// grep/filter) to path, one per line. Flags:
+// grep/filter) to path, one per line, exactly as read from the input.
+// logwiz's own notice lines are skipped. Flags:
 //
 //	-f      overwrite path if it already exists
 //	-a      append to path instead of creating it
@@ -711,7 +712,11 @@ func cmdSave(m Model, args string) (Model, tea.Cmd, error) {
 	w := bufio.NewWriter(f)
 	n := 0
 	writeLine := func(i int) {
-		w.WriteString(m.buf.Line(i).Raw)
+		msg := m.buf.Line(i)
+		if msg.Notice {
+			return
+		}
+		w.WriteString(msg.Raw)
 		w.WriteByte('\n')
 		n++
 	}

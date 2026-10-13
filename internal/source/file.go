@@ -177,7 +177,8 @@ func (f *File) StartFollow() {
 	}
 
 	sender.Send(NewLinesMsg{Lines: []logmsg.LogMessage{{
-		Raw: "[logwiz: follow re-enabled, skipped to current EOF]",
+		Raw:    "[logwiz: follow re-enabled, skipped to current EOF]",
+		Notice: true,
 	}}})
 
 	watchCtx, cancel := context.WithCancel(ctx)
@@ -237,13 +238,13 @@ func (f *File) watch(ctx context.Context, file *os.File, sender Sender, lastOffs
 					return
 				}
 				pathInfo = fileInfo
-				sender.Send(NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "[logwiz: file rotated]"}}})
+				sender.Send(NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "[logwiz: file rotated]", Notice: true}}})
 				lastOffset = 0
 			}
 
 			// Truncation: file shrank.
 			if pathInfo.Size() < lastOffset {
-				sender.Send(NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "[logwiz: file truncated]"}}})
+				sender.Send(NewLinesMsg{Lines: []logmsg.LogMessage{{Raw: "[logwiz: file truncated]", Notice: true}}})
 				if _, err := file.Seek(0, io.SeekStart); err != nil {
 					sender.Send(ErrMsg{Err: err})
 					return
@@ -308,7 +309,8 @@ func (f *File) tailSeek(file *os.File, sender Sender) (io.Reader, error) {
 	}
 	skipped := info.Size() - budget
 	sender.Send(NewLinesMsg{Lines: []logmsg.LogMessage{{
-		Raw: fmt.Sprintf("[logwiz: skipped %s from head of file (tail-seek); raise --max-lines to read more]", humanBytes(skipped)),
+		Raw:    fmt.Sprintf("[logwiz: skipped %s from head of file (tail-seek); raise --max-lines to read more]", humanBytes(skipped)),
+		Notice: true,
 	}}})
 	return br, nil
 }
