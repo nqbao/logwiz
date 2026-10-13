@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,6 +34,8 @@ var cmdRegistry = map[string]cmdHandler{
 	"quit":      cmdQuit,
 	"view":      cmdView,
 	"follow":    cmdFollow,
+	"save":      cmdSave,
+	"w":         cmdSave,
 }
 
 // infoErr is returned by handlers that want to keep the palette open and
@@ -636,6 +641,102 @@ func cmdFollow(m Model, args string) (Model, tea.Cmd, error) {
 	default:
 		return m, nil, fmt.Errorf("usage: follow [on|off|status]")
 	}
+}
+
+// cmdSave implements :save [-f] [-a] [--all] <path> (alias :w).
+// Writes the raw text of the currently visible lines (respecting an active
+// grep/filter) to path, one per line, exactly as read from the input.
+// logwiz's own notice lines are skipped. Flags:
+//
+//	-f      overwrite path if it already exists
+//	-a      append to path instead of creating it
+//	--all   ignore active filters and write the whole buffer
+func cmdSave(m Model, args string) (Model, tea.Cmd, error) {
+	const usage = "usage: save [-f] [-a] [--all] <path>"
+	var force, appendMode, all bool
+	tokens := strings.Fields(args)
+	i := 0
+	for ; i < len(tokens); i++ {
+		tok := tokens[i]
+		if tok == "--" {
+			i++
+			break
+		}
+		if tok == "--all" {
+			all = true
+			continue
+		}
+		if !strings.HasPrefix(tok, "-") || len(tok) == 1 {
+			break
+		}
+		for _, ch := range tok[1:] {
+			switch ch {
+			case 'f':
+				force = true
+			case 'a':
+				appendMode = true
+			default:
+				return m, nil, fmt.Errorf("unknown flag -%c (supported: -f -a --all)", ch)
+			}
+		}
+	}
+	path := strings.Join(tokens[i:], " ")
+	if path == "" {
+		return m, nil, errors.New(usage)
+	}
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return m, nil, err
+		}
+		path = filepath.Join(home, path[1:])
+	}
+
+	flags := os.O_WRONLY | os.O_CREATE
+	switch {
+	case appendMode:
+		flags |= os.O_APPEND
+	case force:
+		flags |= os.O_TRUNC
+	default:
+		flags |= os.O_EXCL
+	}
+	f, err := os.OpenFile(path, flags, 0o644)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return m, nil, fmt.Errorf("%s exists (use -f to overwrite or -a to append)", path)
+		}
+		return m, nil, err
+	}
+
+	w := bufio.NewWriter(f)
+	n := 0
+	writeLine := func(i int) {
+		msg := m.buf.Line(i)
+		if msg.Notice {
+			return
+		}
+		w.WriteString(msg.Raw)
+		w.WriteByte('\n')
+		n++
+	}
+	if m.filterEnabled && !all {
+		for _, i := range m.filterIndices {
+			writeLine(i)
+		}
+	} else {
+		for i := 0; i < m.buf.Len(); i++ {
+			writeLine(i)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		f.Close()
+		return m, nil, err
+	}
+	if err := f.Close(); err != nil {
+		return m, nil, err
+	}
+	return m, nil, infoErr{fmt.Sprintf("saved %d line(s) to %s", n, path)}
 }
 
 // clearBuffer discards all buffered lines and resets derived viewport/search/

@@ -21,6 +21,12 @@ func ParseTime(s string) (time.Time, bool) {
 	if f, err := strconv.ParseFloat(s, 64); err == nil && f > 0 {
 		return parseEpoch(s, f), true
 	}
+	// Zone-less timestamps (Java-style "2024-01-02 15:04:05,123") are local.
+	for _, layout := range []string{"2006-01-02 15:04:05", "2006-01-02T15:04:05"} {
+		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+			return t, true
+		}
+	}
 	return time.Time{}, false
 }
 
@@ -78,7 +84,7 @@ func NormalizeLevel(s string) string {
 		return "INFO "
 	case "WARN", "WARNING":
 		return "WARN "
-	case "ERROR", "ERR":
+	case "ERROR", "ERR", "SEVERE":
 		return "ERROR"
 	case "FATAL", "PANIC":
 		return "FATAL"

@@ -59,7 +59,7 @@ Press `/` to open the command palette, then ask questions or run commands:
 
 ## Features
 
-- Stream from a pipe or read a file; works with JSON, logfmt, and plain text
+- Stream from a pipe or read a file; works with JSON, logfmt, pipe-delimited (`ts | LEVEL | … | msg`, e.g. Java, with stack traces kept together), and plain text
 - Regex search, filter (`:grep`), and highlight — stackable and composable
 - AI command palette: ask questions in plain English, AI inspects the buffer and answers
 - Sensitive field redaction before logs are sent to the LLM (enabled by default)
