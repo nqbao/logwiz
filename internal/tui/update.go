@@ -502,12 +502,15 @@ func applyViewMode(m *Model) {
 	case viewModeRaw:
 		m.highlighter.Register("json", nil)
 		m.highlighter.Register("logfmt", nil)
+		m.highlighter.Register("pipe", nil)
 	case viewModeColor:
 		m.highlighter.Register("json", highlight.JSONRenderer)
 		m.highlighter.Register("logfmt", highlight.LogfmtRenderer)
+		m.highlighter.Register("pipe", highlight.PipeRenderer)
 	case viewModePretty:
 		m.highlighter.Register("json", highlight.PrettyJSONRenderer)
 		m.highlighter.Register("logfmt", highlight.PrettyLogfmtRenderer)
+		m.highlighter.Register("pipe", highlight.PrettyPipeRenderer)
 	}
 	m.highlighter.Clear()
 	m.logs.recomputeWidthCache()

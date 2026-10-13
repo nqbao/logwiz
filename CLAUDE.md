@@ -32,7 +32,7 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
 - `internal/buffer` — fixed-size ring buffer of log lines
 - `internal/source` — stdin and file readers; emit `NewLinesMsg`/`EOFMsg`/`ErrMsg`
 - `internal/config` — flag + env var resolution (flag > env > `~/.logwiz/config.json` > default)
-- `internal/logmsg` — log message types and parsers (JSON, logfmt, auto-detect, passthrough)
+- `internal/logmsg` — log message types and parsers (JSON, logfmt, pipe-delimited/Java with stack-trace continuations, auto-detect, passthrough)
 - `internal/highlight` — syntax highlighting with a per-message render cache
 - `internal/redact` — redacts sensitive fields before sending logs to the LLM
 - `internal/tools` — buffer-query tool registry (`search_regex`, `count_regex`, `tail`, `read`) used by the chat agent

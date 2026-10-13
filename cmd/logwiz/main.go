@@ -98,8 +98,10 @@ func run() (bool, error) {
 		parser = logmsg.JSONParser{}
 	case "logfmt":
 		parser = logmsg.LogfmtParser{}
+	case "pipe":
+		parser = &logmsg.PipeParser{Strict: true}
 	case "auto":
-		parser = logmsg.AutoParser{}
+		parser = &logmsg.AutoParser{}
 	default:
 		parser = logmsg.PassthroughParser{}
 	}

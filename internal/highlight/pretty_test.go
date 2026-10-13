@@ -201,3 +201,11 @@ func TestPrettyJSONAndLogfmt_EqualOutput(t *testing.T) {
 		}
 	}
 }
+
+func TestPipeRenderer_PreservesText(t *testing.T) {
+	raw := "2024-01-02 15:04:05 | ERROR | main | boom | x"
+	msg := logmsg.LogMessage{Raw: raw, Format: "pipe", Level: "ERROR"}
+	if got := stripANSI(PipeRenderer(msg)); got != raw {
+		t.Errorf("stripped render = %q, want %q", got, raw)
+	}
+}

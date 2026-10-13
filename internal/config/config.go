@@ -221,7 +221,7 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 	fs.StringVar(&cfg.InstructionsFile, "instructions-file", "",
 		"Path to a file with extra instructions appended to the system prompt")
 	fs.StringVar(&cfg.Format, "format", DefaultFormat,
-		`Line parser: "auto" (default, detects per line), "json", "logfmt", or "passthrough"`)
+		`Line parser: "auto" (default, detects per line), "json", "logfmt", "pipe" (ts | LEVEL | ... | msg, e.g. Java), or "passthrough"`)
 	fs.StringVar(&cfg.View, "view", defaultView,
 		`Log rendering mode: "raw" (default, no coloring), "color" (syntax-colored), "pretty" (humanlog-style layout). Toggle with p inside the viewer.`)
 	fs.StringVar(&cfg.LogFile, "log-file", "",
@@ -279,9 +279,9 @@ func Parse(args []string, envLookup func(string) (string, bool), out io.Writer) 
 		return Config{}, errors.New("--sidebar-width must be >= 10")
 	}
 	switch cfg.Format {
-	case "auto", "json", "logfmt", "passthrough":
+	case "auto", "json", "logfmt", "pipe", "passthrough":
 	default:
-		return Config{}, errors.New(`--format must be "auto", "json", "logfmt", or "passthrough"`)
+		return Config{}, errors.New(`--format must be "auto", "json", "logfmt", "pipe", or "passthrough"`)
 	}
 	if cfg.ThinkingBudget != 0 && cfg.ThinkingBudget < 1024 {
 		return Config{}, errors.New("--thinking-budget must be 0 (disabled) or >= 1024")

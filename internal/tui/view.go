@@ -204,7 +204,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  :clear buffer         discard all buffered lines (streaming only)",
 		"  C                     clear buffer (streaming only)",
 		"  H             toggle highlights on / off",
-		"  p             cycle view mode: raw → color → pretty (json/logfmt)",
+		"  p             cycle view mode: raw → color → pretty (json/logfmt/pipe)",
 		"  :view [raw|color|pretty]   set view mode explicitly",
 		"  :follow [on|off|status]   toggle file-follow (auto-enabled when reading a file)",
 		"  :save [-f] [-a] [--all] <path>   write visible (filtered) lines to a file; alias :w",

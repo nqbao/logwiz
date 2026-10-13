@@ -219,10 +219,12 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 		initialView = viewModeColor
 		h.Register("json", highlight.JSONRenderer)
 		h.Register("logfmt", highlight.LogfmtRenderer)
+		h.Register("pipe", highlight.PipeRenderer)
 	case "pretty":
 		initialView = viewModePretty
 		h.Register("json", highlight.PrettyJSONRenderer)
 		h.Register("logfmt", highlight.PrettyLogfmtRenderer)
+		h.Register("pipe", highlight.PrettyPipeRenderer)
 	}
 
 	lv := newLogViewport(buf)
