@@ -81,6 +81,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case source.RestartingMsg:
+		m.eof = false
+		if strings.HasPrefix(m.chatErr, "source error: ") {
+			m.chatErr = ""
+		}
+		if m.restartClear {
+			m.restartClear = false
+			m = clearBuffer(m)
+		}
+		return m, nil
+
 	case source.ErrMsg:
 		m.chatErr = "source error: " + msg.Err.Error()
 		m.eof = true
@@ -426,7 +437,7 @@ func (m Model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// 	m = clearChat(m)
 	// 	return m, nil
 	case keyBufferClear:
-		if m.sourceKind == SourceStdin {
+		if m.sourceKind == SourceStdin || m.sourceKind == SourceCommand {
 			m = clearBuffer(m)
 		}
 		return m, nil

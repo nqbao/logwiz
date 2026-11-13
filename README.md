@@ -87,4 +87,5 @@ Press `/` to open the command palette, then ask questions or run commands:
 
 Other commands available inside the palette: `:filter` (attribute/time-based
 filtering), `:follow` (live tail a file), `:config` (runtime configuration),
-`:view` (set view mode), `:clear` (reset filters/highlights/history).
+`:view` (set view mode), `:clear` (reset filters/highlights/history),
+`:restart [-c]` (restart the managed command; `-c` also clears the buffer).

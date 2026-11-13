@@ -106,6 +106,7 @@ func run() (bool, error) {
 		parser = logmsg.PassthroughParser{}
 	}
 	var (
+		restarter  source.Restarter
 		src        source.Source
 		kind       tui.SourceKind
 		fileFollow source.FileFollower
@@ -119,7 +120,9 @@ func run() (bool, error) {
 	killPipelineGroup := false
 	switch {
 	case len(cfg.Command) > 0:
-		src = &source.Command{Args: cfg.Command, Parser: parser}
+		c := &source.Command{Args: cfg.Command, Parser: parser}
+		src = c
+		restarter = c
 		kind = tui.SourceCommand
 	case cfg.File != "":
 		f := &source.File{Path: cfg.File, Parser: parser, MaxLines: cfg.MaxLines, Follow: true}
@@ -153,6 +156,9 @@ func run() (bool, error) {
 
 	registry := tools.NewDefault(redactor)
 	model := tui.New(cfg, kind, buf, client, registry, redactor, fileFollow)
+	if restarter != nil {
+		model = model.WithRestarter(restarter)
+	}
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 

@@ -36,6 +36,7 @@ var cmdRegistry = map[string]cmdHandler{
 	"follow":    cmdFollow,
 	"save":      cmdSave,
 	"memory":    cmdMemory,
+	"restart":   cmdRestart,
 	"w":         cmdSave,
 }
 
@@ -543,7 +544,7 @@ func cmdClear(m Model, args string) (Model, tea.Cmd, error) {
 		clearHL(&m)
 		return m, nil, infoErr{"highlights cleared"}
 	case "buffer":
-		if m.sourceKind != SourceStdin {
+		if m.sourceKind != SourceStdin && m.sourceKind != SourceCommand {
 			return m, nil, fmt.Errorf(":clear buffer is only available in streaming mode")
 		}
 		return clearBuffer(m), nil, nil
@@ -642,6 +643,28 @@ func cmdFollow(m Model, args string) (Model, tea.Cmd, error) {
 	default:
 		return m, nil, fmt.Errorf("usage: follow [on|off|status]")
 	}
+}
+
+// cmdRestart implements :restart [-c].
+// Only available when logwiz spawned the process itself
+// (`logwiz -- <command>`): the child's process group gets SIGINT (SIGKILL
+// after a grace period) and the command is started again. Works after the
+// process has exited too. -c clears the buffer before the new run.
+func cmdRestart(m Model, args string) (Model, tea.Cmd, error) {
+	if m.restarter == nil {
+		return m, nil, fmt.Errorf(":restart is only available when logwiz runs the command (logwiz -- <command>)")
+	}
+	switch strings.TrimSpace(args) {
+	case "":
+		m.restartClear = false
+	case "-c", "clear":
+		m.restartClear = true
+	default:
+		return m, nil, fmt.Errorf("usage: restart [-c]")
+	}
+	m.restarter.Restart()
+	m.yankNotice = "restarting…"
+	return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return yankNoticeClearMsg{} }), nil
 }
 
 // cmdSave implements :save [-f] [-a] [--all] <path> (alias :w).

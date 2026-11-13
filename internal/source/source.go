@@ -85,10 +85,14 @@ func pumpLines(ctx context.Context, r io.Reader, sender Sender, parser logmsg.Pa
 
 	lineCh := make(chan string)
 	go func() {
+		defer close(lineCh)
 		for scanner.Scan() {
-			lineCh <- scanner.Text()
+			select {
+			case lineCh <- scanner.Text():
+			case <-ctx.Done():
+				return
+			}
 		}
-		close(lineCh)
 	}()
 
 	ticker := time.NewTicker(flushDelay)
