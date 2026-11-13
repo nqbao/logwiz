@@ -30,7 +30,7 @@ logwiz is a terminal log viewer with an integrated OpenAI-compatible chat sideba
 ## Package map
 
 - `internal/buffer` — fixed-size ring buffer of log lines
-- `internal/source` — stdin and file readers; emit `NewLinesMsg`/`EOFMsg`/`ErrMsg`. `Queue` sits between sources and `program.Send` so readers keep draining input while the event loop is blocked (e.g. `:memory edit`)
+- `internal/source` — stdin, file and managed-command readers; emit `NewLinesMsg`/`EOFMsg`/`ErrMsg`. `Command` (from `logwiz -- <cmd>`) implements `Restarter` for `:restart`: it SIGINTs the child's process group (SIGKILL after 2s), sends `RestartingMsg`, and respawns. `Queue` sits between sources and `program.Send` so readers keep draining input while the event loop is blocked (e.g. `:memory edit`)
 - `internal/config` — flag + env var resolution (flag > env > `~/.logwiz/config.json` > default); `memory.go` reads/writes `~/.logwiz/memory.md`, which is appended to both agents' system prompts
 - `internal/logmsg` — log message types and parsers (JSON, logfmt, pipe-delimited/Java with stack-trace continuations, auto-detect, passthrough)
 - `internal/highlight` — syntax highlighting with a per-message render cache

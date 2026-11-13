@@ -203,6 +203,7 @@ func (m Model) renderHelpOverlay(underneath string) string {
 		"  :clear chat|grep|hl   clear chat history / grep filters / highlights",
 		"  :clear buffer         discard all buffered lines (streaming only)",
 		"  C                     clear buffer (streaming only)",
+		"  :restart [-c]         restart the command (logwiz -- <cmd> only); -c clears buffer",
 		"  H             toggle highlights on / off",
 		"  p             cycle view mode: raw → color → pretty (json/logfmt/pipe)",
 		"  :view [raw|color|pretty]   set view mode explicitly",

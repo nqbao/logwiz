@@ -79,7 +79,13 @@ type Model struct {
 	eof         bool
 	following   bool // true while file watcher is active
 	fileFollow  source.FileFollower
+	restarter   source.Restarter // non-nil when logwiz spawned the source process
 	highlighter *highlight.Highlighter
+
+	// restartClear is set by `:restart -c`; the buffer is cleared when the
+	// source confirms the old process has stopped (RestartingMsg), so no
+	// trailing output from the old run leaks into the fresh buffer.
+	restartClear bool
 
 	logs LogViewport
 
@@ -251,6 +257,12 @@ func New(cfg config.Config, kind SourceKind, buf *buffer.Buffer, client *agent.C
 		ctx:          ctx,
 		cancel:       cancel,
 	}
+	return m
+}
+
+// WithRestarter enables :restart, for sources whose process logwiz owns.
+func (m Model) WithRestarter(r source.Restarter) Model {
+	m.restarter = r
 	return m
 }
 
